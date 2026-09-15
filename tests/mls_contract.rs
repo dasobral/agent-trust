@@ -1,4 +1,5 @@
 use agent_trust::mls::MlsLab;
+use sha2::{Digest, Sha256};
 
 fn assert_rejected<T>(result: Result<T, String>) {
     assert!(result.is_err(), "operation should be rejected");
@@ -46,6 +47,43 @@ fn other_current_members_decrypt_and_authenticated_data_round_trips() {
         assert_eq!(opened_payload, payload, "payload for {recipient}");
         assert_eq!(opened_aad, aad, "AAD for {recipient}");
     }
+}
+
+#[test]
+fn joining_member_uses_an_embedded_apf_binding_over_the_frozen_key_package() {
+    // Catches a return to one-shot KeyPackage construction, a sidecar binding,
+    // or verification that does not recompute the stripped final KeyPackage.
+    let mut lab = MlsLab::new().expect("new lab should create alice");
+    lab.add_member("bob")
+        .expect("bob should join through staged construction");
+
+    let evidence = lab
+        .verify_member_admission("bob")
+        .expect("bob's embedded APF admission binding should verify");
+
+    assert_eq!(evidence.subject, "bob");
+    assert_eq!(evidence.generation, 0);
+    assert_eq!(evidence.prepared_canonical, evidence.recomputed_canonical);
+    assert_eq!(
+        evidence.certificate_preimage_hash,
+        Sha256::digest(&evidence.recomputed_canonical).as_slice()
+    );
+    assert!(!evidence.final_key_package.is_empty());
+}
+
+#[test]
+fn embedded_apf_binding_cannot_be_substituted_for_another_subject() {
+    // Catches admission verification that checks only the MLS signatures or
+    // the preimage hash while ignoring the APF-bound subject incarnation.
+    let mut lab = MlsLab::new().expect("new lab should create alice");
+    lab.add_member("bob")
+        .expect("bob should join through staged construction");
+
+    let error = lab
+        .verify_member_admission_for("bob", "carol", 0)
+        .expect_err("bob's certificate must not authorize carol");
+
+    assert_eq!(error, "APF certificate subject mismatch");
 }
 
 #[test]

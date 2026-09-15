@@ -28,4 +28,6 @@ See `docs/confused-deputy.md` for the enforcement design and `docs/recovery-cove
 
 ## Claim boundary
 
-`full_lap_mls` remains `false`: the ordinary OpenMLS 0.9.0 laboratory is tested, but exact embedded LAP certificate binding requires the separately maintained staged-KeyPackage API work described in `docs/OPENMLS-INTEGRATION-READY.md`.
+The laboratory pins the custom OpenMLS fork at commit `6daabe33ddb616a6ed54b511d333e691db18a99f`. Joining members now use staged KeyPackage construction and carry an embedded, signed APF admission certificate whose stripped KeyPackage preimage is independently recomputed before admission. Add/Welcome interoperability and retained-key exclusion after removal are exercised end to end.
+
+`full_lap_mls` remains `false`: the executable milestone does not yet couple the durable authority kernel to `acc_context`, `authz_incarnation`, and the complete qualifying policy-bound repair transition. The CLI reports the narrower `staged_keypackage_binding_verified` result separately.

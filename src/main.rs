@@ -54,6 +54,8 @@ fn run_mls_demo() -> i32 {
         let mut lab = MlsLab::new()?;
         lab.add_member("bob")?;
         lab.add_member("carol")?;
+        let staged_keypackage_binding_verified = lab.verify_member_admission("bob").is_ok()
+            && lab.verify_member_admission("carol").is_ok();
         let before = lab.epoch();
 
         lab.snapshot_member("bob", "revoked-copy")?;
@@ -72,11 +74,13 @@ fn run_mls_demo() -> i32 {
             "continuing_reader_decrypts": continuing_reader_decrypts,
             "epoch_advanced": epoch_advanced,
             "full_lap_mls": false,
+            "staged_keypackage_binding_verified": staged_keypackage_binding_verified,
         });
         if old_snapshot_decrypts
             && removed_reader_rejected
             && continuing_reader_decrypts
             && epoch_advanced
+            && staged_keypackage_binding_verified
         {
             Ok(summary)
         } else {

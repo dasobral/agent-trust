@@ -137,6 +137,7 @@ class AuthorityCliTests(unittest.TestCase):
                 "continuing_reader_decrypts": True,
                 "epoch_advanced": True,
                 "full_lap_mls": False,
+                "staged_keypackage_binding_verified": True,
             },
         )
 

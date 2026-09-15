@@ -13,10 +13,11 @@
   },
   "dependencies": {
     "rust_minimum": "1.91",
-    "openmls": "0.9.0",
-    "openmls_traits": "0.6.0",
-    "openmls_rust_crypto": "0.6.0",
-    "openmls_basic_credential": "0.6.0"
+    "openmls": "0.9.0 fork",
+    "openmls_traits": "0.6.0 fork",
+    "openmls_rust_crypto": "0.6.0 fork",
+    "openmls_basic_credential": "0.6.0 fork",
+    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f"
   },
   "public_gates": [
     "python3 scripts/verify.py",
@@ -25,13 +26,14 @@
   ],
   "latest_verification": {
     "date": "2026-09-15",
-    "rust_tests": 37,
+    "rust_tests": 39,
     "python_tests": 32,
     "oracle_tests": 21,
     "status": "pass"
   },
   "claim_boundary": {
     "full_lap_mls": false,
-    "reason": "stock OpenMLS 0.9.0 lacks the required public staged KeyPackage construction API"
+    "staged_keypackage_binding_verified": true,
+    "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete"
   }
 }

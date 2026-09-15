@@ -9,10 +9,20 @@ use std::{collections::BTreeMap, sync::RwLock};
 use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::{MemoryStorage, OpenMlsRustCrypto, RustCrypto};
-use openmls_traits::{types::Ciphersuite, OpenMlsProvider};
+use openmls_traits::{
+    crypto::OpenMlsCrypto,
+    signatures::Signer,
+    types::{Ciphersuite, SignatureScheme},
+    OpenMlsProvider,
+};
+use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize, Serialize};
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
+const GROUP_ID: &[u8] = b"agent-trust-mls-lab";
+const APF_BINDING_EXTENSION_TYPE: u16 = 0xf042;
+const APF_CERTIFICATE_MAGIC: &[u8] = b"AT-APF-KP";
+const APF_CERTIFICATE_VERSION: u8 = 1;
 
 /// The stock provider uses a private `MemoryStorage` field and only enables its
 /// `Clone` implementation under OpenMLS test features.  This wrapper keeps the
@@ -64,26 +74,59 @@ struct Endpoint {
     provider: LabProvider,
     group: MlsGroup,
     signer: Option<SignatureKeyPair>,
+    admission_key_package: Option<Vec<u8>>,
+    prepared_canonical: Option<Vec<u8>>,
 }
 
 struct PendingMember {
     provider: LabProvider,
     signer: SignatureKeyPair,
     key_package: KeyPackageBundle,
+    key_package_wire: Vec<u8>,
+    prepared_canonical: Vec<u8>,
 }
 
 impl PendingMember {
-    fn new(name: &str) -> Result<Self, String> {
+    fn new(name: &str, generation: u64, apf_signer: &SignatureKeyPair) -> Result<Self, String> {
         let provider = LabProvider::default();
         let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
         signer.store(provider.storage()).map_err(error)?;
-        let key_package = KeyPackage::builder()
-            .build(CIPHERSUITE, &provider, &signer, credential(name, &signer))
+        let capabilities = Capabilities::builder()
+            .extensions(vec![ExtensionType::Unknown(APF_BINDING_EXTENSION_TYPE)])
+            .build();
+        let prepared = KeyPackage::builder()
+            .leaf_node_capabilities(capabilities)
+            .prepare(
+                CIPHERSUITE,
+                &provider,
+                &signer,
+                credential(name, &signer),
+                APF_BINDING_EXTENSION_TYPE,
+            )
+            .map_err(error)?;
+        let prepared_canonical = prepared.canonical_binding_bytes().to_vec();
+        let certificate = issue_admission_certificate(
+            GROUP_ID,
+            name,
+            generation,
+            &prepared_canonical,
+            apf_signer,
+        )?;
+        let key_package = prepared
+            .with_external_binding(certificate)
+            .map_err(error)?
+            .finalize(&provider, &signer)
+            .map_err(error)?;
+        let key_package_wire = key_package
+            .key_package()
+            .tls_serialize_detached()
             .map_err(error)?;
         Ok(Self {
             provider,
             signer,
             key_package,
+            key_package_wire,
+            prepared_canonical,
         })
     }
 }
@@ -109,16 +152,73 @@ impl Endpoint {
 pub struct MlsLab {
     roster: BTreeMap<String, Endpoint>,
     stale: BTreeMap<String, Endpoint>,
+    apf_signer: SignatureKeyPair,
+}
+
+/// Evidence returned after independently validating an embedded admission binding.
+#[derive(Debug)]
+pub struct AdmissionBindingEvidence {
+    pub subject: String,
+    pub generation: u64,
+    pub prepared_canonical: Vec<u8>,
+    pub recomputed_canonical: Vec<u8>,
+    pub certificate_preimage_hash: Vec<u8>,
+    pub final_key_package: Vec<u8>,
 }
 
 impl MlsLab {
+    /// Verifies retained admission evidence against an expected APF incarnation.
+    pub fn verify_member_admission_for(
+        &self,
+        name: &str,
+        expected_subject: &str,
+        expected_generation: u64,
+    ) -> Result<AdmissionBindingEvidence, String> {
+        let endpoint = self
+            .roster
+            .get(name)
+            .ok_or_else(|| "member is not current".to_owned())?;
+        let final_key_package = endpoint
+            .admission_key_package
+            .as_ref()
+            .ok_or_else(|| "member has no staged admission evidence".to_owned())?;
+        let prepared_canonical = endpoint
+            .prepared_canonical
+            .as_ref()
+            .ok_or_else(|| "member has no prepared canonical bytes".to_owned())?;
+        let verified = verify_admission_key_package(
+            &endpoint.provider,
+            final_key_package,
+            expected_subject,
+            expected_generation,
+            &self.apf_signer.to_public_vec(),
+        )?;
+        if verified.recomputed_canonical != *prepared_canonical {
+            return Err("prepared and recomputed KeyPackage bytes differ".into());
+        }
+        Ok(AdmissionBindingEvidence {
+            subject: verified.subject,
+            generation: verified.generation,
+            prepared_canonical: prepared_canonical.clone(),
+            recomputed_canonical: verified.recomputed_canonical,
+            certificate_preimage_hash: verified.preimage_hash,
+            final_key_package: final_key_package.clone(),
+        })
+    }
+
+    /// Verifies the staged KeyPackage admission evidence retained for a member.
+    pub fn verify_member_admission(&self, name: &str) -> Result<AdmissionBindingEvidence, String> {
+        self.verify_member_admission_for(name, name, 0)
+    }
+
     /// Creates the group with Alice as its founding member.
     pub fn new() -> Result<Self, String> {
         let provider = LabProvider::default();
         let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
+        let apf_signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
         signer.store(provider.storage()).map_err(error)?;
         let group = MlsGroup::builder()
-            .with_group_id(GroupId::from_slice(b"agent-trust-mls-lab"))
+            .with_group_id(GroupId::from_slice(GROUP_ID))
             .use_ratchet_tree_extension(true)
             .build(&provider, &signer, credential("alice", &signer))
             .map_err(error)?;
@@ -129,9 +229,12 @@ impl MlsLab {
                     provider,
                     group,
                     signer: Some(signer),
+                    admission_key_package: None,
+                    prepared_canonical: None,
                 },
             )]),
             stale: BTreeMap::new(),
+            apf_signer,
         })
     }
 
@@ -142,7 +245,17 @@ impl MlsLab {
         if self.roster.contains_key(name) || self.stale.contains_key(name) {
             return Err("member name already used".into());
         }
-        let joiner = PendingMember::new(name)?;
+        let joiner = PendingMember::new(name, 0, &self.apf_signer)?;
+        let verified = verify_admission_key_package(
+            &joiner.provider,
+            &joiner.key_package_wire,
+            name,
+            0,
+            &self.apf_signer.to_public_vec(),
+        )?;
+        if verified.recomputed_canonical != joiner.prepared_canonical {
+            return Err("prepared and recomputed KeyPackage bytes differ".into());
+        }
         let key_package = joiner.key_package.key_package().clone();
         let (commit_wire, welcome, committer_index) = {
             let committer = self
@@ -189,6 +302,8 @@ impl MlsLab {
                 provider: joiner.provider,
                 group,
                 signer: Some(joiner.signer),
+                admission_key_package: Some(joiner.key_package_wire),
+                prepared_canonical: Some(joiner.prepared_canonical),
             },
         );
         Ok(())
@@ -312,6 +427,8 @@ impl MlsLab {
                 provider,
                 group,
                 signer: None,
+                admission_key_package: original.admission_key_package.clone(),
+                prepared_canonical: original.prepared_canonical.clone(),
             },
         );
         Ok(())
@@ -328,6 +445,135 @@ impl MlsLab {
     pub fn members(&self) -> Vec<String> {
         self.roster.keys().cloned().collect()
     }
+}
+
+struct VerifiedAdmission {
+    subject: String,
+    generation: u64,
+    preimage_hash: Vec<u8>,
+    recomputed_canonical: Vec<u8>,
+}
+
+fn issue_admission_certificate(
+    group: &[u8],
+    subject: &str,
+    generation: u64,
+    canonical: &[u8],
+    signer: &impl Signer,
+) -> Result<Vec<u8>, String> {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(APF_CERTIFICATE_MAGIC);
+    payload.push(APF_CERTIFICATE_VERSION);
+    append_sized(&mut payload, group)?;
+    append_sized(&mut payload, subject.as_bytes())?;
+    payload.extend_from_slice(&generation.to_be_bytes());
+    payload.extend_from_slice(&Sha256::digest(canonical));
+    let signature = signer.sign(&payload).map_err(error)?;
+    append_sized(&mut payload, &signature)?;
+    Ok(payload)
+}
+
+fn verify_admission_key_package(
+    provider: &LabProvider,
+    wire: &[u8],
+    expected_subject: &str,
+    expected_generation: u64,
+    apf_public_key: &[u8],
+) -> Result<VerifiedAdmission, String> {
+    let key_package = KeyPackageIn::tls_deserialize_exact(wire)
+        .map_err(error)?
+        .validate(provider.crypto(), ProtocolVersion::Mls10)
+        .map_err(error)?;
+    let recomputed_canonical = key_package
+        .canonical_binding_bytes(APF_BINDING_EXTENSION_TYPE)
+        .map_err(error)?;
+    let certificate = key_package
+        .extensions()
+        .iter()
+        .find_map(|extension| match extension {
+            Extension::Unknown(extension_type, UnknownExtension(bytes))
+                if *extension_type == APF_BINDING_EXTENSION_TYPE =>
+            {
+                Some(bytes.as_slice())
+            }
+            _ => None,
+        })
+        .ok_or_else(|| "APF binding extension missing".to_owned())?;
+
+    let mut input = certificate;
+    if take(&mut input, APF_CERTIFICATE_MAGIC.len())? != APF_CERTIFICATE_MAGIC {
+        return Err("invalid APF certificate magic".into());
+    }
+    if take(&mut input, 1)?[0] != APF_CERTIFICATE_VERSION {
+        return Err("unsupported APF certificate version".into());
+    }
+    let group = take_sized(&mut input)?;
+    let subject = take_sized(&mut input)?;
+    let generation = u64::from_be_bytes(
+        take(&mut input, 8)?
+            .try_into()
+            .map_err(|_| "invalid APF generation".to_owned())?,
+    );
+    let preimage_hash = take(&mut input, 32)?.to_vec();
+    let signed_len = certificate.len() - input.len();
+    let signature = take_sized(&mut input)?;
+    if !input.is_empty() {
+        return Err("trailing APF certificate bytes".into());
+    }
+    if group != GROUP_ID {
+        return Err("APF certificate group mismatch".into());
+    }
+    if subject != expected_subject.as_bytes() {
+        return Err("APF certificate subject mismatch".into());
+    }
+    if generation != expected_generation {
+        return Err("APF certificate generation mismatch".into());
+    }
+    if preimage_hash != Sha256::digest(&recomputed_canonical).as_slice() {
+        return Err("APF certificate KeyPackage binding mismatch".into());
+    }
+    provider
+        .crypto()
+        .verify_signature(
+            SignatureScheme::ED25519,
+            &certificate[..signed_len],
+            apf_public_key,
+            signature,
+        )
+        .map_err(|_| "invalid APF certificate signature".to_owned())?;
+
+    Ok(VerifiedAdmission {
+        subject: String::from_utf8(subject.to_vec())
+            .map_err(|_| "APF certificate subject is not UTF-8".to_owned())?,
+        generation,
+        preimage_hash,
+        recomputed_canonical,
+    })
+}
+
+fn append_sized(output: &mut Vec<u8>, value: &[u8]) -> Result<(), String> {
+    let length = u16::try_from(value.len()).map_err(|_| "APF certificate field too large")?;
+    output.extend_from_slice(&length.to_be_bytes());
+    output.extend_from_slice(value);
+    Ok(())
+}
+
+fn take_sized<'a>(input: &mut &'a [u8]) -> Result<&'a [u8], String> {
+    let length = u16::from_be_bytes(
+        take(input, 2)?
+            .try_into()
+            .map_err(|_| "invalid APF certificate length".to_owned())?,
+    ) as usize;
+    take(input, length)
+}
+
+fn take<'a>(input: &mut &'a [u8], length: usize) -> Result<&'a [u8], String> {
+    if input.len() < length {
+        return Err("truncated APF certificate".into());
+    }
+    let (value, rest) = input.split_at(length);
+    *input = rest;
+    Ok(value)
 }
 
 fn credential(name: &str, signer: &SignatureKeyPair) -> CredentialWithKey {

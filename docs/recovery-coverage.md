@@ -24,4 +24,4 @@ Recovered executable coverage includes:
 - fail-closed public verification;
 - authenticated invocation provenance and confused-deputy prevention.
 
-Known boundary: `full_lap_mls` remains `false`. Ordinary OpenMLS behavior is tested, but the exact LAP certificate binding awaits a pinned fork exposing canonical staged KeyPackage construction.
+Known boundary: `full_lap_mls` remains `false`. Canonical staged KeyPackage construction and the embedded APF admission binding are now verified against pinned fork commit `6daabe33ddb616a6ed54b511d333e691db18a99f`; the complete durable APF-to-MLS context/incarnation/repair coupling remains future work.
