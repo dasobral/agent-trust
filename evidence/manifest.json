@@ -23,6 +23,13 @@
     "cargo build --locked",
     "python3 -m unittest discover -s harness -v"
   ],
+  "latest_verification": {
+    "date": "2026-09-15",
+    "rust_tests": 37,
+    "python_tests": 32,
+    "oracle_tests": 21,
+    "status": "pass"
+  },
   "claim_boundary": {
     "full_lap_mls": false,
     "reason": "stock OpenMLS 0.9.0 lacks the required public staged KeyPackage construction API"
