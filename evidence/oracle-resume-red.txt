@@ -1,0 +1,160 @@
+test_abandon_is_terminal_and_idempotent (harness.test_oracle.TraceContractTests.test_abandon_is_terminal_and_idempotent) ... ok
+test_allow_requires_higher_new_generation_and_admit_reuses_active_generation (harness.test_oracle.TraceContractTests.test_allow_requires_higher_new_generation_and_admit_reuses_active_generation) ... ok
+test_crash_requires_exact_recovery_before_consume (harness.test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume) ... ERROR
+test_denied_extra_cover_support_is_unsound (harness.test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound) ... FAIL
+test_duplicate_event_id_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_event_id_is_rejected) ... ok
+test_duplicate_operation_allocation_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_operation_allocation_is_rejected) ... ok
+test_emit_on_a_superseded_branch_is_rejected (harness.test_oracle.TraceContractTests.test_emit_on_a_superseded_branch_is_rejected) ... ok
+test_empty_malformed_and_unknown_traces_are_rejected (harness.test_oracle.TraceContractTests.test_empty_malformed_and_unknown_traces_are_rejected) ... ok
+test_good_nonvacuous_write_trace_and_identical_repeat_emit (harness.test_oracle.TraceContractTests.test_good_nonvacuous_write_trace_and_identical_repeat_emit) ... ERROR
+test_good_read_release_requires_reader_cover (harness.test_oracle.TraceContractTests.test_good_read_release_requires_reader_cover) ... ERROR
+test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives (harness.test_oracle.TraceContractTests.test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives) ... ok
+test_malformed_boolean_and_numeric_frontier_are_rejected (harness.test_oracle.TraceContractTests.test_malformed_boolean_and_numeric_frontier_are_rejected) ... ok
+test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny (harness.test_oracle.TraceContractTests.test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny) ... ok
+test_read_cover_omitting_roster_member_is_unsound (harness.test_oracle.TraceContractTests.test_read_cover_omitting_roster_member_is_unsound) ... ok
+test_read_deny_fences_fresh_release_and_blocks_delivery (harness.test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery) ... FAIL
+test_release_digest_and_persisted_bytes_are_frozen (harness.test_oracle.TraceContractTests.test_release_digest_and_persisted_bytes_are_frozen) ... ok
+test_repair_requires_complete_removals_and_cannot_reopen_without_path (harness.test_oracle.TraceContractTests.test_repair_requires_complete_removals_and_cannot_reopen_without_path) ... ok
+test_repair_then_recovery_reopens_for_continuing_reader (harness.test_oracle.TraceContractTests.test_repair_then_recovery_reopens_for_continuing_reader) ... ERROR
+test_replay_of_consumed_cell_is_rejected (harness.test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected) ... ERROR
+test_stale_recovery_is_rejected (harness.test_oracle.TraceContractTests.test_stale_recovery_is_rejected) ... ok
+
+======================================================================
+ERROR: test_crash_requires_exact_recovery_before_consume (harness.test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 168, in test_crash_requires_exact_recovery_before_consume
+    self.assert_has(events, 5, "not_ready")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 67, in violations
+    answer = check_trace(events)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 19, in check_trace
+    return importlib.import_module("harness.oracle").check_trace(events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 156, in check_trace
+    code = _apply(candidate, event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 253, in _apply
+    if event["right"] == "write":
+       ~~~~~^^^^^^^^^
+KeyError: 'right'
+
+======================================================================
+ERROR: test_good_nonvacuous_write_trace_and_identical_repeat_emit (harness.test_oracle.TraceContractTests.test_good_nonvacuous_write_trace_and_identical_repeat_emit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 82, in test_good_nonvacuous_write_trace_and_identical_repeat_emit
+    self.assert_clean([init_event(), alloc(), release_event(), persist(), emit(),
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 76, in assert_clean
+    self.assertEqual(self.violations(events), [])
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 67, in violations
+    answer = check_trace(events)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 19, in check_trace
+    return importlib.import_module("harness.oracle").check_trace(events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 156, in check_trace
+    code = _apply(candidate, event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 253, in _apply
+    if event["right"] == "write":
+       ~~~~~^^^^^^^^^
+KeyError: 'right'
+
+======================================================================
+ERROR: test_good_read_release_requires_reader_cover (harness.test_oracle.TraceContractTests.test_good_read_release_requires_reader_cover)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 88, in test_good_read_release_requires_reader_cover
+    self.assert_clean(events)
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 76, in assert_clean
+    self.assertEqual(self.violations(events), [])
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 67, in violations
+    answer = check_trace(events)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 19, in check_trace
+    return importlib.import_module("harness.oracle").check_trace(events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 156, in check_trace
+    code = _apply(candidate, event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 253, in _apply
+    if event["right"] == "write":
+       ~~~~~^^^^^^^^^
+KeyError: 'right'
+
+======================================================================
+ERROR: test_repair_then_recovery_reopens_for_continuing_reader (harness.test_oracle.TraceContractTests.test_repair_then_recovery_reopens_for_continuing_reader)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 202, in test_repair_then_recovery_reopens_for_continuing_reader
+    self.assert_clean(events)
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 76, in assert_clean
+    self.assertEqual(self.violations(events), [])
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 67, in violations
+    answer = check_trace(events)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 19, in check_trace
+    return importlib.import_module("harness.oracle").check_trace(events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 156, in check_trace
+    code = _apply(candidate, event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 253, in _apply
+    if event["right"] == "write":
+       ~~~~~^^^^^^^^^
+KeyError: 'right'
+
+======================================================================
+ERROR: test_replay_of_consumed_cell_is_rejected (harness.test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 162, in test_replay_of_consumed_cell_is_rejected
+    self.assert_has(events, 6, "replay")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 67, in violations
+    answer = check_trace(events)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 19, in check_trace
+    return importlib.import_module("harness.oracle").check_trace(events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 156, in check_trace
+    code = _apply(candidate, event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/oracle.py", line 253, in _apply
+    if event["right"] == "write":
+       ~~~~~^^^^^^^^^
+KeyError: 'right'
+
+======================================================================
+FAIL: test_denied_extra_cover_support_is_unsound (harness.test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 128, in test_denied_extra_cover_support_is_unsound
+    self.assert_has(events, 3, "unsound_cover")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'unsound_cover'} not found in [{'index': 3, 'code': 'read_fenced'}]
+
+======================================================================
+FAIL: test_read_deny_fences_fresh_release_and_blocks_delivery (harness.test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 107, in test_read_deny_fences_fresh_release_and_blocks_delivery
+    self.assert_has(events, 3, "read_fenced")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'read_fenced'} not found in [{'index': 3, 'code': 'stale_frontier'}, {'index': 4, 'code': 'invalid_transition'}, {'index': 5, 'code': 'read_fenced'}, {'index': 6, 'code': 'invalid_transition'}]
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.006s
+
+FAILED (failures=2, errors=5)

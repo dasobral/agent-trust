@@ -1,0 +1,14 @@
+test_repair_cannot_remove_reallowed_pending_reader (harness.test_oracle_repair.RepairValidationTests.test_repair_cannot_remove_reallowed_pending_reader) ... FAIL
+
+======================================================================
+FAIL: test_repair_cannot_remove_reallowed_pending_reader (harness.test_oracle_repair.RepairValidationTests.test_repair_cannot_remove_reallowed_pending_reader)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle_repair.py", line 23, in test_repair_cannot_remove_reallowed_pending_reader
+    self.assertIn({"index": 3, "code": "invalid_repair"}, check_trace(events))
+AssertionError: {'index': 3, 'code': 'invalid_repair'} not found in []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)

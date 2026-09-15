@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "session": "2026-09-11-agent-trust-implementation",
+  "agents": [
+    {
+      "task_id": "/root/toolchain_probe",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "medium",
+      "fork_turns": "none",
+      "role": "environment probe",
+      "inputs": [
+        "toolchain availability and approved Rust/OpenMLS stack"
+      ],
+      "owned_files": [
+        "../toolchain-probe.txt"
+      ],
+      "status": "running"
+    },
+    {
+      "task_id": "/root/trace_tests",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "fork_turns": "none",
+      "role": "independent trace-test author",
+      "inputs": [
+        "AGENTS.md",
+        "docs/trace-contract.md"
+      ],
+      "owned_files": [
+        "harness/test_oracle.py",
+        "harness/fixtures.py",
+        "harness/__init__.py",
+        "evidence/trace-red.txt",
+        "evidence/trace-tests-report.md"
+      ],
+      "status": "running"
+    },
+    {
+      "task_id": "/root/mls_api_audit",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "fork_turns": "none",
+      "role": "OpenMLS public API compatibility audit",
+      "inputs": [
+        "docs/specification.md section 2",
+        "official OpenMLS source documentation"
+      ],
+      "owned_files": [
+        "docs/openmls-compatibility.md",
+        "evidence/mls-audit-report.md"
+      ],
+      "status": "running"
+    }
+  ]
+}

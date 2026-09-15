@@ -1,0 +1,197 @@
+test_abandon_is_terminal_and_idempotent (harness.test_oracle.TraceContractTests.test_abandon_is_terminal_and_idempotent) ... FAIL
+test_allow_requires_higher_new_generation_and_admit_reuses_active_generation (harness.test_oracle.TraceContractTests.test_allow_requires_higher_new_generation_and_admit_reuses_active_generation) ... FAIL
+test_crash_requires_exact_recovery_before_consume (harness.test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume) ... FAIL
+test_denied_extra_cover_support_is_unsound (harness.test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound) ... FAIL
+test_duplicate_event_id_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_event_id_is_rejected) ... FAIL
+test_duplicate_operation_allocation_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_operation_allocation_is_rejected) ... FAIL
+test_emit_on_a_superseded_branch_is_rejected (harness.test_oracle.TraceContractTests.test_emit_on_a_superseded_branch_is_rejected) ... FAIL
+test_empty_malformed_and_unknown_traces_are_rejected (harness.test_oracle.TraceContractTests.test_empty_malformed_and_unknown_traces_are_rejected) ... FAIL
+test_good_nonvacuous_write_trace_and_identical_repeat_emit (harness.test_oracle.TraceContractTests.test_good_nonvacuous_write_trace_and_identical_repeat_emit) ... ok
+test_good_read_release_requires_reader_cover (harness.test_oracle.TraceContractTests.test_good_read_release_requires_reader_cover) ... ok
+test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives (harness.test_oracle.TraceContractTests.test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives) ... FAIL
+test_malformed_boolean_and_numeric_frontier_are_rejected (harness.test_oracle.TraceContractTests.test_malformed_boolean_and_numeric_frontier_are_rejected) ... FAIL
+test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny (harness.test_oracle.TraceContractTests.test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny) ... FAIL
+test_read_cover_omitting_roster_member_is_unsound (harness.test_oracle.TraceContractTests.test_read_cover_omitting_roster_member_is_unsound) ... FAIL
+test_read_deny_fences_fresh_release_and_blocks_delivery (harness.test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery) ... FAIL
+test_release_digest_and_persisted_bytes_are_frozen (harness.test_oracle.TraceContractTests.test_release_digest_and_persisted_bytes_are_frozen) ... FAIL
+test_repair_requires_complete_removals_and_cannot_reopen_without_path (harness.test_oracle.TraceContractTests.test_repair_requires_complete_removals_and_cannot_reopen_without_path) ... FAIL
+test_repair_then_recovery_reopens_for_continuing_reader (harness.test_oracle.TraceContractTests.test_repair_then_recovery_reopens_for_continuing_reader) ... ok
+test_replay_of_consumed_cell_is_rejected (harness.test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected) ... FAIL
+test_stale_recovery_is_rejected (harness.test_oracle.TraceContractTests.test_stale_recovery_is_rejected) ... FAIL
+
+======================================================================
+FAIL: test_abandon_is_terminal_and_idempotent (harness.test_oracle.TraceContractTests.test_abandon_is_terminal_and_idempotent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 156, in test_abandon_is_terminal_and_idempotent
+    self.assert_has([init_event(), alloc(), release_event(), abandoned, persist()],
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 4, 'code': 'invalid_transition'} not found in []
+
+======================================================================
+FAIL: test_allow_requires_higher_new_generation_and_admit_reuses_active_generation (harness.test_oracle.TraceContractTests.test_allow_requires_higher_new_generation_and_admit_reuses_active_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 206, in test_allow_requires_higher_new_generation_and_admit_reuses_active_generation
+    self.assert_has(old_generation, 2, "invalid_generation")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 2, 'code': 'invalid_generation'} not found in []
+
+======================================================================
+FAIL: test_crash_requires_exact_recovery_before_consume (harness.test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 168, in test_crash_requires_exact_recovery_before_consume
+    self.assert_has(events, 5, "not_ready")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 5, 'code': 'not_ready'} not found in []
+
+======================================================================
+FAIL: test_denied_extra_cover_support_is_unsound (harness.test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 128, in test_denied_extra_cover_support_is_unsound
+    self.assert_has(events, 3, "unsound_cover")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'unsound_cover'} not found in []
+
+======================================================================
+FAIL: test_duplicate_event_id_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_event_id_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 99, in test_duplicate_event_id_is_rejected
+    self.assert_has(events, 2, "duplicate_event")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 2, 'code': 'duplicate_event'} not found in []
+
+======================================================================
+FAIL: test_duplicate_operation_allocation_is_rejected (harness.test_oracle.TraceContractTests.test_duplicate_operation_allocation_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 102, in test_duplicate_operation_allocation_is_rejected
+    self.assert_has([init_event(), alloc(), alloc(event_id="e-allocate-again")],
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 2, 'code': 'duplicate_operation'} not found in []
+
+======================================================================
+FAIL: test_emit_on_a_superseded_branch_is_rejected (harness.test_oracle.TraceContractTests.test_emit_on_a_superseded_branch_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 185, in test_emit_on_a_superseded_branch_is_rejected
+    self.assert_has(events, 6, "stale_frontier")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 6, 'code': 'stale_frontier'} not found in []
+
+======================================================================
+FAIL: test_empty_malformed_and_unknown_traces_are_rejected (harness.test_oracle.TraceContractTests.test_empty_malformed_and_unknown_traces_are_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 91, in test_empty_malformed_and_unknown_traces_are_rejected
+    self.assert_has([], 0, "not_initialized")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 0, 'code': 'not_initialized'} not found in []
+
+======================================================================
+FAIL: test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives (harness.test_oracle.TraceContractTests.test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 143, in test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives
+    self.assert_has(events, 3, "unsound_cover")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'unsound_cover'} not found in []
+
+======================================================================
+FAIL: test_malformed_boolean_and_numeric_frontier_are_rejected (harness.test_oracle.TraceContractTests.test_malformed_boolean_and_numeric_frontier_are_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 174, in test_malformed_boolean_and_numeric_frontier_are_rejected
+    self.assert_has([malformed_init], 0, "malformed")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 0, 'code': 'malformed'} not found in []
+
+======================================================================
+FAIL: test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny (harness.test_oracle.TraceContractTests.test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 113, in test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny
+    self.assert_has(events, 6, "read_fenced")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 6, 'code': 'read_fenced'} not found in []
+
+======================================================================
+FAIL: test_read_cover_omitting_roster_member_is_unsound (harness.test_oracle.TraceContractTests.test_read_cover_omitting_roster_member_is_unsound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 120, in test_read_cover_omitting_roster_member_is_unsound
+    self.assert_has(events, 2, "unsound_cover")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 2, 'code': 'unsound_cover'} not found in []
+
+======================================================================
+FAIL: test_read_deny_fences_fresh_release_and_blocks_delivery (harness.test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 107, in test_read_deny_fences_fresh_release_and_blocks_delivery
+    self.assert_has(events, 3, "read_fenced")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'read_fenced'} not found in []
+
+======================================================================
+FAIL: test_release_digest_and_persisted_bytes_are_frozen (harness.test_oracle.TraceContractTests.test_release_digest_and_persisted_bytes_are_frozen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 147, in test_release_digest_and_persisted_bytes_are_frozen
+    self.assert_has(wrong_digest, 3, "binding_mismatch")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'binding_mismatch'} not found in []
+
+======================================================================
+FAIL: test_repair_requires_complete_removals_and_cannot_reopen_without_path (harness.test_oracle.TraceContractTests.test_repair_requires_complete_removals_and_cannot_reopen_without_path)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 189, in test_repair_requires_complete_removals_and_cannot_reopen_without_path
+    self.assert_has(incomplete, 2, "invalid_repair")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 2, 'code': 'invalid_repair'} not found in []
+
+======================================================================
+FAIL: test_replay_of_consumed_cell_is_rejected (harness.test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 162, in test_replay_of_consumed_cell_is_rejected
+    self.assert_has(events, 6, "replay")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 6, 'code': 'replay'} not found in []
+
+======================================================================
+FAIL: test_stale_recovery_is_rejected (harness.test_oracle.TraceContractTests.test_stale_recovery_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 180, in test_stale_recovery_is_rejected
+    self.assert_has(events, 3, "stale_frontier")
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_oracle.py", line 79, in assert_has
+    self.assertIn({"index": index, "code": code}, self.violations(events))
+AssertionError: {'index': 3, 'code': 'stale_frontier'} not found in []
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.002s
+
+FAILED (failures=17)
+
+[oracle-test negative control exit code: 1]

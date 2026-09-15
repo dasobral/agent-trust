@@ -1,0 +1,62 @@
+test_invalid_args_and_store_failure_are_nonzero_with_usage (harness.test_cli.AuthorityCliTests.test_invalid_args_and_store_failure_are_nonzero_with_usage) ... FAIL
+test_malformed_json_returns_error_and_processing_continues (harness.test_cli.AuthorityCliTests.test_malformed_json_returns_error_and_processing_continues) ... FAIL
+test_mls_demo_reports_the_required_experiment_summary (harness.test_cli.AuthorityCliTests.test_mls_demo_reports_the_required_experiment_summary) ... FAIL
+test_replay_consume_round_trip_and_checkpoint_fields (harness.test_cli.AuthorityCliTests.test_replay_consume_round_trip_and_checkpoint_fields) ... FAIL
+test_state_persists_across_process_reopening (harness.test_cli.AuthorityCliTests.test_state_persists_across_process_reopening) ... FAIL
+
+======================================================================
+FAIL: test_invalid_args_and_store_failure_are_nonzero_with_usage (harness.test_cli.AuthorityCliTests.test_invalid_args_and_store_failure_are_nonzero_with_usage)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 118, in test_invalid_args_and_store_failure_are_nonzero_with_usage
+    self.assertIn("usage", unknown.stderr.lower())
+AssertionError: 'usage' not found in 'unimplemented command interface\n'
+
+======================================================================
+FAIL: test_malformed_json_returns_error_and_processing_continues (harness.test_cli.AuthorityCliTests.test_malformed_json_returns_error_and_processing_continues)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 55, in test_malformed_json_returns_error_and_processing_continues
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : unimplemented command interface
+
+
+======================================================================
+FAIL: test_mls_demo_reports_the_required_experiment_summary (harness.test_cli.AuthorityCliTests.test_mls_demo_reports_the_required_experiment_summary)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 126, in test_mls_demo_reports_the_required_experiment_summary
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : unimplemented command interface
+
+
+======================================================================
+FAIL: test_replay_consume_round_trip_and_checkpoint_fields (harness.test_cli.AuthorityCliTests.test_replay_consume_round_trip_and_checkpoint_fields)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 79, in test_replay_consume_round_trip_and_checkpoint_fields
+    setup = self.authority(
+            ^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 41, in authority
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : unimplemented command interface
+
+
+======================================================================
+FAIL: test_state_persists_across_process_reopening (harness.test_cli.AuthorityCliTests.test_state_persists_across_process_reopening)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 65, in test_state_persists_across_process_reopening
+    first = self.authority(state, {"command": "init", "group": "group-a", "root": "root"})
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/ba7b9f83b536/agent-trust/harness/test_cli.py", line 41, in authority
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : unimplemented command interface
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+FAILED (failures=5)
+
+EXIT_CODE=1

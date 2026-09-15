@@ -1,0 +1,145 @@
+   Compiling agent-trust v0.1.0 (/workspace/scratch/ba7b9f83b536/agent-trust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running tests/authority_contract.rs (target/debug/deps/authority_contract-abdab7e7124e2290)
+
+running 12 tests
+test attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right ... FAILED
+test abandoned_released_operations_are_idempotently_closed_and_never_reusable ... FAILED
+test checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected ... FAILED
+test content_release_requires_an_exact_sound_cover_for_every_roster_reader ... FAILED
+test denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release ... FAILED
+test independently_opened_handles_reload_committed_state_before_each_mutation ... FAILED
+test reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation ... FAILED
+test malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation ... FAILED
+test repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set ... FAILED
+test persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes ... FAILED
+test revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged ... FAILED
+test initialization_has_the_documented_genesis_state_and_survives_restart ... FAILED
+
+failures:
+
+---- attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right stdout ----
+
+thread 'attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right' (167) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- abandoned_released_operations_are_idempotently_closed_and_never_reusable stdout ----
+
+thread 'abandoned_released_operations_are_idempotently_closed_and_never_reusable' (166) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected stdout ----
+
+thread 'checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected' (168) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- content_release_requires_an_exact_sound_cover_for_every_roster_reader stdout ----
+
+thread 'content_release_requires_an_exact_sound_cover_for_every_roster_reader' (169) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release stdout ----
+
+thread 'denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release' (170) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- independently_opened_handles_reload_committed_state_before_each_mutation stdout ----
+
+thread 'independently_opened_handles_reload_committed_state_before_each_mutation' (171) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation stdout ----
+
+thread 'reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation' (175) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation stdout ----
+
+thread 'malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation' (173) panicked at tests/authority_contract.rs:39:5:
+expected uninitialized, got unimplemented
+
+---- repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set stdout ----
+
+thread 'repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set' (176) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes stdout ----
+
+thread 'persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes' (174) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged stdout ----
+
+thread 'revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged' (177) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+---- initialization_has_the_documented_genesis_state_and_survives_restart stdout ----
+
+thread 'initialization_has_the_documented_genesis_state_and_survives_restart' (172) panicked at tests/authority_contract.rs:43:30:
+contract request should succeed: "unimplemented"
+
+
+failures:
+    abandoned_released_operations_are_idempotently_closed_and_never_reusable
+    attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right
+    checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected
+    content_release_requires_an_exact_sound_cover_for_every_roster_reader
+    denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release
+    independently_opened_handles_reload_committed_state_before_each_mutation
+    initialization_has_the_documented_genesis_state_and_survives_restart
+    malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation
+    persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes
+    reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation
+    repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set
+    revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged
+
+test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test authority_contract`
+     Running tests/mls_contract.rs (target/debug/deps/mls_contract-43f86d8ee2f573cc)
+
+running 4 tests
+test removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic ... FAILED
+test modified_protected_wire_is_rejected ... FAILED
+test new_lab_starts_with_alice_as_its_only_member ... FAILED
+test other_current_members_decrypt_and_authenticated_data_round_trips ... FAILED
+
+failures:
+
+---- removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic stdout ----
+
+thread 'removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic' (182) panicked at tests/mls_contract.rs:69:33:
+new lab should create alice: "unimplemented"
+
+---- modified_protected_wire_is_rejected stdout ----
+
+thread 'modified_protected_wire_is_rejected' (179) panicked at tests/mls_contract.rs:54:33:
+new lab should create alice: "unimplemented"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- new_lab_starts_with_alice_as_its_only_member stdout ----
+
+thread 'new_lab_starts_with_alice_as_its_only_member' (180) panicked at tests/mls_contract.rs:21:29:
+new lab should create alice: "unimplemented"
+
+---- other_current_members_decrypt_and_authenticated_data_round_trips stdout ----
+
+thread 'other_current_members_decrypt_and_authenticated_data_round_trips' (181) panicked at tests/mls_contract.rs:29:33:
+new lab should create alice: "unimplemented"
+
+
+failures:
+    modified_protected_wire_is_rejected
+    new_lab_starts_with_alice_as_its_only_member
+    other_current_members_decrypt_and_authenticated_data_round_trips
+    removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test mls_contract`
+error: 2 targets failed:
+    `--test authority_contract`
+    `--test mls_contract`
+
+EXIT_CODE=101

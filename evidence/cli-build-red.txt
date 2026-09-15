@@ -1,0 +1,4 @@
+   Compiling bitflags v2.13.2
+   Compiling rusqlite v0.37.0
+   Compiling agent-trust v0.1.0 (/workspace/scratch/ba7b9f83b536/agent-trust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.88s

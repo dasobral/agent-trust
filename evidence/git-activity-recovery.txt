@@ -1,0 +1,5 @@
+0000000000000000000000000000000000000000 5d6e174350207539d20c9fa04ccea877c1b86763 Codex <codex@local.invalid> 1789148599 +0300	commit (initial): docs: record approved specification and test-first execution plan
+5d6e174350207539d20c9fa04ccea877c1b86763 67d239b7b005c223db6aeefb8024d54e49e1e43f Codex <codex@local.invalid> 1789148949 +0300	commit: test: define independent trace contracts and record failing negative control
+67d239b7b005c223db6aeefb8024d54e49e1e43f 26eb7e11e1ee69e48b7845c1b985a6d0cba92711 Codex <codex@local.invalid> 1789188011 +0200	commit: test: record compiling authority and MLS contracts failing before implementation
+26eb7e11e1ee69e48b7845c1b985a6d0cba92711 4b23b522b9cf106d252cd4b9e75de6068b779ae6 Codex <codex@local.invalid> 1789188100 +0200	commit: feat: implement independent trace oracle against prior contract tests
+4b23b522b9cf106d252cd4b9e75de6068b779ae6 22e6cb3603ec0f06a3326d8915c9aa1cf3c9897f Codex <codex@local.invalid> 1789188209 +0200	commit: test: record failing CLI acceptance tests against compiling stub
