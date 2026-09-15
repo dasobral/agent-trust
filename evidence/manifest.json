@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "project": "agent-trust",
+  "recovery": {
+    "exact_snapshot": {
+      "path": "/Agents/agent-trust-recovered-2026-09-13",
+      "file_count": 49,
+      "byte_count": 301037
+    },
+    "recorded_original_head": "22e6cb3603ec0f06a3326d8915c9aa1cf3c9897f",
+    "recorded_prefork_checkpoint": "fff718a",
+    "historical_objects_available": false
+  },
+  "dependencies": {
+    "rust_minimum": "1.91",
+    "openmls": "0.9.0",
+    "openmls_traits": "0.6.0",
+    "openmls_rust_crypto": "0.6.0",
+    "openmls_basic_credential": "0.6.0"
+  },
+  "public_gates": [
+    "python3 scripts/verify.py",
+    "cargo build --locked",
+    "python3 -m unittest discover -s harness -v"
+  ],
+  "claim_boundary": {
+    "full_lap_mls": false,
+    "reason": "stock OpenMLS 0.9.0 lacks the required public staged KeyPackage construction API"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "checkpoint": "fff718a",
+  "source": "recovered prior-chat handback",
+  "tasks": [
+    {
+      "phase": "reconstruct checkpoint and interim patch",
+      "result": "f98466f"
+    },
+    {
+      "phase": "repair audited authority gaps",
+      "result": "8e658fc"
+    },
+    {
+      "phase": "correct CLI frontier fixture",
+      "result": "1ac9f01"
+    },
+    {
+      "phase": "add fail-closed verifier tests and entrypoint",
+      "result": "2ec5c0a"
+    },
+    {
+      "phase": "add recovery documentation and evidence",
+      "result": "42d34ba"
+    },
+    {
+      "phase": "record verification provenance and dependency boundary",
+      "result": "fff718a"
+    }
+  ],
+  "note": "Historical task models and exact commit objects were unavailable; no identities or hashes were fabricated."
+}

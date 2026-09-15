@@ -1,0 +1,16 @@
+Historical RED contract recovered and reproduced during forensic restoration.
+
+Command:
+  cargo test --locked --test authority_gap_contract
+
+Exit code:
+  101
+
+Result:
+  running 4 tests
+  FAILED revoking_read_from_a_non_roster_subject_does_not_close_the_group_fence
+  FAILED release_rejects_admin_or_admit_as_content_rights_without_consuming_the_reservation
+  FAILED repair_can_remove_a_revoked_root_reader_when_an_authorized_reader_continues
+  ok     revoking_a_non_roster_ancestor_still_fences_when_an_affected_descendant_is_in_the_roster
+
+The failures were authorization-contract failures, not authentication or toolchain failures.
