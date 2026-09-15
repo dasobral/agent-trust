@@ -56,7 +56,10 @@ fn modified_protected_wire_is_rejected() {
     let mut wire = lab
         .protect("alice", b"tamper check", b"aad")
         .expect("alice should protect a message");
-    assert!(!wire.is_empty(), "protected wire should contain a mutable byte");
+    assert!(
+        !wire.is_empty(),
+        "protected wire should contain a mutable byte"
+    );
     let last = wire.len() - 1;
     wire[last] ^= 0x01;
 

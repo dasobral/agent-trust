@@ -73,7 +73,11 @@ fn run_mls_demo() -> i32 {
             "epoch_advanced": epoch_advanced,
             "full_lap_mls": false,
         });
-        if old_snapshot_decrypts && removed_reader_rejected && continuing_reader_decrypts && epoch_advanced {
+        if old_snapshot_decrypts
+            && removed_reader_rejected
+            && continuing_reader_decrypts
+            && epoch_advanced
+        {
             Ok(summary)
         } else {
             Err("mls-demo experiment outcome was not met".to_owned())
@@ -95,14 +99,20 @@ fn run_mls_demo() -> i32 {
 fn main() {
     let mut args = std::env::args_os();
     let _program = args.next();
-    let Some(command) = args.next() else { fail_usage("missing command") };
+    let Some(command) = args.next() else {
+        fail_usage("missing command")
+    };
     let status = match command.to_string_lossy().as_ref() {
         "authority" => {
-            let Some(flag) = args.next() else { fail_usage("authority requires --state PATH") };
+            let Some(flag) = args.next() else {
+                fail_usage("authority requires --state PATH")
+            };
             if flag != "--state" {
                 fail_usage("authority requires --state PATH");
             }
-            let Some(path) = args.next() else { fail_usage("authority requires --state PATH") };
+            let Some(path) = args.next() else {
+                fail_usage("authority requires --state PATH")
+            };
             if args.next().is_some() {
                 fail_usage("unexpected authority argument");
             }

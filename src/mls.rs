@@ -4,10 +4,7 @@
 //! `roster` is the set of endpoints allowed to originate application traffic;
 //! stale copies are retained only for adversarial decryption experiments.
 
-use std::{
-    collections::BTreeMap,
-    sync::RwLock,
-};
+use std::{collections::BTreeMap, sync::RwLock};
 
 use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
@@ -30,7 +27,12 @@ struct LabProvider {
 
 impl LabProvider {
     fn snapshot(&self) -> Self {
-        let values = self.storage.values.read().expect("memory storage lock").clone();
+        let values = self
+            .storage
+            .values
+            .read()
+            .expect("memory storage lock")
+            .clone();
         Self {
             crypto: OpenMlsRustCrypto::default(),
             storage: MemoryStorage {
@@ -73,8 +75,7 @@ struct PendingMember {
 impl PendingMember {
     fn new(name: &str) -> Result<Self, String> {
         let provider = LabProvider::default();
-        let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm())
-            .map_err(error)?;
+        let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
         signer.store(provider.storage()).map_err(error)?;
         let key_package = KeyPackage::builder()
             .build(CIPHERSUITE, &provider, &signer, credential(name, &signer))
@@ -90,7 +91,10 @@ impl PendingMember {
 impl Endpoint {
     fn process_commit(&mut self, wire: &[u8]) -> Result<(), String> {
         let message = protocol_message(wire)?;
-        let processed = self.group.process_message(&self.provider, message).map_err(error)?;
+        let processed = self
+            .group
+            .process_message(&self.provider, message)
+            .map_err(error)?;
         match processed.into_content() {
             ProcessedMessageContent::StagedCommitMessage(commit) => self
                 .group
@@ -155,7 +159,10 @@ impl MlsLab {
                 .map_err(error)?;
             let commit_wire = commit.tls_serialize_detached().map_err(error)?;
             let committer_index = committer.group.own_leaf_index();
-            committer.group.merge_pending_commit(&committer.provider).map_err(error)?;
+            committer
+                .group
+                .merge_pending_commit(&committer.provider)
+                .map_err(error)?;
             (commit_wire, welcome, committer_index)
         };
 
@@ -216,7 +223,10 @@ impl MlsLab {
             .or_else(|| self.stale.get_mut(recipient))
             .ok_or_else(|| "unknown recipient".to_owned())?;
         let message = protocol_message(wire)?;
-        let processed = endpoint.group.process_message(&endpoint.provider, message).map_err(error)?;
+        let processed = endpoint
+            .group
+            .process_message(&endpoint.provider, message)
+            .map_err(error)?;
         let aad = processed.aad().to_vec();
         match processed.into_content() {
             ProcessedMessageContent::ApplicationMessage(message) => Ok((message.into_bytes(), aad)),
@@ -248,7 +258,10 @@ impl MlsLab {
             .own_leaf_index();
 
         let (commit_wire, committer_index) = {
-            let committer = self.roster.get_mut(&committer_name).expect("selected committer");
+            let committer = self
+                .roster
+                .get_mut(&committer_name)
+                .expect("selected committer");
             let signer = committer
                 .signer
                 .as_ref()
@@ -259,7 +272,10 @@ impl MlsLab {
                 .map_err(error)?;
             let commit_wire = commit.tls_serialize_detached().map_err(error)?;
             let committer_index = committer.group.own_leaf_index();
-            committer.group.merge_pending_commit(&committer.provider).map_err(error)?;
+            committer
+                .group
+                .merge_pending_commit(&committer.provider)
+                .map_err(error)?;
             (commit_wire, committer_index)
         };
 

@@ -15,20 +15,30 @@ struct Store {
 impl Store {
     fn new() -> Self {
         let serial = NEXT_STORE.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let dir = std::env::temp_dir().join(format!(
             "agent-trust-authority-adversarial-{}-{nanos}-{serial}",
             std::process::id()
         ));
         fs::create_dir_all(&dir).unwrap();
-        Self { db: dir.join("authority.sqlite"), dir }
+        Self {
+            db: dir.join("authority.sqlite"),
+            dir,
+        }
     }
 
-    fn path(&self) -> &Path { &self.db }
+    fn path(&self) -> &Path {
+        &self.db
+    }
 }
 
 impl Drop for Store {
-    fn drop(&mut self) { let _ = fs::remove_dir_all(&self.dir); }
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
 }
 
 fn code<T>(result: Result<T, String>, expected: &str) {
@@ -43,11 +53,16 @@ fn code<T>(result: Result<T, String>, expected: &str) {
 }
 
 fn request(authority: &mut Authority, value: Value) -> Value {
-    authority.execute(value).expect("contract request should succeed")
+    authority
+        .execute(value)
+        .expect("contract request should succeed")
 }
 
 fn init(authority: &mut Authority) {
-    request(authority, json!({"command":"init", "group":"group-a", "root":"root"}));
+    request(
+        authority,
+        json!({"command":"init", "group":"group-a", "root":"root"}),
+    );
 }
 
 fn checkpoint(authority: &mut Authority) -> Value {
@@ -55,14 +70,27 @@ fn checkpoint(authority: &mut Authority) -> Value {
 }
 
 fn allocate(authority: &mut Authority, op: &str) {
-    request(authority, json!({"command":"allocate", "actor":"root", "op":op}));
+    request(
+        authority,
+        json!({"command":"allocate", "actor":"root", "op":op}),
+    );
 }
 
-fn grant(authority: &mut Authority, subject: &str, right: &str, generation: u64, fresh_keys: bool, now: u64) {
-    request(authority, json!({
-        "command":"grant", "actor":"root", "subject":subject, "right":right,
-        "generation":generation, "fresh_keys":fresh_keys, "now":now
-    }));
+fn grant(
+    authority: &mut Authority,
+    subject: &str,
+    right: &str,
+    generation: u64,
+    fresh_keys: bool,
+    now: u64,
+) {
+    request(
+        authority,
+        json!({
+            "command":"grant", "actor":"root", "subject":subject, "right":right,
+            "generation":generation, "fresh_keys":fresh_keys, "now":now
+        }),
+    );
 }
 
 fn singleton(subject: &str, right: &str, generation: u64) -> Value {
@@ -73,7 +101,13 @@ fn root_cover() -> Vec<Value> {
     vec![singleton("root", "write", 0), singleton("root", "read", 0)]
 }
 
-fn release(authority: &mut Authority, op: &str, digest: &str, cover: Vec<Value>, now: u64) -> Result<Value, String> {
+fn release(
+    authority: &mut Authority,
+    op: &str,
+    digest: &str,
+    cover: Vec<Value>,
+    now: u64,
+) -> Result<Value, String> {
     let frontier = checkpoint(authority);
     authority.execute(json!({
         "command":"release", "actor":"root", "op":op, "right":"write",
@@ -82,7 +116,15 @@ fn release(authority: &mut Authority, op: &str, digest: &str, cover: Vec<Value>,
     }))
 }
 
-fn delegate(authority: &mut Authority, actor: &str, subject: &str, rights: Value, resources: Value, expires_at: u64, depth: u64) -> Result<Value, String> {
+fn delegate(
+    authority: &mut Authority,
+    actor: &str,
+    subject: &str,
+    rights: Value,
+    resources: Value,
+    expires_at: u64,
+    depth: u64,
+) -> Result<Value, String> {
     authority.execute(json!({
         "command":"delegate", "actor":actor, "subject":subject, "rights":rights,
         "resources":resources, "expires_at":expires_at, "not_before":0,
@@ -93,7 +135,10 @@ fn delegate(authority: &mut Authority, actor: &str, subject: &str, rights: Value
 fn admit_alice(authority: &mut Authority) {
     grant(authority, "alice", "read", 0, true, 10);
     grant(authority, "alice", "admit", 0, true, 10);
-    request(authority, json!({"command":"admit", "actor":"root", "subject":"alice", "now":10}));
+    request(
+        authority,
+        json!({"command":"admit", "actor":"root", "subject":"alice", "now":10}),
+    );
 }
 
 #[test]
@@ -104,20 +149,27 @@ fn persisted_operation_consumes_once_across_restarts_and_the_first_consume_progr
         init(&mut authority);
         allocate(&mut authority, "consume-op");
         release(&mut authority, "consume-op", "c0ffee", root_cover(), 10).unwrap();
-        request(&mut authority, json!({"command":"persist", "op":"consume-op", "digest":"c0ffee", "envelope":"0a0b"}));
+        request(
+            &mut authority,
+            json!({"command":"persist", "op":"consume-op", "digest":"c0ffee", "envelope":"0a0b"}),
+        );
     }
 
     {
         let mut reopened = Authority::open(store.path()).unwrap();
         assert_eq!(
-            request(&mut reopened, json!({"command":"consume", "op":"consume-op", "recipient":"root", "now":10})),
+            request(
+                &mut reopened,
+                json!({"command":"consume", "op":"consume-op", "recipient":"root", "now":10})
+            ),
             json!({"op":"consume-op", "recipient":"root"})
         );
     }
 
     let mut reopened_again = Authority::open(store.path()).unwrap();
     code(
-        reopened_again.execute(json!({"command":"consume", "op":"consume-op", "recipient":"root", "now":10})),
+        reopened_again
+            .execute(json!({"command":"consume", "op":"consume-op", "recipient":"root", "now":10})),
         "replay",
     );
 }
@@ -152,7 +204,10 @@ fn release_requires_a_preexisting_reservation_and_leaves_no_operation_state_on_f
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
     let before = checkpoint(&mut authority);
-    code(release(&mut authority, "never-allocated", "aa", root_cover(), 10), "invalid_transition");
+    code(
+        release(&mut authority, "never-allocated", "aa", root_cover(), 10),
+        "invalid_transition",
+    );
     assert_eq!(checkpoint(&mut authority), before);
 }
 
@@ -179,9 +234,26 @@ fn delegation_rejects_child_validity_that_outlives_its_parent() {
     let store = Store::new();
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
-    delegate(&mut authority, "root", "alice", json!(["read"]), json!(["group-a"]), 20, 7).unwrap();
+    delegate(
+        &mut authority,
+        "root",
+        "alice",
+        json!(["read"]),
+        json!(["group-a"]),
+        20,
+        7,
+    )
+    .unwrap();
     code(
-        delegate(&mut authority, "alice", "bob", json!(["read"]), json!(["group-a"]), 21, 6),
+        delegate(
+            &mut authority,
+            "alice",
+            "bob",
+            json!(["read"]),
+            json!(["group-a"]),
+            21,
+            6,
+        ),
         "invalid_delegation",
     );
 }
@@ -191,9 +263,26 @@ fn delegation_rejects_a_child_depth_that_is_not_strictly_lower() {
     let store = Store::new();
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
-    delegate(&mut authority, "root", "alice", json!(["read"]), json!(["group-a"]), u64::MAX, 7).unwrap();
+    delegate(
+        &mut authority,
+        "root",
+        "alice",
+        json!(["read"]),
+        json!(["group-a"]),
+        u64::MAX,
+        7,
+    )
+    .unwrap();
     code(
-        delegate(&mut authority, "alice", "bob", json!(["read"]), json!(["group-a"]), u64::MAX, 7),
+        delegate(
+            &mut authority,
+            "alice",
+            "bob",
+            json!(["read"]),
+            json!(["group-a"]),
+            u64::MAX,
+            7,
+        ),
         "invalid_delegation",
     );
 }
@@ -203,9 +292,26 @@ fn delegation_rejects_resources_outside_the_parent_grant() {
     let store = Store::new();
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
-    delegate(&mut authority, "root", "alice", json!(["read"]), json!(["group-a"]), u64::MAX, 7).unwrap();
+    delegate(
+        &mut authority,
+        "root",
+        "alice",
+        json!(["read"]),
+        json!(["group-a"]),
+        u64::MAX,
+        7,
+    )
+    .unwrap();
     code(
-        delegate(&mut authority, "alice", "bob", json!(["read"]), json!(["other-resource"]), u64::MAX, 6),
+        delegate(
+            &mut authority,
+            "alice",
+            "bob",
+            json!(["read"]),
+            json!(["other-resource"]),
+            u64::MAX,
+            6,
+        ),
         "invalid_delegation",
     );
 }
@@ -215,9 +321,26 @@ fn delegation_rejects_rights_the_parent_does_not_hold() {
     let store = Store::new();
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
-    delegate(&mut authority, "root", "alice", json!(["read"]), json!(["group-a"]), u64::MAX, 7).unwrap();
+    delegate(
+        &mut authority,
+        "root",
+        "alice",
+        json!(["read"]),
+        json!(["group-a"]),
+        u64::MAX,
+        7,
+    )
+    .unwrap();
     code(
-        delegate(&mut authority, "alice", "bob", json!(["write"]), json!(["group-a"]), u64::MAX, 6),
+        delegate(
+            &mut authority,
+            "alice",
+            "bob",
+            json!(["write"]),
+            json!(["group-a"]),
+            u64::MAX,
+            6,
+        ),
         "invalid_delegation",
     );
 }
@@ -228,15 +351,24 @@ fn stale_reader_generation_cannot_satisfy_a_release_cover_after_reallow() {
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
     admit_alice(&mut authority);
-    request(&mut authority, json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":11}));
+    request(
+        &mut authority,
+        json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":11}),
+    );
     let fenced = checkpoint(&mut authority);
-    request(&mut authority, json!({
-        "command":"repair", "parent_branch":fenced["branch"], "new_branch":"repair-1",
-        "epoch":fenced["epoch"].as_u64().unwrap() + 1, "revision":fenced["revision"],
-        "removed":["alice"], "update_path":true, "confirmed":true, "durable":true
-    }));
+    request(
+        &mut authority,
+        json!({
+            "command":"repair", "parent_branch":fenced["branch"], "new_branch":"repair-1",
+            "epoch":fenced["epoch"].as_u64().unwrap() + 1, "revision":fenced["revision"],
+            "removed":["alice"], "update_path":true, "confirmed":true, "durable":true
+        }),
+    );
     grant(&mut authority, "alice", "read", 1, true, 12);
-    request(&mut authority, json!({"command":"admit", "actor":"root", "subject":"alice", "now":12}));
+    request(
+        &mut authority,
+        json!({"command":"admit", "actor":"root", "subject":"alice", "now":12}),
+    );
     allocate(&mut authority, "stale-generation-op");
 
     code(
@@ -244,7 +376,11 @@ fn stale_reader_generation_cannot_satisfy_a_release_cover_after_reallow() {
             &mut authority,
             "stale-generation-op",
             "a1",
-            vec![singleton("root", "write", 0), singleton("root", "read", 0), singleton("alice", "read", 0)],
+            vec![
+                singleton("root", "write", 0),
+                singleton("root", "read", 0),
+                singleton("alice", "read", 0),
+            ],
             12,
         ),
         "unsound_cover",
@@ -257,13 +393,19 @@ fn repair_cannot_be_replayed_against_its_former_parent_branch() {
     let mut authority = Authority::open(store.path()).unwrap();
     init(&mut authority);
     admit_alice(&mut authority);
-    request(&mut authority, json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":11}));
+    request(
+        &mut authority,
+        json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":11}),
+    );
     let fenced = checkpoint(&mut authority);
-    request(&mut authority, json!({
-        "command":"repair", "parent_branch":fenced["branch"], "new_branch":"repair-1",
-        "epoch":fenced["epoch"].as_u64().unwrap() + 1, "revision":fenced["revision"],
-        "removed":["alice"], "update_path":true, "confirmed":true, "durable":true
-    }));
+    request(
+        &mut authority,
+        json!({
+            "command":"repair", "parent_branch":fenced["branch"], "new_branch":"repair-1",
+            "epoch":fenced["epoch"].as_u64().unwrap() + 1, "revision":fenced["revision"],
+            "removed":["alice"], "update_path":true, "confirmed":true, "durable":true
+        }),
+    );
     let after_first_repair = checkpoint(&mut authority);
 
     code(
