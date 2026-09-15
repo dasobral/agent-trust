@@ -88,24 +88,27 @@ class AuthorityCliTests(unittest.TestCase):
                 {"command": "admit", "actor": "root", "subject": "writer", "now": 10},
             )
             self.assertTrue(all("ok" in response for response in setup))
-            checkpoint = self.authority(state, {"command": "checkpoint"})[0]["ok"]
             cover = [
                 [{"subject": "writer", "right": "write", "generation": 0}],
                 [{"subject": "writer", "right": "read", "generation": 0}],
                 [{"subject": "root", "right": "read", "generation": 0}],
                 [{"subject": "alice", "right": "read", "generation": 0}],
             ]
-            responses = self.authority(
+            allocated = self.authority(
                 state,
                 {"command": "allocate", "actor": "writer", "op": "op-1"},
+            )
+            self.assertEqual(allocated, [{"ok": {"op": "op-1"}}])
+            checkpoint = self.authority(state, {"command": "checkpoint"})[0]["ok"]
+            responses = self.authority(
+                state,
                 {"command": "release", "actor": "writer", "op": "op-1", "right": "write", "revision": checkpoint["revision"], "epoch": checkpoint["epoch"], "branch": checkpoint["branch"], "digest": "a1b2", "cover": cover, "now": 11},
                 {"command": "persist", "op": "op-1", "digest": "a1b2", "envelope": "deadbeef"},
                 {"command": "consume", "op": "op-1", "recipient": "alice", "now": 11},
             )
-            self.assertEqual(responses[0], {"ok": {"op": "op-1"}})
-            self.assertEqual(responses[1]["ok"]["digest"], "a1b2")
-            self.assertEqual(responses[2], {"ok": {"op": "op-1"}})
-            self.assertEqual(responses[3], {"ok": {"op": "op-1", "recipient": "alice"}})
+            self.assertEqual(responses[0]["ok"]["digest"], "a1b2")
+            self.assertEqual(responses[1], {"ok": {"op": "op-1"}})
+            self.assertEqual(responses[2], {"ok": {"op": "op-1", "recipient": "alice"}})
             final = self.authority(state, {"command": "checkpoint"})[0]["ok"]
             self.assertIn("history_root", final)
             self.assertIsInstance(final["history"], list)
