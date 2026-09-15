@@ -1,0 +1,12 @@
+Confused-deputy TDD RED evidence
+
+Command:
+  cargo test --test confused_deputy_red
+
+Result before the implementation:
+  5 tests failed.
+  Each failed at the new `invoke` request with:
+    malformed: unknown command
+
+The failures were caused by the missing APF invocation/provenance command,
+not by weakened assertions.

@@ -1,0 +1,15 @@
+Authenticated provenance side-by-side result through the JSONL CLI:
+
+  child(read) -> parent(read,write) -> WRITE
+    APF response: {"error":"unauthorized"}
+
+  parent(read,write) -> WRITE
+    APF response: accepted release with
+      executor = parent
+      invocation = null
+      effective_right = write
+
+The first operation carried an APF-issued invocation whose rights were only
+`read`; the second operation had no invocation and was evaluated as the
+parent's independent request. The difference was enforced by APF state and
+release validation, not by application convention.

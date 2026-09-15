@@ -1,0 +1,27 @@
+Confused-deputy verification evidence
+
+Commands:
+  cargo fmt --all -- --check
+  cargo build --locked
+  cargo test --locked --all-targets
+
+Results:
+  formatting check passed
+  build passed
+  10 authority adversarial tests passed
+  14 authority contract tests passed
+  5 confused-deputy tests passed
+  4 MLS contract tests passed
+  33 integration tests passed; 0 unit-test failures
+
+Command:
+  python3 -m unittest discover -s harness -p 'test_confused_deputy_cli.py' -v
+
+Result:
+  1 CLI provenance test passed.
+
+Command:
+  git diff --cached --check
+
+Result:
+  passed with no whitespace errors.
