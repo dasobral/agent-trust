@@ -1,0 +1,27 @@
+test_abandon_is_terminal_and_idempotent (test_oracle.TraceContractTests.test_abandon_is_terminal_and_idempotent) ... ok
+test_allow_requires_higher_new_generation_and_admit_reuses_active_generation (test_oracle.TraceContractTests.test_allow_requires_higher_new_generation_and_admit_reuses_active_generation) ... ok
+test_crash_requires_exact_recovery_before_consume (test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume) ... ok
+test_denied_extra_cover_support_is_unsound (test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound) ... ok
+test_duplicate_event_id_is_rejected (test_oracle.TraceContractTests.test_duplicate_event_id_is_rejected) ... ok
+test_duplicate_operation_allocation_is_rejected (test_oracle.TraceContractTests.test_duplicate_operation_allocation_is_rejected) ... ok
+test_emit_on_a_superseded_branch_is_rejected (test_oracle.TraceContractTests.test_emit_on_a_superseded_branch_is_rejected) ... ok
+test_empty_malformed_and_unknown_traces_are_rejected (test_oracle.TraceContractTests.test_empty_malformed_and_unknown_traces_are_rejected) ... ok
+test_good_nonvacuous_write_trace_and_identical_repeat_emit (test_oracle.TraceContractTests.test_good_nonvacuous_write_trace_and_identical_repeat_emit) ... ok
+test_good_read_release_requires_reader_cover (test_oracle.TraceContractTests.test_good_read_release_requires_reader_cover) ... ok
+test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives (test_oracle.TraceContractTests.test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives) ... ok
+test_malformed_boolean_and_numeric_frontier_are_rejected (test_oracle.TraceContractTests.test_malformed_boolean_and_numeric_frontier_are_rejected) ... ok
+test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny (test_oracle.TraceContractTests.test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny) ... ok
+test_read_cover_omitting_roster_member_is_unsound (test_oracle.TraceContractTests.test_read_cover_omitting_roster_member_is_unsound) ... ok
+test_read_deny_fences_fresh_release_and_blocks_delivery (test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery) ... ok
+test_release_digest_and_persisted_bytes_are_frozen (test_oracle.TraceContractTests.test_release_digest_and_persisted_bytes_are_frozen) ... ok
+test_repair_requires_complete_removals_and_cannot_reopen_without_path (test_oracle.TraceContractTests.test_repair_requires_complete_removals_and_cannot_reopen_without_path) ... ok
+test_repair_then_recovery_reopens_for_continuing_reader (test_oracle.TraceContractTests.test_repair_then_recovery_reopens_for_continuing_reader) ... ok
+test_replay_of_consumed_cell_is_rejected (test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected) ... ok
+test_stale_recovery_is_rejected (test_oracle.TraceContractTests.test_stale_recovery_is_rejected) ... ok
+test_repair_cannot_remove_reallowed_pending_reader (test_oracle_repair.RepairValidationTests.test_repair_cannot_remove_reallowed_pending_reader) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 0.005s
+
+OK
+EXIT_CODE=0

@@ -1,0 +1,209 @@
+use agent_trust::authority::Authority;
+use serde_json::{json, Value};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static NEXT_STORE: AtomicU64 = AtomicU64::new(0);
+
+struct Store {
+    dir: PathBuf,
+    db: PathBuf,
+}
+
+impl Store {
+    fn new() -> Self {
+        let serial = NEXT_STORE.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "agent-trust-authority-gap-{}-{nanos}-{serial}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        Self {
+            db: dir.join("authority.sqlite"),
+            dir,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.db
+    }
+}
+
+impl Drop for Store {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn request(authority: &mut Authority, value: Value) -> Value {
+    authority
+        .execute(value)
+        .expect("contract request should succeed")
+}
+
+fn code<T>(result: Result<T, String>, expected: &str) {
+    let err = match result {
+        Err(err) => err,
+        Ok(_) => panic!("request should be rejected"),
+    };
+    assert!(
+        err == expected || err.starts_with(&format!("{expected}:")),
+        "expected {expected}, got {err}"
+    );
+}
+
+fn init(authority: &mut Authority) {
+    request(
+        authority,
+        json!({"command":"init", "group":"group-a", "root":"root"}),
+    );
+}
+
+fn checkpoint(authority: &mut Authority) -> Value {
+    request(authority, json!({"command":"checkpoint"}))
+}
+
+fn singleton(subject: &str, right: &str, generation: u64) -> Value {
+    json!([{"subject":subject, "right":right, "generation":generation}])
+}
+
+fn root_cover() -> Vec<Value> {
+    vec![singleton("root", "write", 0), singleton("root", "read", 0)]
+}
+
+fn grant(authority: &mut Authority, subject: &str, right: &str) {
+    request(
+        authority,
+        json!({
+            "command":"grant", "actor":"root", "subject":subject,
+            "right":right, "generation":0, "fresh_keys":true, "now":10
+        }),
+    );
+}
+
+#[test]
+fn revoking_read_from_a_non_roster_subject_does_not_close_the_group_fence() {
+    // authority-contract.md: the read fence closes only if an affected active or
+    // pending reader is in the MLS roster.
+    let store = Store::new();
+    let mut authority = Authority::open(store.path()).unwrap();
+    init(&mut authority);
+    grant(&mut authority, "observer", "read");
+
+    let response = request(
+        &mut authority,
+        json!({"command":"revoke", "actor":"root", "subject":"observer", "right":"read", "now":11}),
+    );
+    assert_eq!(response["read_fenced"], false);
+    assert_eq!(checkpoint(&mut authority)["read_fenced"], false);
+}
+
+#[test]
+fn release_rejects_admin_or_admit_as_content_rights_without_consuming_the_reservation() {
+    // release.right is restricted to read/write. A malformed content-right must
+    // leave the reservation usable for a subsequent valid release.
+    for forbidden in ["admin", "admit"] {
+        let store = Store::new();
+        let mut authority = Authority::open(store.path()).unwrap();
+        init(&mut authority);
+        request(
+            &mut authority,
+            json!({"command":"allocate", "actor":"root", "op":"op-1"}),
+        );
+        let frontier = checkpoint(&mut authority);
+        code(
+            authority.execute(json!({
+                "command":"release", "actor":"root", "op":"op-1", "right":forbidden,
+                "revision":frontier["revision"], "epoch":frontier["epoch"],
+                "branch":frontier["branch"], "digest":"aa", "cover":root_cover(), "now":10
+            })),
+            "malformed",
+        );
+        let frontier = checkpoint(&mut authority);
+        request(
+            &mut authority,
+            json!({
+                "command":"release", "actor":"root", "op":"op-1", "right":"write",
+                "revision":frontier["revision"], "epoch":frontier["epoch"],
+                "branch":frontier["branch"], "digest":"aa", "cover":root_cover(), "now":10
+            }),
+        );
+    }
+}
+
+#[test]
+fn repair_can_remove_a_revoked_root_reader_when_an_authorized_reader_continues() {
+    // Root is allowed to revoke its own read right. Because root is also an MLS
+    // roster reader, the qualifying repair must be able to remove it rather than
+    // silently exempting the authority root from the removal set.
+    let store = Store::new();
+    let mut authority = Authority::open(store.path()).unwrap();
+    init(&mut authority);
+    grant(&mut authority, "alice", "read");
+    grant(&mut authority, "alice", "admit");
+    request(
+        &mut authority,
+        json!({"command":"admit", "actor":"root", "subject":"alice", "now":10}),
+    );
+    request(
+        &mut authority,
+        json!({"command":"revoke", "actor":"root", "subject":"root", "right":"read", "now":11}),
+    );
+    let fenced = checkpoint(&mut authority);
+    assert_eq!(fenced["read_fenced"], true);
+
+    request(
+        &mut authority,
+        json!({
+            "command":"repair", "parent_branch":fenced["branch"], "new_branch":"repair-root-read",
+            "epoch":fenced["epoch"].as_u64().unwrap() + 1, "revision":fenced["revision"],
+            "removed":["root"], "update_path":true, "confirmed":true, "durable":true
+        }),
+    );
+    let repaired = checkpoint(&mut authority);
+    assert_eq!(repaired["read_fenced"], false);
+    assert_eq!(repaired["roster"], json!(["alice"]));
+}
+
+#[test]
+fn revoking_a_non_roster_ancestor_still_fences_when_an_affected_descendant_is_in_the_roster() {
+    // The fence condition is about the affected roster set, not whether the
+    // directly named subject is itself a current reader.
+    let store = Store::new();
+    let mut authority = Authority::open(store.path()).unwrap();
+    init(&mut authority);
+    request(
+        &mut authority,
+        json!({
+            "command":"delegate", "actor":"root", "subject":"alice",
+            "rights":["read","admit"], "resources":["group-a"],
+            "expires_at":100, "not_before":0, "depth":7, "now":10
+        }),
+    );
+    request(
+        &mut authority,
+        json!({
+            "command":"delegate", "actor":"alice", "subject":"bob",
+            "rights":["read","admit"], "resources":["group-a"],
+            "expires_at":90, "not_before":0, "depth":6, "now":10
+        }),
+    );
+    request(
+        &mut authority,
+        json!({"command":"admit", "actor":"root", "subject":"bob", "now":10}),
+    );
+    assert_eq!(checkpoint(&mut authority)["read_fenced"], false);
+
+    let response = request(
+        &mut authority,
+        json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":11}),
+    );
+    assert_eq!(response["read_fenced"], true);
+    assert_eq!(checkpoint(&mut authority)["read_fenced"], true);
+}

@@ -67,7 +67,7 @@ struct Endpoint {
 struct PendingMember {
     provider: LabProvider,
     signer: SignatureKeyPair,
-    key_package: KeyPackage,
+    key_package: KeyPackageBundle,
 }
 
 impl PendingMember {
@@ -88,8 +88,6 @@ impl PendingMember {
 }
 
 impl Endpoint {
-    }
-
     fn process_commit(&mut self, wire: &[u8]) -> Result<(), String> {
         let message = protocol_message(wire)?;
         let processed = self.group.process_message(&self.provider, message).map_err(error)?;

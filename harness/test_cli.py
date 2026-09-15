@@ -110,7 +110,8 @@ class AuthorityCliTests(unittest.TestCase):
             self.assertIn("history_root", final)
             self.assertIsInstance(final["history"], list)
             self.assertGreaterEqual(len(final["history"]), 1)
-            self.assertEqual(final["history"][0]["sequence"], 1)
+            # authority_contract.rs defines the durable history sequence as zero-based.
+            self.assertEqual(final["history"][0]["sequence"], 0)
 
     def test_invalid_args_and_store_failure_are_nonzero_with_usage(self):
         unknown = self.run_cli("unknown-command")
