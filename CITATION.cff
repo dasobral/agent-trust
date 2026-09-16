@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: agent-trust
+message: If you use this software, please cite it using these metadata.
+type: software
+authors:
+  - given-names: Daniel
+    family-names: Sobral Blanco
+    email: dasobral93@gmail.com
+    orcid: "https://orcid.org/0000-0001-9559-3651"
+    alias: dasobral
+repository-code: "https://github.com/dasobral/agent-trust"
+license: MIT
+version: 0.1.0
+abstract: >-
+  Experimental laboratory for Authorization–Capability Coherence (ACC) with
+  cryptographic agent principals, attenuated delegation, revocation, frozen
+  operation release, OpenMLS authorization domains, and authenticated
+  invocation provenance.
+keywords:
+  - MLS
+  - OpenMLS
+  - authorization
+  - capability
+  - delegation
+  - cryptography
+  - RFC 9420

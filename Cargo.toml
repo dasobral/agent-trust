@@ -4,7 +4,14 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.91"
 publish = false
-description = "Experimental authorization/capability consistency laboratory"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dasobral/agent-trust"
+homepage = "https://github.com/dasobral/agent-trust"
+authors = ["Daniel Sobral Blanco <dasobral93@gmail.com>"]
+keywords = ["mls", "authorization", "openmls", "capability", "delegation"]
+categories = ["cryptography"]
+description = "Experimental laboratory for authorization-capability coherence with MLS agent principals"
 
 [lib]
 name = "agent_trust"
