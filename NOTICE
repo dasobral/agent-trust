@@ -1,0 +1,6 @@
+agent-trust
+Copyright (c) 2026 Daniel Sobral Blanco
+
+This laboratory includes the OpenMLS crates from a pinned git revision of
+https://github.com/dasobral/openmls (upstream: https://github.com/openmls/openmls).
+Those crates remain under their own licenses.
