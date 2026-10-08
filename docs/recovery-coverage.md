@@ -25,3 +25,5 @@ Recovered executable coverage includes:
 - authenticated invocation provenance and confused-deputy prevention.
 
 Known boundary: `full_lap_mls` remains `false`. Canonical staged KeyPackage construction and the embedded APF admission binding are now verified against pinned fork commit `6daabe33ddb616a6ed54b511d333e691db18a99f`; the complete durable APF-to-MLS context/incarnation/repair coupling remains future work.
+
+**Update 2026-10-08:** the LAP-MLS coupling (`acc_context`, `authz_incarnation`, frontier CAS, policy-bound repair, and release binding) is now implemented. `agent-trust lap-demo` reports `full_lap_mls: true` for the laboratory profile defined in [`lap-mls.md`](lap-mls.md).

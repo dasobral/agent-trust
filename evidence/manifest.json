@@ -25,7 +25,8 @@
   "public_gates": [
     "python3 scripts/verify.py",
     "cargo build --locked",
-    "python3 -m unittest discover -s harness -v"
+    "python3 -m unittest discover -s harness -v",
+    "./target/debug/agent-trust lap-demo"
   ],
   "latest_verification": {
     "date": "2026-10-08",
@@ -46,15 +47,16 @@
     ]
   },
   "claim_boundary": {
-    "full_lap_mls": false,
+    "full_lap_mls": true,
     "staged_keypackage_binding_verified": true,
-    "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete",
+    "reason": "LAP-MLS coupling (acc_context, authz_incarnation, frontier CAS, policy-bound repair with designated confirmation, release certificate AAD binding) verified by tests/lap_kernel.rs, tests/lap_mls.rs and lap-demo",
     "qrng_entropy_source_offline_verified": true,
     "qrng_entropy_live_verified": false,
     "qrng_scope": "OpenMlsRand and laboratory Ed25519 seeds only; HPKE/RustCrypto internal randomness excluded",
     "durable_endpoint_state_verified": true,
     "retained_state_adversary_verified": true,
-    "durable_scope": "receiving-member crash before COMMIT; committer crash and whole-lab restart not covered"
+    "durable_scope": "receiving-member crash before COMMIT; committer crash and whole-lab restart not covered",
+    "full_lap_mls_scope": "agent-trust lap-demo: single authority, trusted in-process adapter deriving evidence from real OpenMLS objects, designated honest continuing member, simulated crashes; Bridge_remove^ETK proof obligation open; committer failure after kernel accept not covered; mls-demo (uncoupled) reports false"
   },
   "entropy_configuration": {
     "file_env": "AGENT_TRUST_ENTROPY_CONFIG",

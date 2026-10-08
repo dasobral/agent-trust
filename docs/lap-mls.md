@@ -102,3 +102,51 @@ ciphertext), then emit.
 checks `AAD = SHA-256(certificate)` and `SHA-256(plaintext) = digest`. Only
 then does it call kernel `consume` (at most once per recipient), and only after
 that is the plaintext delivered.
+
+## Adapter rules
+
+- **Designated member:** the first continuing member, in roster order, that is
+  online and is not the committer. If there is none, the committer is
+  designated. A member that is already offline is never designated, so it
+  cannot block the central fence. A designated member that crashes during the
+  repair leaves the fence closed until `LapMls::confirm` succeeds after its
+  restart.
+- **Re-admission:** after removal and a regrant at generation `g+1`, a subject
+  joins again with fresh keys and a new state file (`<subject>-g<g+1>.sqlite`).
+  The removed incarnation's retained endpoint is kept as
+  `<subject>-retired-<k>`.
+- **Admin interface:** `LapMls::authority` refuses every adapter-only command
+  (`admit`, `repair`, `confirm_repair`, `release`, `persist`, `emit`, `consume`,
+  `abandon`).
+
+## Gates and evidence
+
+| Gate (`lap-demo`) | Test |
+| --- | --- |
+| Members bound to the APF frontier, `acc_context`, and incarnations | `bound_group_carries_signed_acc_context_and_incarnations_matching_the_apf` |
+| Release certificate bound to ciphertext (AAD) and content (digest) | `release_certificate_is_bound_to_ciphertext_content_and_single_consumption` |
+| A rolled-back client cannot replay a consumed release | `rolled_back_client_cannot_replay_a_consumed_release` |
+| Forged, rolled-back, or incoherent `acc_context` rejected by members | `members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent` |
+| Fence until qualifying repair, retained-state exclusion, continuing readers, pre-cut release rejected after the epoch change | `read_revocation_fences_until_qualifying_repair_and_excludes_retained_state` |
+| A rejected canonicalization rolls the committer back | `rejected_canonicalization_rolls_the_committer_back` |
+| Write revocation without removal; reauthorization with a fresh generation; invocation provenance; offline member not blocking repair | remaining tests in `tests/lap_mls.rs` |
+| Kernel lap-mode CAS, binding, and repair rules | `tests/lap_kernel.rs` |
+
+The baseline (`api_only_revocation_leaks: true`) is the broken mode. Without
+an MLS removal, the retained state of a revoked reader still decrypts traffic
+that bypasses the APF fence.
+
+Red runs are in `evidence/lap-kernel-red.txt`, `evidence/envelope-size-red.txt`
+and `evidence/lap-mls-red.txt`. The last one was run with coherence and the
+receive-side binding stubbed off.
+
+## Findings while integrating
+
+- The confirmed transcript hash of epoch 0 is empty (RFC 9420). The kernel's
+  frontier parser initially rejected it.
+- The kernel's payload parser applied the 256-byte identifier limit, so a real
+  MLS envelope could never be persisted. It now has a dedicated 1 MiB envelope
+  limit.
+- A duplicate delivery to the same live client is rejected by MLS (deleted
+  message keys) before it reaches the APF. The APF replay barrier matters for a
+  *rolled-back* client, and a dedicated test covers it.

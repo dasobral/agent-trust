@@ -45,6 +45,11 @@ const GROUP_ID: &[u8] = b"agent-trust-mls-lab";
 const APF_BINDING_EXTENSION_TYPE: u16 = 0xf042;
 const APF_CERTIFICATE_MAGIC: &[u8] = b"AT-APF-KP";
 const APF_CERTIFICATE_VERSION: u8 = 1;
+const ACC_CONTEXT_EXTENSION_TYPE: u16 = 0xf043;
+const INCARNATION_EXTENSION_TYPE: u16 = 0xf044;
+const ACC_CONTEXT_MAGIC: &[u8] = b"AT-ACC";
+const INCARNATION_MAGIC: &[u8] = b"AT-INC";
+const BINDING_VERSION: u8 = 1;
 
 /// Randomness source for OpenMLS protocol randomness and laboratory signature keys.
 #[derive(Clone, Default)]
@@ -315,13 +320,14 @@ impl PendingMember {
         apf_signer: &SignatureKeyPair,
         entropy: &EntropySource,
         state_file: Option<&Path>,
+        binding: Option<&Binding>,
     ) -> Result<Self, String> {
         let provider = match state_file {
             Some(path) => LabProvider::create_file(path, entropy)?,
             None => LabProvider::in_memory(entropy)?,
         };
         provider.begin()?;
-        let staged = Self::stage(name, generation, apf_signer, &provider);
+        let staged = Self::stage(name, generation, apf_signer, &provider, binding);
         match staged {
             Ok((signer, key_package, key_package_wire, prepared_canonical)) => {
                 provider.commit()?;
@@ -346,14 +352,25 @@ impl PendingMember {
         generation: u64,
         apf_signer: &SignatureKeyPair,
         provider: &LabProvider,
+        binding: Option<&Binding>,
     ) -> Result<(SignatureKeyPair, KeyPackageBundle, Vec<u8>, Vec<u8>), String> {
         let signer = provider.generate_signer()?;
         signer.store(provider.storage()).map_err(error)?;
-        let capabilities = Capabilities::builder()
-            .extensions(vec![ExtensionType::Unknown(APF_BINDING_EXTENSION_TYPE)])
-            .build();
-        let prepared = KeyPackage::builder()
-            .leaf_node_capabilities(capabilities)
+        let mut builder = KeyPackage::builder().leaf_node_capabilities(bound_capabilities());
+        if let Some(binding) = binding {
+            let incarnation = encode_incarnation(
+                &binding.group,
+                name,
+                generation,
+                signer.public(),
+                apf_signer,
+            )?;
+            builder = builder.leaf_node_extensions(
+                Extensions::single(unknown_extension(INCARNATION_EXTENSION_TYPE, incarnation))
+                    .map_err(error)?,
+            );
+        }
+        let prepared = builder
             .prepare(
                 CIPHERSUITE,
                 provider,
@@ -424,8 +441,24 @@ impl Endpoint {
         }
     }
 
-    fn process_commit(&mut self, wire: &[u8]) -> Result<(), String> {
-        self.atomic(|endpoint| endpoint.process_commit_unchecked(wire))
+    /// Processes and merges a commit in one transaction; a bound endpoint
+    /// commits only if the merged state passes the coherence check.
+    fn process_commit(&mut self, wire: &[u8], binding: Option<&Binding>) -> Result<(), String> {
+        self.atomic(|endpoint| {
+            let parent_revision = binding.map(|binding| {
+                acc_revision_of(&endpoint.group, &endpoint.provider.crypto, binding)
+            });
+            endpoint.process_commit_unchecked(wire)?;
+            if let (Some(binding), Some(parent_revision)) = (binding, parent_revision) {
+                check_coherence(
+                    &endpoint.group,
+                    &endpoint.provider.crypto,
+                    binding,
+                    parent_revision,
+                )?;
+            }
+            Ok(())
+        })
     }
 
     /// Loads a durable endpoint from its state file, as a restarted process.
@@ -468,6 +501,7 @@ pub struct MlsLab {
     apf_signer: SignatureKeyPair,
     entropy: EntropySource,
     state_dir: Option<PathBuf>,
+    binding: Option<Binding>,
 }
 
 /// Epochs observed when a durable member restarts: the epoch loaded from its
@@ -542,7 +576,7 @@ impl MlsLab {
 
     /// Creates an in-memory laboratory drawing randomness from `source`.
     pub fn with_entropy(entropy: EntropySource) -> Result<Self, String> {
-        Self::create(entropy, None)
+        Self::create(entropy, None, None)
     }
 
     /// Creates a durable laboratory: each endpoint keeps its OpenMLS state in
@@ -551,10 +585,36 @@ impl MlsLab {
         if !dir.is_dir() {
             return Err(format!("state directory missing: {}", dir.display()));
         }
-        Self::create(entropy, Some(dir.to_path_buf()))
+        Self::create(entropy, Some(dir.to_path_buf()), None)
     }
 
-    fn create(entropy: EntropySource, state_dir: Option<PathBuf>) -> Result<Self, String> {
+    /// Creates a laboratory bound to APF group `apf_group`: the group context
+    /// carries a signed `acc_context` (revision 0, roster `alice@0`), every leaf
+    /// carries a signed `authz_incarnation`, and both are required capabilities.
+    /// Membership changes then go only through [`MlsLab::transition`].
+    pub fn create_bound(
+        entropy: EntropySource,
+        state_dir: Option<&Path>,
+        apf_group: &str,
+    ) -> Result<Self, String> {
+        if let Some(dir) = state_dir {
+            if !dir.is_dir() {
+                return Err(format!("state directory missing: {}", dir.display()));
+            }
+        }
+        ensure_name(apf_group)?;
+        Self::create(
+            entropy,
+            state_dir.map(Path::to_path_buf),
+            Some(apf_group.to_owned()),
+        )
+    }
+
+    fn create(
+        entropy: EntropySource,
+        state_dir: Option<PathBuf>,
+        apf_group: Option<String>,
+    ) -> Result<Self, String> {
         let state_file = state_dir.as_ref().map(|dir| dir.join("alice.sqlite"));
         let provider = match &state_file {
             Some(path) => LabProvider::create_file(path, &entropy)?,
@@ -565,15 +625,43 @@ impl MlsLab {
             let signer = provider.generate_signer()?;
             let apf_signer = provider.generate_signer()?;
             signer.store(provider.storage()).map_err(error)?;
-            let group = MlsGroup::builder()
+            let mut builder = MlsGroup::builder()
                 .with_group_id(GroupId::from_slice(GROUP_ID))
-                .use_ratchet_tree_extension(true)
+                .use_ratchet_tree_extension(true);
+            let binding = match &apf_group {
+                None => None,
+                Some(group) => {
+                    let binding = Binding {
+                        group: group.clone(),
+                        apf_public: apf_signer.to_public_vec(),
+                    };
+                    let incarnation =
+                        encode_incarnation(group, "alice", 0, signer.public(), &apf_signer)?;
+                    let acc = encode_acc_context(group, 0, &[("alice".into(), 0)], &apf_signer)?;
+                    builder = builder
+                        .with_capabilities(bound_capabilities())
+                        .with_leaf_node_extensions(
+                            Extensions::single(unknown_extension(
+                                INCARNATION_EXTENSION_TYPE,
+                                incarnation,
+                            ))
+                            .map_err(error)?,
+                        )
+                        .map_err(error)?
+                        .with_group_context_extensions(bound_group_context_extensions(acc)?);
+                    Some(binding)
+                }
+            };
+            let group = builder
                 .build(&provider, &signer, credential("alice", &signer))
                 .map_err(error)?;
+            if let Some(binding) = &binding {
+                check_coherence(&group, &provider.crypto, binding, 0)?;
+            }
             provider.commit()?;
-            Ok::<_, String>((signer, apf_signer, group))
+            Ok::<_, String>((signer, apf_signer, group, binding))
         })();
-        let (signer, apf_signer, group) = match founded {
+        let (signer, apf_signer, group, binding) = match founded {
             Ok(founded) => founded,
             Err(failure) => {
                 provider.rollback();
@@ -602,6 +690,7 @@ impl MlsLab {
             apf_signer,
             entropy,
             state_dir,
+            binding,
         })
     }
 
@@ -628,6 +717,7 @@ impl MlsLab {
     /// after OpenMLS has written the successor state but before COMMIT; it
     /// becomes offline and does not block the others.
     fn deliver_commit(&mut self, wire: &[u8], skip: &[&str]) -> Result<(), String> {
+        let binding = self.binding.clone();
         for offline in self.offline.values_mut() {
             offline.pending_commits.push(wire.to_vec());
         }
@@ -640,7 +730,7 @@ impl MlsLab {
         for name in names {
             let endpoint = self.roster.get_mut(&name).expect("listed member");
             if !endpoint.crash_before_commit {
-                endpoint.process_commit(wire)?;
+                endpoint.process_commit(wire, binding.as_ref())?;
                 continue;
             }
             endpoint.provider.begin()?;
@@ -675,6 +765,7 @@ impl MlsLab {
     /// Adds a member using a KeyPackage and makes every continuing member merge
     /// the authenticated commit; the new member joins from its Welcome.
     pub fn add_member(&mut self, name: &str) -> Result<(), String> {
+        self.ensure_unbound()?;
         ensure_name(name)?;
         if self.name_in_use(name) {
             return Err("member name already used".into());
@@ -690,7 +781,8 @@ impl MlsLab {
     }
 
     fn add_member_inner(&mut self, name: &str, state_file: Option<&Path>) -> Result<(), String> {
-        let joiner = PendingMember::new(name, 0, &self.apf_signer, &self.entropy, state_file)?;
+        let joiner =
+            PendingMember::new(name, 0, &self.apf_signer, &self.entropy, state_file, None)?;
         let verified = verify_admission_key_package(
             &joiner.provider,
             &joiner.key_package_wire,
@@ -811,6 +903,7 @@ impl MlsLab {
     /// endpoint processes and merges the resulting confirmed commit.  The
     /// removed endpoint is retained as stale state only for decryption attacks.
     pub fn remove_member(&mut self, name: &str) -> Result<(), String> {
+        self.ensure_unbound()?;
         if self.offline.contains_key(name) {
             return Err("member is offline".into());
         }
@@ -976,7 +1069,7 @@ impl MlsLab {
             endpoint.prepared_canonical = offline.prepared_canonical.clone();
             let loaded_epoch = endpoint.group.epoch().as_u64();
             for wire in &offline.pending_commits {
-                endpoint.process_commit(wire)?;
+                endpoint.process_commit(wire, self.binding.as_ref())?;
             }
             Ok::<_, String>((endpoint, loaded_epoch))
         })();
@@ -1027,6 +1120,401 @@ impl MlsLab {
             .map(|endpoint| endpoint.group.epoch().as_u64())
     }
 
+    fn ensure_unbound(&self) -> Result<(), String> {
+        if self.binding.is_some() {
+            Err("bound laboratory: membership changes go through the LAP adapter".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn require_binding(&self) -> Result<Binding, String> {
+        self.binding
+            .clone()
+            .ok_or_else(|| "operation requires a bound laboratory".to_owned())
+    }
+
+    /// Performs one bound membership transition as a single regular commit
+    /// with a forced UpdatePath and an `acc_context` GroupContextExtensions
+    /// proposal. Inside the committer's SQLite transaction the commit is
+    /// staged, merged, coherence-checked, and its evidence handed to
+    /// `canonicalize` (the APF compare-and-swap). If `canonicalize` fails the
+    /// committer rolls back to the parent epoch. Only after it succeeds is the
+    /// commit delivered and the Welcome processed.
+    pub fn transition<T>(
+        &mut self,
+        committer: &str,
+        spec: TransitionSpec<'_>,
+        canonicalize: impl FnOnce(&TransitionEvidence) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let binding = self.require_binding()?;
+        if !self.roster.contains_key(committer) {
+            return Err("committer is not a current online member".into());
+        }
+        if spec.remove.contains(&committer) {
+            return Err("a committer cannot remove itself".into());
+        }
+        let joiner_file = match spec.add {
+            Some((subject, generation)) => {
+                ensure_name(subject)?;
+                if self.roster.contains_key(subject) || self.offline.contains_key(subject) {
+                    return Err("member name already used".into());
+                }
+                // A removed earlier incarnation of the subject stays available
+                // as a retired stale endpoint; its state file is never reused.
+                self.retire_stale(subject);
+                self.new_state_path(&format!("{subject}-g{generation}"))?
+            }
+            None => None,
+        };
+        let result = self.transition_inner(
+            committer,
+            &spec,
+            &binding,
+            joiner_file.as_deref(),
+            canonicalize,
+        );
+        if result.is_err() {
+            if let (Some((subject, _)), Some(path)) = (spec.add, &joiner_file) {
+                if !self.name_in_use(subject) {
+                    discard_state_file(path);
+                }
+            }
+        }
+        result
+    }
+
+    fn transition_inner<T>(
+        &mut self,
+        committer: &str,
+        spec: &TransitionSpec<'_>,
+        binding: &Binding,
+        joiner_file: Option<&Path>,
+        canonicalize: impl FnOnce(&TransitionEvidence) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let joiner = match spec.add {
+            Some((subject, generation)) => {
+                let joiner = PendingMember::new(
+                    subject,
+                    generation,
+                    &self.apf_signer,
+                    &self.entropy,
+                    joiner_file,
+                    Some(binding),
+                )?;
+                let verified = verify_admission_key_package(
+                    &joiner.provider,
+                    &joiner.key_package_wire,
+                    subject,
+                    generation,
+                    &self.apf_signer.to_public_vec(),
+                )?;
+                if verified.recomputed_canonical != joiner.prepared_canonical {
+                    return Err("prepared and recomputed KeyPackage bytes differ".into());
+                }
+                Some(joiner)
+            }
+            None => None,
+        };
+        let acc = encode_acc_context(
+            &binding.group,
+            spec.acc_revision,
+            &spec.acc_roster,
+            &self.apf_signer,
+        )?;
+        let extensions = bound_group_context_extensions(acc)?;
+        let key_package = joiner
+            .as_ref()
+            .map(|joiner| joiner.key_package.key_package().clone());
+        let removals: Vec<String> = spec.remove.iter().map(|name| (*name).to_owned()).collect();
+
+        let (out, commit_wire, welcome, removed) = self
+            .roster
+            .get_mut(committer)
+            .expect("checked committer")
+            .atomic(|c| {
+                let parent = MlsFrontier::of(c.group.public_group().group_context());
+                let parent_revision = acc_revision_of(&c.group, &c.provider.crypto, binding);
+                let subjects = leaf_subjects(&c.group, &c.provider.crypto, binding)?;
+                let indices = leaf_indices(&subjects, &removals)?;
+                let signer = c
+                    .signer
+                    .as_ref()
+                    .ok_or_else(|| "committer has no signing key".to_owned())?;
+                let bundle = c
+                    .group
+                    .commit_builder()
+                    .propose_adds(key_package)
+                    .propose_removals(indices)
+                    .propose_group_context_extensions(extensions)
+                    .map_err(error)?
+                    .force_self_update(true)
+                    .load_psks(c.provider.storage())
+                    .map_err(error)?
+                    .build(c.provider.rand(), c.provider.crypto(), signer, |_| true)
+                    .map_err(error)?
+                    .stage_commit(&c.provider)
+                    .map_err(error)?;
+                let commit = bundle.commit().tls_serialize_detached().map_err(error)?;
+                let welcome = bundle.to_welcome_msg();
+                let pending = c
+                    .group
+                    .pending_commit()
+                    .ok_or_else(|| "commit was not staged".to_owned())?;
+                let update_path = pending.update_path_leaf_node().is_some();
+                let removed = pending
+                    .remove_proposals()
+                    .map(|proposal| {
+                        subjects
+                            .get(&proposal.remove_proposal().removed())
+                            .cloned()
+                            .ok_or_else(|| "removed leaf has no incarnation".to_owned())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut added = pending
+                    .add_proposals()
+                    .map(|proposal| {
+                        leaf_incarnation(
+                            proposal.add_proposal().key_package().leaf_node(),
+                            &c.provider.crypto,
+                            binding,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                if added.len() > 1 {
+                    return Err("a transition admits at most one member".into());
+                }
+                let staged = MlsFrontier::of(pending.group_context());
+                c.group.merge_pending_commit(&c.provider).map_err(error)?;
+                check_coherence(&c.group, &c.provider.crypto, binding, parent_revision)?;
+                let (acc_revision, acc_roster) =
+                    read_acc_context(&c.group, &c.provider.crypto, binding)?;
+                let successor = MlsFrontier::of(c.group.public_group().group_context());
+                if successor != staged {
+                    return Err("staged and merged frontiers differ".into());
+                }
+                let evidence = TransitionEvidence {
+                    parent,
+                    successor,
+                    removed: removed.clone(),
+                    added: added.pop(),
+                    update_path,
+                    acc_revision,
+                    acc_roster,
+                    commit: commit.clone(),
+                };
+                let out = canonicalize(&evidence)?;
+                Ok((out, commit, welcome, removed))
+            })?;
+
+        let mut skip = vec![committer];
+        skip.extend(removed.iter().map(String::as_str));
+        self.deliver_commit(&commit_wire, &skip)?;
+        for name in &removed {
+            if let Some(endpoint) = self.roster.remove(name) {
+                self.stale.insert(name.clone(), endpoint);
+            }
+            self.offline.remove(name);
+        }
+
+        if let (Some(joiner), Some((subject, _))) = (joiner, spec.add) {
+            let welcome = welcome_from_out(
+                welcome.ok_or_else(|| "Add commit produced no Welcome".to_owned())?,
+            )?;
+            joiner.provider.begin()?;
+            let joined = StagedWelcome::new_from_welcome(
+                &joiner.provider,
+                &MlsGroupJoinConfig::default(),
+                welcome,
+                None,
+            )
+            .and_then(|staged| staged.into_group(&joiner.provider))
+            .map_err(error)
+            .and_then(|group| {
+                check_coherence(&group, &joiner.provider.crypto, binding, 0)?;
+                Ok(group)
+            })
+            .and_then(|group| joiner.provider.commit().map(|()| group));
+            let group = match joined {
+                Ok(group) => group,
+                Err(failure) => {
+                    joiner.provider.rollback();
+                    return Err(failure);
+                }
+            };
+            self.roster.insert(
+                subject.to_owned(),
+                Endpoint {
+                    provider: joiner.provider,
+                    group,
+                    signer: Some(joiner.signer),
+                    admission_key_package: Some(joiner.key_package_wire),
+                    prepared_canonical: Some(joiner.prepared_canonical),
+                    state_file: joiner_file.map(Path::to_path_buf),
+                    crash_before_commit: false,
+                },
+            );
+        }
+        Ok(out)
+    }
+
+    /// Adversary model: a compromised member endpoint creates a commit that
+    /// bypasses the APF and the adapter, carrying arbitrary `acc_context` bytes
+    /// and removals. The rogue member does not install it; the returned commit
+    /// can be offered to honest members with [`MlsLab::process_commit_as`].
+    pub fn adversarial_commit(
+        &mut self,
+        committer: &str,
+        acc_context: Vec<u8>,
+        remove: &[&str],
+    ) -> Result<Vec<u8>, String> {
+        let binding = self.require_binding()?;
+        let removals: Vec<String> = remove.iter().map(|name| (*name).to_owned()).collect();
+        self.roster
+            .get_mut(committer)
+            .ok_or_else(|| "committer is not a current member".to_owned())?
+            .atomic(|c| {
+                let subjects = leaf_subjects(&c.group, &c.provider.crypto, &binding)?;
+                let indices = leaf_indices(&subjects, &removals)?;
+                let signer = c
+                    .signer
+                    .as_ref()
+                    .ok_or_else(|| "committer has no signing key".to_owned())?;
+                let bundle = c
+                    .group
+                    .commit_builder()
+                    .propose_removals(indices)
+                    .propose_group_context_extensions(bound_group_context_extensions(acc_context)?)
+                    .map_err(error)?
+                    .force_self_update(true)
+                    .load_psks(c.provider.storage())
+                    .map_err(error)?
+                    .build(c.provider.rand(), c.provider.crypto(), signer, |_| true)
+                    .map_err(error)?
+                    .stage_commit(&c.provider)
+                    .map_err(error)?;
+                let wire = bundle.commit().tls_serialize_detached().map_err(error)?;
+                c.group
+                    .clear_pending_commit(c.provider.storage())
+                    .map_err(error)?;
+                Ok(wire)
+            })
+    }
+
+    /// Offers a commit to one current member, which processes it with the
+    /// same transactional, coherence-checked path used for honest delivery.
+    pub fn process_commit_as(&mut self, member: &str, wire: &[u8]) -> Result<(), String> {
+        let binding = self.binding.clone();
+        self.roster
+            .get_mut(member)
+            .ok_or_else(|| "member is not current".to_owned())?
+            .process_commit(wire, binding.as_ref())
+    }
+
+    /// Signs an `acc_context` with the laboratory APF key (adversarial tests
+    /// use it to build honestly signed but stale or incoherent bindings).
+    ///
+    /// # Panics
+    /// Panics if the laboratory is not bound.
+    pub fn sign_acc_context(&self, revision: u64, roster: &[(&str, u64)]) -> Vec<u8> {
+        let binding = self.binding.as_ref().expect("bound laboratory");
+        let roster: Vec<(String, u64)> = roster
+            .iter()
+            .map(|(subject, generation)| ((*subject).to_owned(), *generation))
+            .collect();
+        encode_acc_context(&binding.group, revision, &roster, &self.apf_signer)
+            .expect("encode acc_context")
+    }
+
+    fn retire_stale(&mut self, subject: &str) {
+        if let Some(endpoint) = self.stale.remove(subject) {
+            let retired = (0..)
+                .map(|k| format!("{subject}-retired-{k}"))
+                .find(|name| !self.name_in_use(name))
+                .expect("unbounded names");
+            self.stale.insert(retired, endpoint);
+        }
+    }
+
+    /// Client rollback: replaces a durable member's state file with an earlier
+    /// byte copy (taken with [`MlsLab::retain_storage_copy`]) and restarts the
+    /// member from it. The APF must not trust the rolled-back client state.
+    pub fn restore_member_from(&mut self, name: &str, copy_name: &str) -> Result<(), String> {
+        let copy_file = self
+            .stale
+            .get(copy_name)
+            .and_then(|endpoint| endpoint.state_file.clone())
+            .ok_or_else(|| "copy has no durable state".to_owned())?;
+        let endpoint = self
+            .roster
+            .get(name)
+            .ok_or_else(|| "member is not current".to_owned())?;
+        let state_file = endpoint
+            .state_file
+            .clone()
+            .ok_or_else(|| "member has no durable state".to_owned())?;
+        let signer_public = endpoint
+            .signer
+            .as_ref()
+            .ok_or_else(|| "member has no signing key".to_owned())?
+            .to_public_vec();
+        let endpoint = self.roster.remove(name).expect("checked current member");
+        let admission_key_package = endpoint.admission_key_package.clone();
+        let prepared_canonical = endpoint.prepared_canonical.clone();
+        drop(endpoint);
+        std::fs::copy(&copy_file, &state_file).map_err(error)?;
+        let mut restored = Endpoint::load(state_file, Some(&signer_public), &self.entropy)?;
+        restored.admission_key_package = admission_key_package;
+        restored.prepared_canonical = prepared_canonical;
+        self.roster.insert(name.to_owned(), restored);
+        Ok(())
+    }
+
+    fn endpoint(&self, name: &str) -> Option<&Endpoint> {
+        self.roster.get(name).or_else(|| self.stale.get(name))
+    }
+
+    /// The verified `acc_context` installed at a member: `(revision, roster)`.
+    pub fn acc_context(&self, name: &str) -> Option<(u64, Vec<(String, u64)>)> {
+        let binding = self.binding.as_ref()?;
+        let endpoint = self.endpoint(name)?;
+        read_acc_context(&endpoint.group, &endpoint.provider.crypto, binding).ok()
+    }
+
+    /// Verified leaf incarnations of the ratchet tree held by a member.
+    pub fn incarnations(&self, name: &str) -> Vec<(String, u64)> {
+        let (Some(binding), Some(endpoint)) = (self.binding.as_ref(), self.endpoint(name)) else {
+            return Vec::new();
+        };
+        endpoint
+            .group
+            .members()
+            .filter_map(|member| endpoint.group.public_group().leaf(member.index))
+            .filter_map(|leaf| leaf_incarnation(leaf, &endpoint.provider.crypto, binding).ok())
+            .collect()
+    }
+
+    /// The MLS frontier installed at an online current or stale endpoint.
+    pub fn frontier(&self, name: &str) -> Option<MlsFrontier> {
+        self.endpoint(name)
+            .map(|endpoint| MlsFrontier::of(endpoint.group.public_group().group_context()))
+    }
+
+    pub(crate) fn apf_sign(&self, message: &[u8]) -> Result<Vec<u8>, String> {
+        self.apf_signer.sign(message).map_err(error)
+    }
+
+    pub(crate) fn apf_verify(&self, message: &[u8], signature: &[u8]) -> bool {
+        RustCrypto::default()
+            .verify_signature(
+                SignatureScheme::ED25519,
+                message,
+                &self.apf_signer.to_public_vec(),
+                signature,
+            )
+            .is_ok()
+    }
+
     pub fn epoch(&self) -> u64 {
         self.roster
             .values()
@@ -1046,6 +1534,341 @@ impl MlsLab {
         members.sort();
         members
     }
+}
+
+/// APF binding of a laboratory created with [`MlsLab::create_bound`].
+#[derive(Clone)]
+struct Binding {
+    group: String,
+    apf_public: Vec<u8>,
+}
+
+/// MLS epoch identity used as the APF canonical frontier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MlsFrontier {
+    pub epoch: u64,
+    pub tree_hash: Vec<u8>,
+    pub confirmed_transcript_hash: Vec<u8>,
+}
+
+impl MlsFrontier {
+    fn of(context: &GroupContext) -> Self {
+        Self {
+            epoch: context.epoch().as_u64(),
+            tree_hash: context.tree_hash().to_vec(),
+            confirmed_transcript_hash: context.confirmed_transcript_hash().to_vec(),
+        }
+    }
+}
+
+/// What a bound membership transition must contain.
+pub struct TransitionSpec<'a> {
+    /// A joining subject and its APF read generation.
+    pub add: Option<(&'a str, u64)>,
+    /// Subjects to remove, identified through their leaf incarnations.
+    pub remove: &'a [&'a str],
+    pub acc_revision: u64,
+    pub acc_roster: Vec<(String, u64)>,
+}
+
+/// Evidence derived from the real staged and merged commit, handed to the APF.
+#[derive(Clone, Debug)]
+pub struct TransitionEvidence {
+    pub parent: MlsFrontier,
+    pub successor: MlsFrontier,
+    /// Subjects of the commit's actual Remove proposals (via leaf incarnations).
+    pub removed: Vec<String>,
+    /// Incarnation of the commit's actual Add proposal, if any.
+    pub added: Option<(String, u64)>,
+    pub update_path: bool,
+    /// `acc_context` installed by the merged commit.
+    pub acc_revision: u64,
+    pub acc_roster: Vec<(String, u64)>,
+    pub commit: Vec<u8>,
+}
+
+fn unknown_extension(extension_type: u16, bytes: Vec<u8>) -> Extension {
+    Extension::Unknown(extension_type, UnknownExtension(bytes))
+}
+
+fn bound_capabilities() -> Capabilities {
+    Capabilities::builder()
+        .extensions(vec![
+            ExtensionType::Unknown(APF_BINDING_EXTENSION_TYPE),
+            ExtensionType::Unknown(ACC_CONTEXT_EXTENSION_TYPE),
+            ExtensionType::Unknown(INCARNATION_EXTENSION_TYPE),
+        ])
+        .build()
+}
+
+fn bound_group_context_extensions(
+    acc_context: Vec<u8>,
+) -> Result<Extensions<GroupContext>, String> {
+    Extensions::from_vec(vec![
+        unknown_extension(ACC_CONTEXT_EXTENSION_TYPE, acc_context),
+        Extension::RequiredCapabilities(RequiredCapabilitiesExtension::new(
+            &[
+                ExtensionType::Unknown(ACC_CONTEXT_EXTENSION_TYPE),
+                ExtensionType::Unknown(INCARNATION_EXTENSION_TYPE),
+            ],
+            &[],
+            &[],
+        )),
+    ])
+    .map_err(error)
+}
+
+pub(crate) fn sorted_roster(roster: &[(String, u64)]) -> Vec<(String, u64)> {
+    let mut roster = roster.to_vec();
+    roster.sort();
+    roster
+}
+
+/// `acc_context`: APF-signed policy revision and `(subject, generation)` roster.
+fn encode_acc_context(
+    group: &str,
+    revision: u64,
+    roster: &[(String, u64)],
+    signer: &impl Signer,
+) -> Result<Vec<u8>, String> {
+    let roster = sorted_roster(roster);
+    let mut payload = ACC_CONTEXT_MAGIC.to_vec();
+    payload.push(BINDING_VERSION);
+    append_sized(&mut payload, group.as_bytes())?;
+    payload.extend_from_slice(&revision.to_be_bytes());
+    let count = u16::try_from(roster.len()).map_err(|_| "acc_context roster too large")?;
+    payload.extend_from_slice(&count.to_be_bytes());
+    for (subject, generation) in &roster {
+        append_sized(&mut payload, subject.as_bytes())?;
+        payload.extend_from_slice(&generation.to_be_bytes());
+    }
+    let signature = signer.sign(&payload).map_err(error)?;
+    append_sized(&mut payload, &signature)?;
+    Ok(payload)
+}
+
+fn decode_acc_context(
+    bytes: &[u8],
+    crypto: &impl OpenMlsCrypto,
+    apf_public: &[u8],
+) -> Result<(String, u64, Vec<(String, u64)>), String> {
+    let mut input = bytes;
+    if take(&mut input, ACC_CONTEXT_MAGIC.len())? != ACC_CONTEXT_MAGIC
+        || take(&mut input, 1)?[0] != BINDING_VERSION
+    {
+        return Err("invalid acc_context header".into());
+    }
+    let group = utf8(take_sized(&mut input)?)?;
+    let revision = take_u64(&mut input)?;
+    let count = u16::from_be_bytes(
+        take(&mut input, 2)?
+            .try_into()
+            .map_err(|_| "invalid acc_context roster")?,
+    );
+    let mut roster = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let subject = utf8(take_sized(&mut input)?)?;
+        roster.push((subject, take_u64(&mut input)?));
+    }
+    let signed_len = bytes.len() - input.len();
+    let signature = take_sized(&mut input)?;
+    if !input.is_empty() {
+        return Err("trailing acc_context bytes".into());
+    }
+    crypto
+        .verify_signature(
+            SignatureScheme::ED25519,
+            &bytes[..signed_len],
+            apf_public,
+            signature,
+        )
+        .map_err(|_| "invalid acc_context signature".to_owned())?;
+    Ok((group, revision, roster))
+}
+
+/// `authz_incarnation`: APF-signed subject, generation, and leaf signature key.
+fn encode_incarnation(
+    group: &str,
+    subject: &str,
+    generation: u64,
+    signature_key: &[u8],
+    signer: &impl Signer,
+) -> Result<Vec<u8>, String> {
+    let mut payload = INCARNATION_MAGIC.to_vec();
+    payload.push(BINDING_VERSION);
+    append_sized(&mut payload, group.as_bytes())?;
+    append_sized(&mut payload, subject.as_bytes())?;
+    payload.extend_from_slice(&generation.to_be_bytes());
+    append_sized(&mut payload, signature_key)?;
+    let signature = signer.sign(&payload).map_err(error)?;
+    append_sized(&mut payload, &signature)?;
+    Ok(payload)
+}
+
+fn decode_incarnation(
+    bytes: &[u8],
+    crypto: &impl OpenMlsCrypto,
+    apf_public: &[u8],
+) -> Result<(String, String, u64, Vec<u8>), String> {
+    let mut input = bytes;
+    if take(&mut input, INCARNATION_MAGIC.len())? != INCARNATION_MAGIC
+        || take(&mut input, 1)?[0] != BINDING_VERSION
+    {
+        return Err("invalid authz_incarnation header".into());
+    }
+    let group = utf8(take_sized(&mut input)?)?;
+    let subject = utf8(take_sized(&mut input)?)?;
+    let generation = take_u64(&mut input)?;
+    let signature_key = take_sized(&mut input)?.to_vec();
+    let signed_len = bytes.len() - input.len();
+    let signature = take_sized(&mut input)?;
+    if !input.is_empty() {
+        return Err("trailing authz_incarnation bytes".into());
+    }
+    crypto
+        .verify_signature(
+            SignatureScheme::ED25519,
+            &bytes[..signed_len],
+            apf_public,
+            signature,
+        )
+        .map_err(|_| "invalid authz_incarnation signature".to_owned())?;
+    Ok((group, subject, generation, signature_key))
+}
+
+fn take_u64(input: &mut &[u8]) -> Result<u64, String> {
+    Ok(u64::from_be_bytes(
+        take(input, 8)?
+            .try_into()
+            .map_err(|_| "invalid u64 field".to_owned())?,
+    ))
+}
+
+fn utf8(bytes: &[u8]) -> Result<String, String> {
+    String::from_utf8(bytes.to_vec()).map_err(|_| "field is not UTF-8".to_owned())
+}
+
+/// Verified incarnation `(subject, generation)` of a leaf; the subject must be
+/// the leaf credential's identity and the key the leaf's signature key.
+fn leaf_incarnation(
+    leaf: &LeafNode,
+    crypto: &impl OpenMlsCrypto,
+    binding: &Binding,
+) -> Result<(String, u64), String> {
+    let bytes = leaf
+        .extensions()
+        .unknown(INCARNATION_EXTENSION_TYPE)
+        .ok_or_else(|| "leaf has no authz_incarnation".to_owned())?;
+    let (group, subject, generation, signature_key) =
+        decode_incarnation(&bytes.0, crypto, &binding.apf_public)?;
+    if group != binding.group {
+        return Err("authz_incarnation names another group".into());
+    }
+    if leaf.credential().serialized_content() != subject.as_bytes() {
+        return Err("authz_incarnation subject differs from the leaf credential".into());
+    }
+    if leaf.signature_key().as_slice() != signature_key.as_slice() {
+        return Err("authz_incarnation signature key differs from the leaf".into());
+    }
+    Ok((subject, generation))
+}
+
+/// The installed `acc_context` revision of a bound group (unverified read used
+/// only to obtain the parent's lower bound before a commit is processed).
+fn acc_revision_of(group: &MlsGroup, crypto: &impl OpenMlsCrypto, binding: &Binding) -> u64 {
+    group
+        .public_group()
+        .group_context()
+        .extensions()
+        .unknown(ACC_CONTEXT_EXTENSION_TYPE)
+        .and_then(|bytes| decode_acc_context(&bytes.0, crypto, &binding.apf_public).ok())
+        .map(|(_, revision, _)| revision)
+        .unwrap_or(0)
+}
+
+/// Verified `acc_context` of a bound group: `(revision, sorted roster)`.
+fn read_acc_context(
+    group: &MlsGroup,
+    crypto: &impl OpenMlsCrypto,
+    binding: &Binding,
+) -> Result<(u64, Vec<(String, u64)>), String> {
+    let bytes = group
+        .public_group()
+        .group_context()
+        .extensions()
+        .unknown(ACC_CONTEXT_EXTENSION_TYPE)
+        .ok_or_else(|| "acc_context missing".to_owned())?;
+    let (acc_group, revision, roster) = decode_acc_context(&bytes.0, crypto, &binding.apf_public)?;
+    if acc_group != binding.group {
+        return Err("acc_context names another group".into());
+    }
+    Ok((revision, sorted_roster(&roster)))
+}
+
+/// ACC coherence of a bound group state: a valid APF-signed `acc_context` no
+/// older than `min_revision`, valid incarnations on every leaf, and the leaf
+/// incarnation multiset equal to the `acc_context` roster.
+fn check_coherence(
+    group: &MlsGroup,
+    crypto: &impl OpenMlsCrypto,
+    binding: &Binding,
+    min_revision: u64,
+) -> Result<(), String> {
+    let coherence = |detail: String| format!("coherence: {detail}");
+    let (revision, roster) = read_acc_context(group, crypto, binding).map_err(coherence)?;
+    if revision < min_revision {
+        return Err(coherence(format!(
+            "acc_context revision {revision} is older than {min_revision}"
+        )));
+    }
+    let mut leaves = Vec::new();
+    for member in group.members() {
+        let leaf = group
+            .public_group()
+            .leaf(member.index)
+            .ok_or_else(|| coherence("missing leaf".into()))?;
+        leaves.push(leaf_incarnation(leaf, crypto, binding).map_err(coherence)?);
+    }
+    leaves.sort();
+    if leaves != roster {
+        return Err(coherence(
+            "tree incarnations differ from the acc_context roster".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Leaf index → verified incarnation subject for every member of `group`.
+fn leaf_subjects(
+    group: &MlsGroup,
+    crypto: &impl OpenMlsCrypto,
+    binding: &Binding,
+) -> Result<BTreeMap<LeafNodeIndex, String>, String> {
+    let mut subjects = BTreeMap::new();
+    for member in group.members() {
+        let leaf = group
+            .public_group()
+            .leaf(member.index)
+            .ok_or_else(|| "missing leaf".to_owned())?;
+        subjects.insert(member.index, leaf_incarnation(leaf, crypto, binding)?.0);
+    }
+    Ok(subjects)
+}
+
+fn leaf_indices(
+    subjects: &BTreeMap<LeafNodeIndex, String>,
+    names: &[String],
+) -> Result<Vec<LeafNodeIndex>, String> {
+    names
+        .iter()
+        .map(|name| {
+            subjects
+                .iter()
+                .find(|(_, subject)| *subject == name)
+                .map(|(index, _)| *index)
+                .ok_or_else(|| format!("{name} has no leaf in the group"))
+        })
+        .collect()
 }
 
 struct VerifiedAdmission {

@@ -31,3 +31,31 @@ Requests use `command` discriminator. Error strings begin a stable code followed
 Errors: `malformed`, `uninitialized`, `already_initialized`, `unauthorized`, `invalid_generation`, `invalid_delegation`, `duplicate_operation`, `invalid_transition`, `stale_frontier`, `read_fenced`, `unsound_cover`, `binding_mismatch`, `not_persisted`, `replay`, `invalid_repair`, `corrupt_history`.
 
 Expiry is evaluated from trusted adapter time `now` at release and consume. If any roster read grant's chain has expired, new content releases fail closed even before an explicit revoke. A later explicit revoke drives removal. Do not allow expired ancestor grants to authorize descendants. Production time-source trust and authentication are separate adapter gates.
+
+## Lap mode
+
+`init` with an additional `frontier` object `{epoch, tree_hash, confirmed_transcript_hash}` (hex; the transcript hash may be empty at epoch 0, per RFC 9420) enables lap mode. `branch` is then `SHA-256("AT-FRONTIER" ‖ group ‖ epoch ‖ tree_hash ‖ confirmed_transcript_hash)`, computed by the kernel (`authority::canonical_frontier_id`). The checkpoint gains `lap: {frontier, denial_revision, pending_repair, commits}`. `commits` is the canonical commit log: `{kind, epoch, parent, branch, commit}`, with the commit as hex.
+
+In lap mode, the fixture forms of `admit` and `repair` are refused as `malformed`, because they lack the MLS evidence fields. Only the trusted adapter (`src/lap.rs`) issues the following commands. It derives every field from real OpenMLS objects.
+
+- `admit`: `actor`, `subject`, `now`, `parent` (branch id), `successor` (frontier), `acc_revision`, `acc_roster` (`[{subject, generation}]`), `generation`, `commit`. Authorization is the same as in fixture mode, and admission is refused while the group is fenced. The checks are, in order:
+  - `stale_frontier` unless `parent` is the current branch;
+  - `invalid_transition` unless `successor.epoch` is the next epoch;
+  - `invalid_generation` unless `generation` is the subject's active read generation;
+  - `binding_mismatch` unless `acc_revision` is the current revision and `acc_roster` equals the post-admission roster with active read generations.
+
+  Response `{epoch, branch, revision}`.
+- `repair`: `parent`, `successor`, `removed`, `update_path`, `acc_revision`, `acc_roster`, `designated`, `commit`. It requires a closed fence with no repair pending, and `stale_frontier` is returned on a parent mismatch. It returns `invalid_repair` unless all of the following hold:
+  - the successor is the next epoch;
+  - `removed` equals exactly the roster members without an active read grant, and is nonempty;
+  - `update_path` is true;
+  - `acc_revision` is the current revision and is at least `denial_revision`;
+  - `acc_roster` equals the remaining roster with read generations;
+  - `designated` is a remaining member.
+
+  The fence stays closed and `pending_repair` is recorded. Response `{epoch, branch, revision}`.
+- `confirm_repair`: `member`, `installed` (frontier). It returns `invalid_repair` unless a repair is pending, `member` is the designated member, and the identity of the member's own `installed` frontier equals the canonical branch. On success it opens the fence. Response `{branch, revision, read_fenced}`.
+
+A read revocation that closes the fence records `denial_revision`, the revision after the revocation.
+
+Envelopes (`persist`, `emit`) accept up to 1 MiB of hex. Digests and other payload fields accept up to 4096 bytes. Before this change, the payload parser applied the 256-byte identifier limit by mistake (see `evidence/envelope-size-red.txt`).

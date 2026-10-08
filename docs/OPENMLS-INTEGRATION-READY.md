@@ -31,3 +31,5 @@ The staged-KeyPackage milestone is enabled because all of the following pass aga
 - complete `agent-trust` Rust and Python verification.
 
 `full_lap_mls` remains `false` because this milestone does not yet implement the complete durable APF adapter, `acc_context`, `authz_incarnation`, or policy-bound repair coupling. The OpenMLS fork remains a separate repository and is consumed only through the exact Git revision.
+
+**Update 2026-10-08:** the LAP-MLS coupling (`acc_context`, `authz_incarnation`, frontier CAS, policy-bound repair, and release binding) is now implemented. `agent-trust lap-demo` reports `full_lap_mls: true` for the laboratory profile defined in [`lap-mls.md`](lap-mls.md).

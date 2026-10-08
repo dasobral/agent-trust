@@ -1,0 +1,41 @@
+# Red run: LAP adapter with coherence enforcement and receive-side release binding stubbed off
+# (COHERENCE_ENFORCED=false in src/mls.rs, RECEIVE_BINDING_ENFORCED=false in src/lap.rs).
+# Other gates (frontier CAS, fencing, repair evidence, consume) are live and pass.
+# date: 2026-10-08T19:35:16Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+$ cargo test --locked --test lap_mls
+
+running 11 tests
+test adapter_only_commands_are_not_exposed_through_the_admin_interface ... ok
+test write_revocation_closes_the_generation_without_removing_the_reader ... ok
+test rolled_back_client_cannot_replay_a_consumed_release ... ok
+test rejected_canonicalization_rolls_the_committer_back ... ok
+test invocation_provenance_holds_through_the_adapter ... ok
+test members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent ... FAILED
+test bound_group_carries_signed_acc_context_and_incarnations_matching_the_apf ... ok
+test reauthorization_requires_a_fresh_generation_and_fresh_keys ... ok
+test release_certificate_is_bound_to_ciphertext_content_and_single_consumption ... FAILED
+test read_revocation_fences_until_qualifying_repair_and_excludes_retained_state ... ok
+test offline_member_does_not_block_repair_and_stays_locally_fenced_until_restart ... ok
+
+failures:
+
+---- members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent stdout ----
+
+thread 'members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent' (157556) panicked at tests/lap_mls.rs:281:14:
+forged signature: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- release_certificate_is_bound_to_ciphertext_content_and_single_consumption stdout ----
+
+thread 'release_certificate_is_bound_to_ciphertext_content_and_single_consumption' (157561) panicked at tests/lap_mls.rs:58:24:
+operation must be rejected: [102, 105, 114, 115, 116]
+
+
+failures:
+    members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent
+    release_certificate_is_bound_to_ciphertext_content_and_single_consumption
+
+test result: FAILED. 9 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+
+error: test failed, to rerun pass `--test lap_mls`
+exit: 101

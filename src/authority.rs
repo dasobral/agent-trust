@@ -1308,18 +1308,31 @@ fn bound_roster_untimed(s: &State, roster: &[String]) -> Result<BTreeSet<(String
 /// Canonical frontier identity: SHA-256 over the group and the MLS epoch
 /// identity (epoch, tree hash, confirmed transcript hash).
 fn frontier_id(group: &str, f: &Frontier) -> String {
+    canonical_frontier_id(
+        group,
+        f.epoch,
+        &hex::decode(&f.tree_hash).unwrap_or_default(),
+        &hex::decode(&f.confirmed_transcript_hash).unwrap_or_default(),
+    )
+}
+/// Canonical lap-mode frontier identity:
+/// `SHA-256("AT-FRONTIER" ‖ len‖group ‖ epoch ‖ len‖tree_hash ‖ len‖confirmed_transcript_hash)`
+/// with 32-bit big-endian lengths and a 64-bit big-endian epoch.
+pub fn canonical_frontier_id(
+    group: &str,
+    epoch: u64,
+    tree_hash: &[u8],
+    confirmed_transcript_hash: &[u8],
+) -> String {
     fn push_sized(input: &mut Vec<u8>, bytes: &[u8]) {
         input.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
         input.extend_from_slice(bytes);
     }
     let mut input = b"AT-FRONTIER".to_vec();
     push_sized(&mut input, group.as_bytes());
-    input.extend_from_slice(&f.epoch.to_be_bytes());
-    push_sized(&mut input, &hex::decode(&f.tree_hash).unwrap_or_default());
-    push_sized(
-        &mut input,
-        &hex::decode(&f.confirmed_transcript_hash).unwrap_or_default(),
-    );
+    input.extend_from_slice(&epoch.to_be_bytes());
+    push_sized(&mut input, tree_hash);
+    push_sized(&mut input, confirmed_transcript_hash);
     hex::encode(Sha256::digest(&input))
 }
 fn req_frontier(o: &serde_json::Map<String, Value>, k: &str) -> Result<Frontier, String> {
@@ -1327,13 +1340,16 @@ fn req_frontier(o: &serde_json::Map<String, Value>, k: &str) -> Result<Frontier,
         .get(k)
         .and_then(Value::as_object)
         .ok_or_else(|| format!("malformed: {k}"))?;
-    let digest = |name: &str| -> Result<String, String> {
+    // RFC 9420: the confirmed transcript hash of epoch 0 is the empty string.
+    let digest = |name: &str, may_be_empty: bool| -> Result<String, String> {
         let value = f
             .get(name)
             .and_then(Value::as_str)
             .ok_or_else(|| format!("malformed: {k}.{name}"))?;
         match hex::decode(value) {
-            Ok(bytes) if !bytes.is_empty() && bytes.len() <= 64 => Ok(value.to_ascii_lowercase()),
+            Ok(bytes) if (may_be_empty || !bytes.is_empty()) && bytes.len() <= 64 => {
+                Ok(value.to_ascii_lowercase())
+            }
             _ => Err(format!("malformed: {k}.{name}")),
         }
     };
@@ -1342,8 +1358,8 @@ fn req_frontier(o: &serde_json::Map<String, Value>, k: &str) -> Result<Frontier,
     }
     Ok(Frontier {
         epoch: req_u64(f, "epoch")?,
-        tree_hash: digest("tree_hash")?,
-        confirmed_transcript_hash: digest("confirmed_transcript_hash")?,
+        tree_hash: digest("tree_hash", false)?,
+        confirmed_transcript_hash: digest("confirmed_transcript_hash", true)?,
     })
 }
 fn req_commit(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {

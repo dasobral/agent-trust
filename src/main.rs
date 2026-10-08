@@ -6,7 +6,7 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 fn usage() -> &'static str {
-    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo [--entropy-config PATH]\n\nWithout --entropy-config, mls-demo reads AGENT_TRUST_ENTROPY_CONFIG or\nAGENT_TRUST_QRNG_BASE_URL, and otherwise uses the OS entropy source.\nThe authority command is a trusted administrative local interface; it is not a network service."
+    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo [--entropy-config PATH]\n       agent-trust lap-demo [--entropy-config PATH]\n\nWithout --entropy-config, mls-demo reads AGENT_TRUST_ENTROPY_CONFIG or\nAGENT_TRUST_QRNG_BASE_URL, and otherwise uses the OS entropy source.\nThe authority command is a trusted administrative local interface; it is not a network service."
 }
 
 fn fail_usage(message: &str) -> ! {
@@ -106,6 +106,60 @@ fn run_mls_demo(entropy_config: Option<PathBuf>) -> i32 {
     }
 }
 
+fn run_lap_demo(entropy_config: Option<PathBuf>) -> i32 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let dir = std::env::temp_dir().join(format!(
+        "agent-trust-lap-demo-{}-{nanos}",
+        std::process::id()
+    ));
+    let result = (|| -> Result<Value, String> {
+        let config = match entropy_config {
+            Some(path) => EntropyConfig::load(&path)?,
+            None => EntropyConfig::from_env()?,
+        };
+        let entropy = config.connect()?;
+        std::fs::create_dir(&dir).map_err(|e| format!("create state dir: {e}"))?;
+        let mut summary = agent_trust::lap::run_demo(&dir, entropy)?;
+        summary["entropy_source"] = json!(config.label());
+        Ok(summary)
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    match result {
+        Ok(summary) => {
+            println!("{}", summary);
+            if summary["full_lap_mls"] == true {
+                0
+            } else {
+                1
+            }
+        }
+        Err(error) => {
+            eprintln!("{}", error);
+            1
+        }
+    }
+}
+
+fn entropy_config_arg(args: &mut std::env::ArgsOs, command: &str) -> Option<PathBuf> {
+    let entropy_config = match args.next() {
+        None => None,
+        Some(flag) if flag == "--entropy-config" => {
+            let Some(path) = args.next() else {
+                fail_usage("--entropy-config requires PATH")
+            };
+            Some(PathBuf::from(path))
+        }
+        Some(_) => fail_usage(&format!("unexpected {command} argument")),
+    };
+    if args.next().is_some() {
+        fail_usage(&format!("unexpected {command} argument"));
+    }
+    entropy_config
+}
+
 fn main() {
     let mut args = std::env::args_os();
     let _program = args.next();
@@ -128,22 +182,8 @@ fn main() {
             }
             run_authority(path.into())
         }
-        "mls-demo" => {
-            let entropy_config = match args.next() {
-                None => None,
-                Some(flag) if flag == "--entropy-config" => {
-                    let Some(path) = args.next() else {
-                        fail_usage("--entropy-config requires PATH")
-                    };
-                    Some(PathBuf::from(path))
-                }
-                Some(_) => fail_usage("unexpected mls-demo argument"),
-            };
-            if args.next().is_some() {
-                fail_usage("unexpected mls-demo argument");
-            }
-            run_mls_demo(entropy_config)
-        }
+        "mls-demo" => run_mls_demo(entropy_config_arg(&mut args, "mls-demo")),
+        "lap-demo" => run_lap_demo(entropy_config_arg(&mut args, "lap-demo")),
         _ => fail_usage("unknown command"),
     };
     std::process::exit(status);

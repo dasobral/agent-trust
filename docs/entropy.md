@@ -93,6 +93,6 @@ not a live result. Do not record live endpoint details or credentials in
 
 ## Claim boundary
 
-This change does not alter `full_lap_mls`, which stays `false`. It does not
+This change does not alter `full_lap_mls`; see [`lap-mls.md`](lap-mls.md) for that claim. It does not
 introduce conditioning, and it makes no quantum-origin claim beyond what the
 configured endpoint provides.

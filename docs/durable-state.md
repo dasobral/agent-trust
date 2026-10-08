@@ -53,4 +53,4 @@ runs ahead of the durable state.
 - Durability against storage rollback or a compromised host. The specification
   does not cover this for the client role either.
 
-`full_lap_mls` remains `false`.
+This milestone by itself did not change `full_lap_mls`. **Update 2026-10-08:** the LAP-MLS coupling (`acc_context`, `authz_incarnation`, frontier CAS, policy-bound repair, and release binding) is now implemented. `agent-trust lap-demo` reports `full_lap_mls: true` for the laboratory profile defined in [`lap-mls.md`](lap-mls.md).
