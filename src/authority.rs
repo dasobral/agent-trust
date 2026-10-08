@@ -8,6 +8,7 @@ use std::path::Path;
 
 const MAX_ID: usize = 256;
 const MAX_PAYLOAD: usize = 4096;
+const MAX_ENVELOPE_HEX: usize = 1 << 20;
 
 pub struct Authority {
     conn: Connection,
@@ -27,6 +28,36 @@ struct State {
     consumed: Vec<Consumption>,
     #[serde(default)]
     invocations: Vec<Invocation>,
+    /// Present only in lap mode (`init` with an MLS `frontier`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lap: Option<LapState>,
+}
+/// Lap-mode state: the canonical MLS frontier and the sequencer's commit log.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct LapState {
+    frontier: Frontier,
+    denial_revision: u64,
+    pending_repair: Option<PendingRepair>,
+    commits: Vec<CanonicalCommit>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Frontier {
+    epoch: u64,
+    tree_hash: String,
+    confirmed_transcript_hash: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PendingRepair {
+    branch: String,
+    designated: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CanonicalCommit {
+    kind: String,
+    epoch: u64,
+    parent: String,
+    branch: String,
+    commit: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Grant {
@@ -131,11 +162,24 @@ impl Authority {
             }
             let group = req_id(obj, "group")?;
             let root = req_id(obj, "root")?;
+            let lap = match obj.get("frontier") {
+                None => None,
+                Some(_) => Some(LapState {
+                    frontier: req_frontier(obj, "frontier")?,
+                    denial_revision: 0,
+                    pending_repair: None,
+                    commits: vec![],
+                }),
+            };
+            let (epoch, branch) = match &lap {
+                Some(lap) => (lap.frontier.epoch, frontier_id(&group, &lap.frontier)),
+                None => (0, "genesis".to_string()),
+            };
             let state = State {
                 group: group.clone(),
                 revision: 0,
-                epoch: 0,
-                branch: "genesis".into(),
+                epoch,
+                branch: branch.clone(),
                 read_fenced: false,
                 roster: vec![root.clone()],
                 grants: rights(&["read", "write", "admin", "admit"])
@@ -159,9 +203,10 @@ impl Authority {
                 operations: vec![],
                 consumed: vec![],
                 invocations: vec![],
+                lap,
             };
             self.save(&state, "init")?;
-            return Ok(json!({"revision":0,"epoch":0,"branch":"genesis"}));
+            return Ok(json!({"revision":0,"epoch":epoch,"branch":branch}));
         }
         if !initialized {
             return Err("uninitialized".into());
@@ -173,6 +218,7 @@ impl Authority {
             "delegate" => self.delegate(&mut state, obj),
             "invoke" => self.invoke(&mut state, obj),
             "revoke" => self.revoke(&mut state, obj),
+            "admit" if state.lap.is_some() => self.lap_admit(&mut state, obj),
             "admit" => self.admit(&mut state, obj),
             "allocate" => self.allocate(&mut state, obj),
             "release" => self.release(&mut state, obj),
@@ -180,7 +226,9 @@ impl Authority {
             "emit" => self.emit(&state, obj),
             "consume" => self.consume(&mut state, obj),
             "abandon" => self.abandon(&mut state, obj),
+            "repair" if state.lap.is_some() => self.lap_repair(&mut state, obj),
             "repair" => self.repair(&mut state, obj),
+            "confirm_repair" => self.confirm_repair(&mut state, obj),
             _ => Err("malformed: unknown command".into()),
         }
     }
@@ -328,6 +376,11 @@ impl Authority {
                 s.read_fenced = true;
             }
             bump(s);
+            if fences_current_reader {
+                if let Some(lap) = &mut s.lap {
+                    lap.denial_revision = s.revision;
+                }
+            }
             self.save(s, "revoke")?;
         }
         Ok(json!({"revision":s.revision,"read_fenced":s.read_fenced}))
@@ -749,6 +802,161 @@ impl Authority {
         Ok(json!({"epoch":s.epoch,"branch":s.branch,"revision":s.revision}))
     }
 
+    /// Lap-mode admission: the trusted adapter reports the real MLS successor
+    /// produced by a winning Add commit, plus the `acc_context` it binds.
+    fn lap_admit(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        let actor = req_id(o, "actor")?;
+        let subject = req_id(o, "subject")?;
+        let now = req_u64(o, "now")?;
+        let parent = req_id(o, "parent")?;
+        let successor = req_frontier(o, "successor")?;
+        let acc_revision = req_u64(o, "acc_revision")?;
+        let acc_roster = req_acc_roster(o, "acc_roster")?;
+        let generation = req_u64(o, "generation")?;
+        let commit = req_commit(o, "commit")?;
+        if !effective(s, &actor, "admin", now)
+            || !effective(s, &subject, "admit", now)
+            || !effective(s, &subject, "read", now)
+        {
+            return Err("unauthorized".into());
+        }
+        if s.read_fenced {
+            return Err("read_fenced".into());
+        }
+        if s.roster.contains(&subject) {
+            return Err("invalid_transition".into());
+        }
+        if parent != s.branch {
+            return Err("stale_frontier".into());
+        }
+        if Some(successor.epoch) != s.epoch.checked_add(1) {
+            return Err("invalid_transition".into());
+        }
+        if active_generation(s, &subject, "read", now) != Some(generation) {
+            return Err("invalid_generation".into());
+        }
+        let mut roster = s.roster.clone();
+        roster.push(subject.clone());
+        if acc_revision != s.revision || acc_roster != bound_roster(s, &roster, now)? {
+            return Err("binding_mismatch".into());
+        }
+        s.roster = roster;
+        self.install_successor(s, "admit", parent, successor, commit);
+        bump(s);
+        self.save(s, "admit")?;
+        Ok(json!({"epoch":s.epoch,"branch":s.branch,"revision":s.revision}))
+    }
+
+    /// Lap-mode repair: the adapter reports the evidence it derived from the
+    /// real staged commit. The fence stays closed until `confirm_repair`.
+    fn lap_repair(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        let parent = req_id(o, "parent")?;
+        let successor = req_frontier(o, "successor")?;
+        let removed: BTreeSet<String> = req_ids(o, "removed")?.into_iter().collect();
+        let update_path = req_bool(o, "update_path")?;
+        let acc_revision = req_u64(o, "acc_revision")?;
+        let acc_roster = req_acc_roster(o, "acc_roster")?;
+        let designated = req_id(o, "designated")?;
+        let commit = req_commit(o, "commit")?;
+        let lap = s.lap.as_ref().ok_or_else(|| "invalid_repair".to_string())?;
+        if !s.read_fenced || lap.pending_repair.is_some() {
+            return Err("invalid_repair".into());
+        }
+        if parent != s.branch {
+            return Err("stale_frontier".into());
+        }
+        let expected: BTreeSet<String> = s
+            .roster
+            .iter()
+            .filter(|n| !active_without_time(s, n, "read"))
+            .cloned()
+            .collect();
+        let remaining: Vec<String> = s
+            .roster
+            .iter()
+            .filter(|n| !removed.contains(*n))
+            .cloned()
+            .collect();
+        if Some(successor.epoch) != s.epoch.checked_add(1)
+            || removed.is_empty()
+            || removed != expected
+            || !update_path
+            || acc_revision != s.revision
+            || acc_revision < lap.denial_revision
+            || !remaining.contains(&designated)
+            || acc_roster != bound_roster_untimed(s, &remaining)?
+        {
+            return Err("invalid_repair".into());
+        }
+        s.roster = remaining;
+        self.install_successor(s, "repair", parent, successor, commit);
+        if let Some(lap) = &mut s.lap {
+            lap.pending_repair = Some(PendingRepair {
+                branch: s.branch.clone(),
+                designated,
+            });
+        }
+        bump(s);
+        self.save(s, "repair")?;
+        Ok(json!({"epoch":s.epoch,"branch":s.branch,"revision":s.revision}))
+    }
+
+    /// Opens the central fence once the designated continuing member reports
+    /// its own durably installed frontier and it equals the canonical one.
+    fn confirm_repair(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        let member = req_id(o, "member")?;
+        let installed = req_frontier(o, "installed")?;
+        let installed_id = frontier_id(&s.group, &installed);
+        let lap = s.lap.as_mut().ok_or_else(|| "invalid_repair".to_string())?;
+        let pending = lap
+            .pending_repair
+            .as_ref()
+            .ok_or_else(|| "invalid_repair".to_string())?;
+        if pending.designated != member || pending.branch != s.branch || installed_id != s.branch {
+            return Err("invalid_repair".into());
+        }
+        lap.pending_repair = None;
+        s.read_fenced = false;
+        bump(s);
+        self.save(s, "confirm_repair")?;
+        Ok(json!({"branch":s.branch,"revision":s.revision,"read_fenced":false}))
+    }
+
+    fn install_successor(
+        &self,
+        s: &mut State,
+        kind: &str,
+        parent: String,
+        successor: Frontier,
+        commit: String,
+    ) {
+        let branch = frontier_id(&s.group, &successor);
+        s.epoch = successor.epoch;
+        s.branch = branch.clone();
+        if let Some(lap) = &mut s.lap {
+            lap.commits.push(CanonicalCommit {
+                kind: kind.into(),
+                epoch: successor.epoch,
+                parent,
+                branch,
+                commit,
+            });
+            lap.frontier = successor;
+        }
+    }
+
     fn checkpoint(&self, s: &State) -> Result<Value, String> {
         let mut stmt = self
             .conn
@@ -777,9 +985,11 @@ impl Authority {
             history
                 .push(json!({"sequence":sequence,"previous":previous,"hash":hash,"event":event}));
         }
-        Ok(
-            json!({"group":s.group,"revision":s.revision,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root,"history":history}),
-        )
+        let mut checkpoint = json!({"group":s.group,"revision":s.revision,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root,"history":history});
+        if let Some(lap) = &s.lap {
+            checkpoint["lap"] = json!(lap);
+        }
+        Ok(checkpoint)
     }
 
     fn get_meta(&self, key: &str) -> Result<Option<String>, String> {
@@ -1007,11 +1217,17 @@ fn req_id(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String>
     Ok(s.to_string())
 }
 fn req_payload(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
-    let s = req_id(o, k)?;
-    if s.len() > MAX_PAYLOAD {
+    req_bounded(o, k, MAX_PAYLOAD)
+}
+fn req_bounded(o: &serde_json::Map<String, Value>, k: &str, max: usize) -> Result<String, String> {
+    let s = o
+        .get(k)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("malformed: {k}"))?;
+    if s.is_empty() || s.len() > max {
         return Err(format!("malformed: {k}"));
     }
-    Ok(s)
+    Ok(s.to_string())
 }
 fn req_u64(o: &serde_json::Map<String, Value>, k: &str) -> Result<u64, String> {
     o.get(k)
@@ -1063,8 +1279,103 @@ fn req_ids(o: &serde_json::Map<String, Value>, k: &str) -> Result<Vec<String>, S
     }
     Ok(out)
 }
+const MAX_COMMIT_HEX: usize = 1 << 21;
+
+/// The `(subject, read generation)` roster an `acc_context` must bind.
+fn bound_roster(s: &State, roster: &[String], now: u64) -> Result<BTreeSet<(String, u64)>, String> {
+    roster
+        .iter()
+        .map(|name| {
+            active_generation(s, name, "read", now)
+                .map(|generation| (name.clone(), generation))
+                .ok_or_else(|| "unauthorized".to_string())
+        })
+        .collect()
+}
+fn bound_roster_untimed(s: &State, roster: &[String]) -> Result<BTreeSet<(String, u64)>, String> {
+    roster
+        .iter()
+        .map(|name| {
+            s.grants
+                .iter()
+                .find(|g| g.subject == *name && g.right == "read" && g.active)
+                .map(|g| (name.clone(), g.generation))
+                .ok_or_else(|| "invalid_repair".to_string())
+        })
+        .collect()
+}
+
+/// Canonical frontier identity: SHA-256 over the group and the MLS epoch
+/// identity (epoch, tree hash, confirmed transcript hash).
+fn frontier_id(group: &str, f: &Frontier) -> String {
+    fn push_sized(input: &mut Vec<u8>, bytes: &[u8]) {
+        input.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        input.extend_from_slice(bytes);
+    }
+    let mut input = b"AT-FRONTIER".to_vec();
+    push_sized(&mut input, group.as_bytes());
+    input.extend_from_slice(&f.epoch.to_be_bytes());
+    push_sized(&mut input, &hex::decode(&f.tree_hash).unwrap_or_default());
+    push_sized(
+        &mut input,
+        &hex::decode(&f.confirmed_transcript_hash).unwrap_or_default(),
+    );
+    hex::encode(Sha256::digest(&input))
+}
+fn req_frontier(o: &serde_json::Map<String, Value>, k: &str) -> Result<Frontier, String> {
+    let f = o
+        .get(k)
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("malformed: {k}"))?;
+    let digest = |name: &str| -> Result<String, String> {
+        let value = f
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("malformed: {k}.{name}"))?;
+        match hex::decode(value) {
+            Ok(bytes) if !bytes.is_empty() && bytes.len() <= 64 => Ok(value.to_ascii_lowercase()),
+            _ => Err(format!("malformed: {k}.{name}")),
+        }
+    };
+    if f.len() != 3 {
+        return Err(format!("malformed: {k}"));
+    }
+    Ok(Frontier {
+        epoch: req_u64(f, "epoch")?,
+        tree_hash: digest("tree_hash")?,
+        confirmed_transcript_hash: digest("confirmed_transcript_hash")?,
+    })
+}
+fn req_commit(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
+    let s = o
+        .get(k)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("malformed: {k}"))?;
+    if s.is_empty() || s.len() > MAX_COMMIT_HEX || s.len() % 2 != 0 || hex::decode(s).is_err() {
+        return Err(format!("malformed: {k}"));
+    }
+    Ok(s.to_ascii_lowercase())
+}
+fn req_acc_roster(
+    o: &serde_json::Map<String, Value>,
+    k: &str,
+) -> Result<BTreeSet<(String, u64)>, String> {
+    let a = o
+        .get(k)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("malformed: {k}"))?;
+    let mut out = BTreeSet::new();
+    for entry in a {
+        let e = entry.as_object().ok_or_else(|| format!("malformed: {k}"))?;
+        if !out.insert((req_id(e, "subject")?, req_u64(e, "generation")?)) {
+            return Err(format!("malformed: {k}"));
+        }
+    }
+    Ok(out)
+}
+/// Envelopes carry a release certificate plus a real MLS ciphertext.
 fn req_hex(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
-    let s = req_payload(o, k)?;
+    let s = req_bounded(o, k, MAX_ENVELOPE_HEX)?;
     if s.len() % 2 != 0 || hex::decode(&s).is_err() {
         return Err(format!("malformed: {k}"));
     }

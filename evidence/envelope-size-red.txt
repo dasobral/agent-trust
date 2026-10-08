@@ -1,0 +1,23 @@
+# Red run: envelope size defect (req_payload capped at MAX_ID=256 via req_id)
+# date: 2026-10-08T19:26:09Z
+$ cargo test --locked --test lap_kernel persist_and_emit_accept_real_size_mls_envelopes
+
+running 1 test
+test persist_and_emit_accept_real_size_mls_envelopes ... FAILED
+
+failures:
+
+---- persist_and_emit_accept_real_size_mls_envelopes stdout ----
+
+thread 'persist_and_emit_accept_real_size_mls_envelopes' (129874) panicked at tests/lap_kernel.rs:356:6:
+persist a 6000-byte envelope: "malformed: envelope"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    persist_and_emit_accept_real_size_mls_envelopes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test lap_kernel`
+exit: 101

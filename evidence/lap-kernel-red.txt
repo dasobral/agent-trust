@@ -1,0 +1,67 @@
+# Red run: lap-mode kernel stub (init binds the MLS frontier; admit/repair keep fixture semantics; no confirm_repair)
+# date: 2026-10-08T19:24:34Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+$ cargo test --locked --test lap_kernel
+warning: constant `MAX_COMMIT_HEX` is never used
+    --> src/authority.rs:1112:7
+     |
+1112 | const MAX_COMMIT_HEX: usize = 1 << 21;
+     |       ^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `req_commit` is never used
+    --> src/authority.rs:1155:4
+     |
+1155 | fn req_commit(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
+     |    ^^^^^^^^^^
+
+warning: function `req_acc_roster` is never used
+    --> src/authority.rs:1165:4
+     |
+1165 | fn req_acc_roster(
+     |    ^^^^^^^^^^^^^^
+
+warning: `agent-trust` (lib) generated 3 warnings
+
+running 4 tests
+test lap_repair_is_refused_while_the_group_is_not_fenced ... FAILED
+test lap_init_binds_the_frontier_and_refuses_fixture_transitions ... FAILED
+test lap_admit_requires_cas_current_binding_and_incarnation_generation ... FAILED
+test lap_repair_requires_exact_evidence_and_designated_confirmation ... FAILED
+
+failures:
+
+---- lap_repair_is_refused_while_the_group_is_not_fenced stdout ----
+
+thread 'lap_repair_is_refused_while_the_group_is_not_fenced' (126898) panicked at tests/lap_kernel.rs:45:5:
+expected invalid_repair, got malformed: parent_branch
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- lap_init_binds_the_frontier_and_refuses_fixture_transitions stdout ----
+
+thread 'lap_init_binds_the_frontier_and_refuses_fixture_transitions' (126897) panicked at tests/lap_kernel.rs:45:5:
+expected malformed, got invalid_repair
+
+---- lap_admit_requires_cas_current_binding_and_incarnation_generation stdout ----
+
+thread 'lap_admit_requires_cas_current_binding_and_incarnation_generation' (126896) panicked at tests/lap_kernel.rs:44:24:
+request should be rejected: Object {"branch": String("admit:1:bob"), "epoch": Number(1)}
+
+---- lap_repair_requires_exact_evidence_and_designated_confirmation stdout ----
+
+thread 'lap_repair_requires_exact_evidence_and_designated_confirmation' (126899) panicked at tests/lap_kernel.rs:107:9:
+assertion `left == right` failed
+  left: String("admit:1:bob")
+ right: "9e17ac401c63bff28c427886073aa8f2e28f9e48901585e581b3267e955fa548"
+
+
+failures:
+    lap_admit_requires_cas_current_binding_and_incarnation_generation
+    lap_init_binds_the_frontier_and_refuses_fixture_transitions
+    lap_repair_is_refused_while_the_group_is_not_fenced
+    lap_repair_requires_exact_evidence_and_designated_confirmation
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--test lap_kernel`
+exit: 101
