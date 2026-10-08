@@ -17,7 +17,9 @@
     "openmls_traits": "0.6.0 fork",
     "openmls_rust_crypto": "0.6.0 fork",
     "openmls_basic_credential": "0.6.0 fork",
-    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f"
+    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f",
+    "openmls_qrand_git_revision": "dc8dced82e1edbe13579cc64ad2e1fcc348d8a72",
+    "openmls_traits_patch": "crates-io openmls_traits redirected to the fork revision"
   },
   "public_gates": [
     "python3 scripts/verify.py",
@@ -25,15 +27,22 @@
     "python3 -m unittest discover -s harness -v"
   ],
   "latest_verification": {
-    "date": "2026-09-15",
-    "rust_tests": 39,
+    "date": "2026-10-08",
+    "rust_tests": 44,
     "python_tests": 32,
     "oracle_tests": 21,
-    "status": "pass"
+    "status": "pass",
+    "evidence": [
+      "evidence/qrng-entropy-red.txt",
+      "evidence/qrng-entropy-green.txt"
+    ]
   },
   "claim_boundary": {
     "full_lap_mls": false,
     "staged_keypackage_binding_verified": true,
-    "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete"
+    "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete",
+    "qrng_entropy_source_offline_verified": true,
+    "qrng_entropy_live_verified": false,
+    "qrng_scope": "OpenMlsRand and laboratory Ed25519 seeds only; HPKE/RustCrypto internal randomness excluded"
   }
 }

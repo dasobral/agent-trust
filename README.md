@@ -39,6 +39,7 @@ network service.
 | Public verifier fails closed | Yes, via `python3 scripts/verify.py` |
 | Confused-deputy / invocation provenance | Enforced in the APF kernel |
 | Staged OpenMLS KeyPackage admission binding | Verified against a pinned fork |
+| QRNG entropy source for the MLS laboratory | Verified offline against a fake QRNG Open API; live Entropy Core not yet recorded |
 | `full_lap_mls` | **`false`** |
 
 `full_lap_mls` remains `false`: this milestone does not yet couple the durable
@@ -73,8 +74,8 @@ reconstruction provenance.
 - Rust **1.91** or newer (`cargo`)
 - Python **3**
 
-Network access is required on first build to fetch the pinned OpenMLS git
-dependency.
+Network access is required on first build to fetch the pinned OpenMLS and
+`openmls-qrand` git dependencies.
 
 ## Verify
 
@@ -111,6 +112,7 @@ python3 scripts/verify.py
 | [`docs/confused-deputy.md`](docs/confused-deputy.md) | Invocation provenance |
 | [`docs/OPENMLS-INTEGRATION-READY.md`](docs/OPENMLS-INTEGRATION-READY.md) | Staged KeyPackage milestone |
 | [`docs/openmls-compatibility.md`](docs/openmls-compatibility.md) | Adapter compatibility notes |
+| [`docs/entropy.md`](docs/entropy.md) | QRNG entropy source and coverage boundary |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Staged work plan |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to propose changes |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting |

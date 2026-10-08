@@ -28,6 +28,16 @@ openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "6daab
 openmls_rust_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
 openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f", features = ["clonable"] }
 tls_codec = "0.5"
+openmls_qrand = { git = "https://github.com/dasobral/openmls-qrand.git", rev = "dc8dced82e1edbe13579cc64ad2e1fcc348d8a72" }
+ed25519-dalek = "2"
+zeroize = "1"
 
 [dev-dependencies]
 tempfile = "3"
+tiny_http = "0.12"
+base64 = "0.22"
+
+# openmls-qrand depends on crates.io openmls_traits 0.6.0. Redirect it to the
+# pinned fork so a single OpenMlsRand/OpenMlsProvider trait set is in the graph.
+[patch.crates-io]
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }

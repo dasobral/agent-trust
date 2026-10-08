@@ -1,0 +1,45 @@
+# Red run against interface stub (with_entropy ignores the QRNG source)
+# date: 2026-10-08T18:31:53Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+$ cargo test --locked --test mls_entropy
+
+running 5 tests
+test live_qrng_removal_excludes_retained_reader ... ignored, requires a reachable QRNG Open API endpoint (QRNG_LIVE_BASE_URL)
+test qrng_source_supplies_openmls_randomness_for_group_operations ... FAILED
+test qrng_unavailable_blocks_group_creation ... FAILED
+test qrng_source_seeds_member_signature_keys ... FAILED
+test qrng_unavailable_fails_closed_without_partial_membership ... FAILED
+
+failures:
+
+---- qrng_source_supplies_openmls_randomness_for_group_operations stdout ----
+
+thread 'qrng_source_supplies_openmls_randomness_for_group_operations' (43800) panicked at tests/mls_entropy.rs:157:5:
+group creation must draw QRNG entropy
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- qrng_unavailable_blocks_group_creation stdout ----
+
+thread 'qrng_unavailable_blocks_group_creation' (43801) panicked at tests/mls_entropy.rs:241:5:
+group creation must fail closed while QRNG is unavailable
+
+---- qrng_source_seeds_member_signature_keys stdout ----
+
+thread 'qrng_source_seeds_member_signature_keys' (43799) panicked at tests/mls_entropy.rs:201:9:
+alice's signature key must derive from a QRNG-served 32-byte seed
+
+---- qrng_unavailable_fails_closed_without_partial_membership stdout ----
+
+thread 'qrng_unavailable_fails_closed_without_partial_membership' (43802) panicked at tests/mls_entropy.rs:221:10:
+admission must fail closed while QRNG is unavailable: ()
+
+
+failures:
+    qrng_source_seeds_member_signature_keys
+    qrng_source_supplies_openmls_randomness_for_group_operations
+    qrng_unavailable_blocks_group_creation
+    qrng_unavailable_fails_closed_without_partial_membership
+
+test result: FAILED. 0 passed; 4 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `--test mls_entropy`
+exit: 101

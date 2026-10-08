@@ -3,20 +3,31 @@
 //! Each endpoint owns a real MLS group and an independent crypto provider.  The
 //! `roster` is the set of endpoints allowed to originate application traffic;
 //! stale copies are retained only for adversarial decryption experiments.
+//!
+//! OpenMLS protocol randomness (`OpenMlsRand`) and the laboratory's Ed25519
+//! signature-key seeds come from the configured [`EntropySource`]. Randomness
+//! internal to RustCrypto and hpke-rs (for example HPKE encapsulation) is not
+//! routed through that source.
 
-use std::{collections::BTreeMap, sync::RwLock};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
 
 use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
-use openmls_rust_crypto::{MemoryStorage, OpenMlsRustCrypto, RustCrypto};
+use openmls_qrand::{QrngClient, QrngError, QrngRand};
+use openmls_rust_crypto::{MemoryStorage, RustCrypto};
 use openmls_traits::{
     crypto::OpenMlsCrypto,
+    random::OpenMlsRand,
     signatures::Signer,
     types::{Ciphersuite, SignatureScheme},
     OpenMlsProvider,
 };
 use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 const GROUP_ID: &[u8] = b"agent-trust-mls-lab";
@@ -24,19 +35,107 @@ const APF_BINDING_EXTENSION_TYPE: u16 = 0xf042;
 const APF_CERTIFICATE_MAGIC: &[u8] = b"AT-APF-KP";
 const APF_CERTIFICATE_VERSION: u8 = 1;
 
+/// Randomness source for OpenMLS protocol randomness and laboratory signature keys.
+#[derive(Clone, Default)]
+pub enum EntropySource {
+    /// RustCrypto's ChaCha20 generator seeded from the operating system.
+    #[default]
+    Os,
+    /// A QRNG Open API endpoint. Failures are errors; there is no fallback.
+    Qrng(Arc<QrngClient>),
+}
+
+// Manual Debug: never print the QRNG client, whose Debug includes the endpoint.
+impl std::fmt::Debug for EntropySource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Os => "EntropySource::Os",
+            Self::Qrng(_) => "EntropySource::Qrng(..)",
+        })
+    }
+}
+
+/// The `OpenMlsRand` selected by an [`EntropySource`].
+enum LabRand {
+    Os(RustCrypto),
+    Qrng(QrngRand),
+}
+
+impl LabRand {
+    fn new(source: &EntropySource) -> Self {
+        match source {
+            EntropySource::Os => Self::Os(RustCrypto::default()),
+            EntropySource::Qrng(client) => Self::Qrng(QrngRand::new(client.clone())),
+        }
+    }
+}
+
+impl std::fmt::Debug for LabRand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Os(_) => "LabRand::Os",
+            Self::Qrng(_) => "LabRand::Qrng",
+        })
+    }
+}
+
+#[derive(Debug)]
+enum LabRandError {
+    Os(<RustCrypto as OpenMlsRand>::Error),
+    Qrng(QrngError),
+}
+
+impl std::fmt::Display for LabRandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Os(error) => write!(f, "OS randomness failed: {error}"),
+            Self::Qrng(error) => write!(f, "QRNG entropy unavailable: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for LabRandError {}
+
+impl OpenMlsRand for LabRand {
+    type Error = LabRandError;
+
+    fn random_array<const N: usize>(&self) -> Result<[u8; N], Self::Error> {
+        match self {
+            Self::Os(rand) => rand.random_array().map_err(LabRandError::Os),
+            Self::Qrng(rand) => rand.random_array().map_err(LabRandError::Qrng),
+        }
+    }
+
+    fn random_vec(&self, len: usize) -> Result<Vec<u8>, Self::Error> {
+        match self {
+            Self::Os(rand) => rand.random_vec(len).map_err(LabRandError::Os),
+            Self::Qrng(rand) => rand.random_vec(len).map_err(LabRandError::Qrng),
+        }
+    }
+}
+
 /// The stock provider uses a private `MemoryStorage` field and only enables its
 /// `Clone` implementation under OpenMLS test features.  This wrapper keeps the
 /// stock RustCrypto implementation while making each endpoint's storage
 /// explicit, so a snapshot can take an exact copy without enabling test-only
-/// OpenMLS features.
-#[derive(Debug, Default)]
+/// OpenMLS features, and selects the randomness source.
+#[derive(Debug)]
 struct LabProvider {
-    crypto: OpenMlsRustCrypto,
+    crypto: RustCrypto,
     storage: MemoryStorage,
+    rand: LabRand,
 }
 
 impl LabProvider {
-    fn snapshot(&self) -> Self {
+    fn new(source: &EntropySource) -> Self {
+        Self {
+            crypto: RustCrypto::default(),
+            storage: MemoryStorage::default(),
+            rand: LabRand::new(source),
+        }
+    }
+
+    fn snapshot(&self, source: &EntropySource) -> Self {
         let values = self
             .storage
             .values
@@ -44,17 +143,30 @@ impl LabProvider {
             .expect("memory storage lock")
             .clone();
         Self {
-            crypto: OpenMlsRustCrypto::default(),
+            crypto: RustCrypto::default(),
             storage: MemoryStorage {
                 values: RwLock::new(values),
             },
+            rand: LabRand::new(source),
         }
+    }
+
+    /// Generates an Ed25519 signature key pair from a 32-byte seed drawn from
+    /// this provider's entropy source, rather than `SignatureKeyPair::new`,
+    /// which always uses `OsRng`.
+    fn generate_signer(&self) -> Result<SignatureKeyPair, String> {
+        let mut seed: [u8; 32] = self.rand.random_array().map_err(error)?;
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
+        let public = signing_key.verifying_key().to_bytes().to_vec();
+        let signer = SignatureKeyPair::from_raw(SignatureScheme::ED25519, seed.to_vec(), public);
+        seed.zeroize();
+        Ok(signer)
     }
 }
 
 impl OpenMlsProvider for LabProvider {
     type CryptoProvider = RustCrypto;
-    type RandProvider = RustCrypto;
+    type RandProvider = LabRand;
     type StorageProvider = MemoryStorage;
 
     fn storage(&self) -> &Self::StorageProvider {
@@ -62,11 +174,11 @@ impl OpenMlsProvider for LabProvider {
     }
 
     fn crypto(&self) -> &Self::CryptoProvider {
-        self.crypto.crypto()
+        &self.crypto
     }
 
     fn rand(&self) -> &Self::RandProvider {
-        self.crypto.rand()
+        &self.rand
     }
 }
 
@@ -87,9 +199,14 @@ struct PendingMember {
 }
 
 impl PendingMember {
-    fn new(name: &str, generation: u64, apf_signer: &SignatureKeyPair) -> Result<Self, String> {
-        let provider = LabProvider::default();
-        let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
+    fn new(
+        name: &str,
+        generation: u64,
+        apf_signer: &SignatureKeyPair,
+        entropy: &EntropySource,
+    ) -> Result<Self, String> {
+        let provider = LabProvider::new(entropy);
+        let signer = provider.generate_signer()?;
         signer.store(provider.storage()).map_err(error)?;
         let capabilities = Capabilities::builder()
             .extensions(vec![ExtensionType::Unknown(APF_BINDING_EXTENSION_TYPE)])
@@ -153,6 +270,7 @@ pub struct MlsLab {
     roster: BTreeMap<String, Endpoint>,
     stale: BTreeMap<String, Endpoint>,
     apf_signer: SignatureKeyPair,
+    entropy: EntropySource,
 }
 
 /// Evidence returned after independently validating an embedded admission binding.
@@ -211,11 +329,12 @@ impl MlsLab {
         self.verify_member_admission_for(name, name, 0)
     }
 
-    /// Creates the group with Alice as its founding member.
-    pub fn new() -> Result<Self, String> {
-        let provider = LabProvider::default();
-        let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
-        let apf_signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
+    /// Creates the group with Alice as its founding member, drawing randomness
+    /// from `source`.
+    pub fn with_entropy(entropy: EntropySource) -> Result<Self, String> {
+        let provider = LabProvider::new(&entropy);
+        let signer = provider.generate_signer()?;
+        let apf_signer = provider.generate_signer()?;
         signer.store(provider.storage()).map_err(error)?;
         let group = MlsGroup::builder()
             .with_group_id(GroupId::from_slice(GROUP_ID))
@@ -235,7 +354,23 @@ impl MlsLab {
             )]),
             stale: BTreeMap::new(),
             apf_signer,
+            entropy,
         })
+    }
+
+    /// Returns a current or stale endpoint's MLS signature public key.
+    pub fn member_signature_key(&self, name: &str) -> Option<Vec<u8>> {
+        self.roster
+            .get(name)
+            .or_else(|| self.stale.get(name))
+            .and_then(|endpoint| endpoint.group.own_leaf_node())
+            .map(|leaf| leaf.signature_key().as_slice().to_vec())
+    }
+
+    /// Creates the group with Alice as its founding member, using OS-seeded
+    /// randomness.
+    pub fn new() -> Result<Self, String> {
+        Self::with_entropy(EntropySource::Os)
     }
 
     /// Adds a member using a KeyPackage and makes every continuing member merge
@@ -245,7 +380,7 @@ impl MlsLab {
         if self.roster.contains_key(name) || self.stale.contains_key(name) {
             return Err("member name already used".into());
         }
-        let joiner = PendingMember::new(name, 0, &self.apf_signer)?;
+        let joiner = PendingMember::new(name, 0, &self.apf_signer, &self.entropy)?;
         let verified = verify_admission_key_package(
             &joiner.provider,
             &joiner.key_package_wire,
@@ -416,7 +551,7 @@ impl MlsLab {
             .roster
             .get(name)
             .ok_or_else(|| "member is not current".to_owned())?;
-        let provider = original.provider.snapshot();
+        let provider = original.provider.snapshot(&self.entropy);
         let group_id = original.group.group_id().clone();
         let group = MlsGroup::load(provider.storage(), &group_id)
             .map_err(error)?
