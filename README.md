@@ -39,6 +39,7 @@ network service.
 | Public verifier fails closed | Yes, via `python3 scripts/verify.py` |
 | Confused-deputy / invocation provenance | Enforced in the APF kernel |
 | Staged OpenMLS KeyPackage admission binding | Verified against a pinned fork |
+| Durable MLS endpoint state, restart, retained-copy exclusion | Verified with SQLite storage (receiving-member crash only) |
 | QRNG entropy source for the MLS laboratory | Verified offline against a fake QRNG Open API; live Entropy Core not yet recorded |
 | `full_lap_mls` | **`false`** |
 
@@ -94,7 +95,7 @@ python3 scripts/verify.py
 | Path | Role |
 | --- | --- |
 | `src/authority.rs` | Durable APF kernel |
-| `src/mls.rs` | In-memory OpenMLS laboratory |
+| `src/mls.rs` | OpenMLS laboratory (in-memory or durable SQLite endpoints) |
 | `src/main.rs` | Local `authority` and `mls-demo` CLI |
 | `tests/` | Rust contract and adversarial tests |
 | `harness/` | Independent Python oracle and CLI tests |
@@ -115,6 +116,7 @@ python3 scripts/verify.py
 | [`docs/confused-deputy.md`](docs/confused-deputy.md) | Invocation provenance |
 | [`docs/OPENMLS-INTEGRATION-READY.md`](docs/OPENMLS-INTEGRATION-READY.md) | Staged KeyPackage milestone |
 | [`docs/openmls-compatibility.md`](docs/openmls-compatibility.md) | Adapter compatibility notes |
+| [`docs/durable-state.md`](docs/durable-state.md) | Durable endpoint state and crash boundary |
 | [`docs/entropy.md`](docs/entropy.md) | QRNG entropy source and coverage boundary |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Staged work plan |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to propose changes |

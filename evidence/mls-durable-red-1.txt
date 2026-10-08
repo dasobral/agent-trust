@@ -1,0 +1,44 @@
+# Red run 1: durable API stub that ignores the directory (state kept in memory)
+# date: 2026-10-08T19:07:50Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+$ cargo test --locked --test mls_durable
+
+running 4 tests
+test durable_lab_refuses_reuse_and_memory_lab_has_no_durable_state ... FAILED
+test restarted_member_reloads_secrets_and_signing_key_from_its_state_file ... FAILED
+test retained_byte_copy_of_removed_member_cannot_read_successor_traffic ... FAILED
+test crash_before_commit_rolls_back_to_the_previous_epoch_and_catches_up ... FAILED
+
+failures:
+
+---- durable_lab_refuses_reuse_and_memory_lab_has_no_durable_state stdout ----
+
+thread 'durable_lab_refuses_reuse_and_memory_lab_has_no_durable_state' (92367) panicked at tests/mls_durable.rs:179:5:
+an existing state file must not be overwritten or silently reused
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- restarted_member_reloads_secrets_and_signing_key_from_its_state_file stdout ----
+
+thread 'restarted_member_reloads_secrets_and_signing_key_from_its_state_file' (92368) panicked at tests/mls_durable.rs:30:42:
+bob has a state file
+
+---- retained_byte_copy_of_removed_member_cannot_read_successor_traffic stdout ----
+
+thread 'retained_byte_copy_of_removed_member_cannot_read_successor_traffic' (92369) panicked at tests/mls_durable.rs:80:42:
+bob file
+
+---- crash_before_commit_rolls_back_to_the_previous_epoch_and_catches_up stdout ----
+
+thread 'crash_before_commit_rolls_back_to_the_previous_epoch_and_catches_up' (92366) panicked at tests/mls_durable.rs:156:5:
+a crashed member is offline until restarted
+
+
+failures:
+    crash_before_commit_rolls_back_to_the_previous_epoch_and_catches_up
+    durable_lab_refuses_reuse_and_memory_lab_has_no_durable_state
+    restarted_member_reloads_secrets_and_signing_key_from_its_state_file
+    retained_byte_copy_of_removed_member_cannot_read_successor_traffic
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+error: test failed, to rerun pass `--test mls_durable`
+exit: 101

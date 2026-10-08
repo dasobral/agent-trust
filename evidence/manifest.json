@@ -19,7 +19,8 @@
     "openmls_basic_credential": "0.6.0 fork",
     "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f",
     "openmls_qrand_git_revision": "dc8dced82e1edbe13579cc64ad2e1fcc348d8a72",
-    "openmls_traits_patch": "crates-io openmls_traits redirected to the fork revision"
+    "openmls_traits_patch": "crates-io openmls_traits redirected to the fork revision",
+    "openmls_sqlite_storage": "0.3.0 fork (same revision)"
   },
   "public_gates": [
     "python3 scripts/verify.py",
@@ -28,7 +29,7 @@
   ],
   "latest_verification": {
     "date": "2026-10-08",
-    "rust_tests": 50,
+    "rust_tests": 55,
     "python_tests": 37,
     "oracle_tests": 21,
     "status": "pass",
@@ -38,7 +39,10 @@
       "evidence/entropy-config-red.txt",
       "evidence/entropy-cli-red.txt",
       "evidence/entropy-config-green.txt",
-      "evidence/requirement-correction-2026-10-08.md"
+      "evidence/requirement-correction-2026-10-08.md",
+      "evidence/mls-durable-red-1.txt",
+      "evidence/mls-durable-red-2.txt",
+      "evidence/mls-durable-green.txt"
     ]
   },
   "claim_boundary": {
@@ -47,7 +51,10 @@
     "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete",
     "qrng_entropy_source_offline_verified": true,
     "qrng_entropy_live_verified": false,
-    "qrng_scope": "OpenMlsRand and laboratory Ed25519 seeds only; HPKE/RustCrypto internal randomness excluded"
+    "qrng_scope": "OpenMlsRand and laboratory Ed25519 seeds only; HPKE/RustCrypto internal randomness excluded",
+    "durable_endpoint_state_verified": true,
+    "retained_state_adversary_verified": true,
+    "durable_scope": "receiving-member crash before COMMIT; committer crash and whole-lab restart not covered"
   },
   "entropy_configuration": {
     "file_env": "AGENT_TRUST_ENTROPY_CONFIG",
