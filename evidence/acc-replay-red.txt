@@ -1,0 +1,23 @@
+# Red run: same-revision acc_context replay by a rogue member (coherence allowed revision == parent)
+# date: 2026-10-08T19:40:40Z
+$ cargo test --locked --test lap_mls members_reject
+
+running 1 test
+test members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent ... FAILED
+
+failures:
+
+---- members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent stdout ----
+
+thread 'members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent' (171547) panicked at tests/lap_mls.rs:287:14:
+same-revision replay: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.75s
+
+error: test failed, to rerun pass `--test lap_mls`
+exit: 101

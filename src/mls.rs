@@ -454,7 +454,7 @@ impl Endpoint {
                     &endpoint.group,
                     &endpoint.provider.crypto,
                     binding,
-                    parent_revision,
+                    Some(parent_revision),
                 )?;
             }
             Ok(())
@@ -656,7 +656,7 @@ impl MlsLab {
                 .build(&provider, &signer, credential("alice", &signer))
                 .map_err(error)?;
             if let Some(binding) = &binding {
-                check_coherence(&group, &provider.crypto, binding, 0)?;
+                check_coherence(&group, &provider.crypto, binding, None)?;
             }
             provider.commit()?;
             Ok::<_, String>((signer, apf_signer, group, binding))
@@ -1286,7 +1286,7 @@ impl MlsLab {
                 }
                 let staged = MlsFrontier::of(pending.group_context());
                 c.group.merge_pending_commit(&c.provider).map_err(error)?;
-                check_coherence(&c.group, &c.provider.crypto, binding, parent_revision)?;
+                check_coherence(&c.group, &c.provider.crypto, binding, Some(parent_revision))?;
                 let (acc_revision, acc_roster) =
                     read_acc_context(&c.group, &c.provider.crypto, binding)?;
                 let successor = MlsFrontier::of(c.group.public_group().group_context());
@@ -1331,7 +1331,7 @@ impl MlsLab {
             .and_then(|staged| staged.into_group(&joiner.provider))
             .map_err(error)
             .and_then(|group| {
-                check_coherence(&group, &joiner.provider.crypto, binding, 0)?;
+                check_coherence(&group, &joiner.provider.crypto, binding, None)?;
                 Ok(group)
             })
             .and_then(|group| joiner.provider.commit().map(|()| group));
@@ -1805,21 +1805,26 @@ fn read_acc_context(
     Ok((revision, sorted_roster(&roster)))
 }
 
-/// ACC coherence of a bound group state: a valid APF-signed `acc_context` no
-/// older than `min_revision`, valid incarnations on every leaf, and the leaf
-/// incarnation multiset equal to the `acc_context` roster.
+/// ACC coherence of a bound group state: a valid APF-signed `acc_context`
+/// strictly newer than the parent's (`parent_revision`; `None` for group
+/// creation and Welcome), valid incarnations on every leaf, and the leaf
+/// incarnation multiset equal to the `acc_context` roster. Every honest
+/// transition binds a strictly newer APF revision, so replaying the current
+/// binding in a rogue commit cannot fork honest members.
 fn check_coherence(
     group: &MlsGroup,
     crypto: &impl OpenMlsCrypto,
     binding: &Binding,
-    min_revision: u64,
+    parent_revision: Option<u64>,
 ) -> Result<(), String> {
     let coherence = |detail: String| format!("coherence: {detail}");
     let (revision, roster) = read_acc_context(group, crypto, binding).map_err(coherence)?;
-    if revision < min_revision {
-        return Err(coherence(format!(
-            "acc_context revision {revision} is older than {min_revision}"
-        )));
+    if let Some(parent) = parent_revision {
+        if revision <= parent {
+            return Err(coherence(format!(
+                "acc_context revision {revision} is not newer than the parent's {parent}"
+            )));
+        }
     }
     let mut leaves = Vec::new();
     for member in group.members() {

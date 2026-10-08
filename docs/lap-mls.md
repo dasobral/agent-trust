@@ -38,7 +38,9 @@ After merging any commit or Welcome, every member runs the **coherence check**
 before its SQLite COMMIT:
 
 1. the `acc_context` signature is valid, its group is the APF group, and its
-   revision does not decrease;
+   revision is strictly newer than the parent's. Every honest transition binds
+   a newer APF revision, so a rogue member that replays the current, honestly
+   signed binding cannot fork honest members onto a non-canonical epoch;
 2. every leaf carries a valid `authz_incarnation` whose subject equals the leaf's
    credential identity and whose signature key equals the leaf's key;
 3. the multiset of leaf incarnations equals the `acc_context` roster exactly.
@@ -64,15 +66,16 @@ A membership transition proceeds as follows:
 3. The kernel `admit` / `repair` transaction is **the canonical decision**. It
    compares the parent with the current frontier (CAS), so at most one
    successor wins. It also records the canonical commit bytes in its
-   hash-chained state, as the sequencer's delivery log.
+   hash-chained state (`checkpoint.lap.commits`).
 4. Only after the kernel accepts does the committer COMMIT locally and the
    adapter deliver the commit and Welcome. On a kernel rejection, the
    committer's transaction rolls back to the parent.
 
 **Not covered:** a committer whose local COMMIT fails *after* the kernel
 accepted. OpenMLS does not let a member process its own commit, so that member
-must rejoin. The other members install the transition from the canonical
-commit log.
+must rejoin. In this laboratory, members catch up from the adapter's own
+delivery queue. The kernel records the canonical commit bytes, but reconciling
+a member from that kernel log is not implemented.
 
 ## Repair
 
@@ -136,9 +139,10 @@ The baseline (`api_only_revocation_leaks: true`) is the broken mode. Without
 an MLS removal, the retained state of a revoked reader still decrypts traffic
 that bypasses the APF fence.
 
-Red runs are in `evidence/lap-kernel-red.txt`, `evidence/envelope-size-red.txt`
-and `evidence/lap-mls-red.txt`. The last one was run with coherence and the
-receive-side binding stubbed off.
+Red runs are in `evidence/lap-kernel-red.txt`, `evidence/envelope-size-red.txt`,
+`evidence/lap-mls-red.txt` (run with coherence and the receive-side binding
+stubbed off), and `evidence/acc-replay-red.txt` (a same-revision `acc_context`
+replay accepted before the strict-revision rule).
 
 ## Findings while integrating
 

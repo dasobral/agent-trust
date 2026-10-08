@@ -266,10 +266,16 @@ fn members_reject_commits_whose_acc_context_is_forged_stale_or_incoherent() {
         .lab()
         .sign_acc_context(revision + 1, &[("alice", 0), ("bob", 0), ("carol", 0)]);
 
+    let replayed = lap
+        .lab()
+        .sign_acc_context(revision, &[("alice", 0), ("bob", 0), ("carol", 0)]);
     for (label, acc, removals) in [
         ("forged signature", forged, vec![]),
         ("revision rollback", stale, vec![]),
         ("roster without the removal", incoherent, vec!["alice"]),
+        // Without the APF key a rogue member can still replay the current,
+        // honestly signed acc_context; that must not fork honest members.
+        ("same-revision replay", replayed, vec![]),
     ] {
         let wire = lap
             .lab()

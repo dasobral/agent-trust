@@ -30,8 +30,8 @@
   ],
   "latest_verification": {
     "date": "2026-10-08",
-    "rust_tests": 55,
-    "python_tests": 37,
+    "rust_tests": 71,
+    "python_tests": 39,
     "oracle_tests": 21,
     "status": "pass",
     "evidence": [
@@ -43,7 +43,12 @@
       "evidence/requirement-correction-2026-10-08.md",
       "evidence/mls-durable-red-1.txt",
       "evidence/mls-durable-red-2.txt",
-      "evidence/mls-durable-green.txt"
+      "evidence/mls-durable-green.txt",
+      "evidence/lap-kernel-red.txt",
+      "evidence/envelope-size-red.txt",
+      "evidence/lap-mls-red.txt",
+      "evidence/acc-replay-red.txt",
+      "evidence/lap-mls-green.txt"
     ]
   },
   "claim_boundary": {
