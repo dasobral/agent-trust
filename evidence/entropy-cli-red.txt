@@ -1,0 +1,54 @@
+# Red run: CLI entropy configuration before mls-demo accepts --entropy-config
+# date: 2026-10-08T19:02:37Z
+$ python3 -m unittest harness.test_entropy_cli -v
+test_config_file_flag_routes_demo_entropy_through_the_fake_qrng (harness.test_entropy_cli.EntropyCliTests.test_config_file_flag_routes_demo_entropy_through_the_fake_qrng) ... FAIL
+test_environment_variables_select_the_fake_qrng (harness.test_entropy_cli.EntropyCliTests.test_environment_variables_select_the_fake_qrng) ... ERROR
+test_invalid_configuration_fails_closed (harness.test_entropy_cli.EntropyCliTests.test_invalid_configuration_fails_closed) ... ok
+test_no_configuration_uses_the_os_source (harness.test_entropy_cli.EntropyCliTests.test_no_configuration_uses_the_os_source) ... ERROR
+test_unreachable_configured_qrng_fails_closed (harness.test_entropy_cli.EntropyCliTests.test_unreachable_configured_qrng_fails_closed) ... FAIL
+
+======================================================================
+ERROR: test_environment_variables_select_the_fake_qrng (harness.test_entropy_cli.EntropyCliTests.test_environment_variables_select_the_fake_qrng)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./harness/test_entropy_cli.py", line 83, in test_environment_variables_select_the_fake_qrng
+    self.assertEqual(json.loads(result.stdout)["entropy_source"], "qrng")
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'entropy_source'
+
+======================================================================
+ERROR: test_no_configuration_uses_the_os_source (harness.test_entropy_cli.EntropyCliTests.test_no_configuration_uses_the_os_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./harness/test_entropy_cli.py", line 97, in test_no_configuration_uses_the_os_source
+    self.assertEqual(json.loads(result.stdout)["entropy_source"], "os")
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+KeyError: 'entropy_source'
+
+======================================================================
+FAIL: test_config_file_flag_routes_demo_entropy_through_the_fake_qrng (harness.test_entropy_cli.EntropyCliTests.test_config_file_flag_routes_demo_entropy_through_the_fake_qrng)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./harness/test_entropy_cli.py", line 73, in test_config_file_flag_routes_demo_entropy_through_the_fake_qrng
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 2 != 0 : mls-demo takes no arguments
+usage: agent-trust authority --state PATH
+       agent-trust mls-demo
+
+The authority command is a trusted administrative local interface; it is not a network service.
+
+
+======================================================================
+FAIL: test_unreachable_configured_qrng_fails_closed (harness.test_entropy_cli.EntropyCliTests.test_unreachable_configured_qrng_fails_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./harness/test_entropy_cli.py", line 107, in test_unreachable_configured_qrng_fails_closed
+    self.assertIn("QRNG", result.stderr)
+AssertionError: 'QRNG' not found in 'mls-demo takes no arguments\nusage: agent-trust authority --state PATH\n       agent-trust mls-demo\n\nThe authority command is a trusted administrative local interface; it is not a network service.\n'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.800s
+
+FAILED (failures=2, errors=2)
+exit: 1
+# note: test_invalid_configuration_fails_closed passes vacuously here (CLI rejects every argument).

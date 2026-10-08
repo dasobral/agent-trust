@@ -1,11 +1,12 @@
 use agent_trust::authority::Authority;
+use agent_trust::entropy::EntropyConfig;
 use agent_trust::mls::MlsLab;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 fn usage() -> &'static str {
-    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo\n\nThe authority command is a trusted administrative local interface; it is not a network service."
+    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo [--entropy-config PATH]\n\nWithout --entropy-config, mls-demo reads AGENT_TRUST_ENTROPY_CONFIG or\nAGENT_TRUST_QRNG_BASE_URL, and otherwise uses the OS entropy source.\nThe authority command is a trusted administrative local interface; it is not a network service."
 }
 
 fn fail_usage(message: &str) -> ! {
@@ -49,9 +50,13 @@ fn run_authority(path: PathBuf) -> i32 {
     0
 }
 
-fn run_mls_demo() -> i32 {
+fn run_mls_demo(entropy_config: Option<PathBuf>) -> i32 {
     let result = (|| -> Result<Value, String> {
-        let mut lab = MlsLab::new()?;
+        let config = match entropy_config {
+            Some(path) => EntropyConfig::load(&path)?,
+            None => EntropyConfig::from_env()?,
+        };
+        let mut lab = MlsLab::with_entropy(config.connect()?)?;
         lab.add_member("bob")?;
         lab.add_member("carol")?;
         let staged_keypackage_binding_verified = lab.verify_member_admission("bob").is_ok()
@@ -72,6 +77,7 @@ fn run_mls_demo() -> i32 {
             "baseline_retained_reader_decrypts": old_snapshot_decrypts,
             "removed_reader_rejected": removed_reader_rejected,
             "continuing_reader_decrypts": continuing_reader_decrypts,
+            "entropy_source": config.label(),
             "epoch_advanced": epoch_advanced,
             "full_lap_mls": false,
             "staged_keypackage_binding_verified": staged_keypackage_binding_verified,
@@ -123,10 +129,20 @@ fn main() {
             run_authority(path.into())
         }
         "mls-demo" => {
+            let entropy_config = match args.next() {
+                None => None,
+                Some(flag) if flag == "--entropy-config" => {
+                    let Some(path) = args.next() else {
+                        fail_usage("--entropy-config requires PATH")
+                    };
+                    Some(PathBuf::from(path))
+                }
+                Some(_) => fail_usage("unexpected mls-demo argument"),
+            };
             if args.next().is_some() {
-                fail_usage("mls-demo takes no arguments");
+                fail_usage("unexpected mls-demo argument");
             }
-            run_mls_demo()
+            run_mls_demo(entropy_config)
         }
         _ => fail_usage("unknown command"),
     };

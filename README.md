@@ -98,7 +98,10 @@ python3 scripts/verify.py
 | `src/main.rs` | Local `authority` and `mls-demo` CLI |
 | `tests/` | Rust contract and adversarial tests |
 | `harness/` | Independent Python oracle and CLI tests |
+| `src/entropy.rs` | Entropy-source configuration (file / environment) |
 | `scripts/verify.py` | Fail-closed public verifier |
+| `scripts/fake_qrng.py` | Development-only fake QRNG Open API (not random) |
+| `config/` | Example entropy configuration |
 | `docs/` | Specification, contracts, and design notes |
 | `evidence/` | Recorded red/green runs and manifests |
 

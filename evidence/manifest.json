@@ -28,13 +28,17 @@
   ],
   "latest_verification": {
     "date": "2026-10-08",
-    "rust_tests": 44,
-    "python_tests": 32,
+    "rust_tests": 50,
+    "python_tests": 37,
     "oracle_tests": 21,
     "status": "pass",
     "evidence": [
       "evidence/qrng-entropy-red.txt",
-      "evidence/qrng-entropy-green.txt"
+      "evidence/qrng-entropy-green.txt",
+      "evidence/entropy-config-red.txt",
+      "evidence/entropy-cli-red.txt",
+      "evidence/entropy-config-green.txt",
+      "evidence/requirement-correction-2026-10-08.md"
     ]
   },
   "claim_boundary": {
@@ -44,5 +48,11 @@
     "qrng_entropy_source_offline_verified": true,
     "qrng_entropy_live_verified": false,
     "qrng_scope": "OpenMlsRand and laboratory Ed25519 seeds only; HPKE/RustCrypto internal randomness excluded"
+  },
+  "entropy_configuration": {
+    "file_env": "AGENT_TRUST_ENTROPY_CONFIG",
+    "base_url_env": "AGENT_TRUST_QRNG_BASE_URL",
+    "cli_flag": "mls-demo --entropy-config PATH",
+    "dev_fake": "scripts/fake_qrng.py (deterministic, not random)"
   }
 }

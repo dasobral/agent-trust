@@ -31,6 +31,8 @@ tls_codec = "0.5"
 openmls_qrand = { git = "https://github.com/dasobral/openmls-qrand.git", rev = "dc8dced82e1edbe13579cc64ad2e1fcc348d8a72" }
 ed25519-dalek = "2"
 zeroize = "1"
+toml = "0.9"
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"

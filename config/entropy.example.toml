@@ -1,0 +1,19 @@
+# Laboratory entropy source. Select it with:
+#   agent-trust mls-demo --entropy-config config/entropy.example.toml
+#   AGENT_TRUST_ENTROPY_CONFIG=config/entropy.example.toml cargo test ...
+# This example targets the development fake server (NOT random):
+#   python3 scripts/fake_qrng.py --port 8002
+# For Entropy Core, change base_url/transport (and auth) only.
+
+source = "qrng"            # "os" | "qrng"
+
+[qrng]
+base_url = "http://127.0.0.1:8002"
+transport = "plain-http"   # "plain-http" | "tls" | "mtls"
+# ca_cert_pem = "certs/ca.pem"          # tls (optional) / mtls (required); relative to this file
+# client_cert_pem = "certs/client.crt"  # mtls
+# client_key_pem = "certs/client.key"   # mtls
+auth = "none"              # "none" | "bearer" | "x-api-key"
+# auth_secret_env = "QRNG_API_KEY"      # the secret itself is read from this variable
+# entropy_type = "raw"
+request_timeout_ms = 5000

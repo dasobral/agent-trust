@@ -1,0 +1,158 @@
+# Green run: configurable entropy source (file / environment / CLI)
+# date: 2026-10-08T19:03:38Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)  host: x86_64
+$ cargo fmt --all -- --check
+exit: 0
+$ cargo build --locked
+exit: 0
+$ cargo test --locked --test entropy_config
+test os_file_selects_os_source_even_with_a_qrng_section ... ok
+test mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var ... ok
+test qrng_file_selects_plain_http_with_defaults ... ok
+test environment_selects_the_source ... ok
+test invalid_configurations_are_rejected ... ok
+test configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+exit: 0
+$ cargo test --locked --test mls_entropy
+test live_qrng_removal_excludes_retained_reader ... ignored, requires a reachable QRNG Open API endpoint selected by entropy configuration
+test qrng_unavailable_blocks_group_creation ... ok
+test qrng_source_seeds_member_signature_keys ... ok
+test qrng_unavailable_fails_closed_without_partial_membership ... ok
+test qrng_unavailable_inside_openmls_commit_leaves_group_unchanged ... ok
+test qrng_source_supplies_openmls_randomness_for_group_operations ... ok
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.26s
+exit: 0
+$ cargo test --locked --all-targets
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test delegation_rejects_rights_the_parent_does_not_hold ... ok
+test delegation_rejects_child_validity_that_outlives_its_parent ... ok
+test release_requires_a_preexisting_reservation_and_leaves_no_operation_state_on_failure ... ok
+test delegation_rejects_a_child_depth_that_is_not_strictly_lower ... ok
+test delegation_rejects_resources_outside_the_parent_grant ... ok
+test malformed_cover_is_rejected_without_consuming_the_reservation ... ok
+test denied_release_from_an_independent_handle_cannot_poison_a_reserved_operation ... ok
+test persisted_operation_consumes_once_across_restarts_and_the_first_consume_progresses ... ok
+test repair_cannot_be_replayed_against_its_former_parent_branch ... ok
+test stale_reader_generation_cannot_satisfy_a_release_cover_after_reallow ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation ... ok
+test checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected ... ok
+test initialization_has_the_documented_genesis_state_and_survives_restart ... ok
+test release_rejects_administrative_rights ... ok
+test revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged ... ok
+test reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation ... ok
+test abandoned_released_operations_are_idempotently_closed_and_never_reusable ... ok
+test independently_opened_handles_reload_committed_state_before_each_mutation ... ok
+test revoking_non_roster_read_does_not_fence_the_group ... ok
+test persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes ... ok
+test denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release ... ok
+test repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set ... ok
+test content_release_requires_an_exact_sound_cover_for_every_roster_reader ... ok
+test attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right ... ok
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test revoking_read_from_a_non_roster_subject_does_not_close_the_group_fence ... ok
+test repair_can_remove_a_revoked_root_reader_when_an_authorized_reader_continues ... ok
+test revoking_a_non_roster_ancestor_still_fences_when_an_affected_descendant_is_in_the_roster ... ok
+test release_rejects_admin_or_admit_as_content_rights_without_consuming_the_reservation ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test child_cannot_launder_parent_only_resource ... ok
+test child_originated_read_through_parent_is_allowed ... ok
+test revocation_of_origin_authority_invalidates_a_still_authorized_executor ... ok
+test direct_confused_deputy_is_rejected_while_parent_independent_write_is_allowed ... ok
+test multi_hop_and_attenuation_cannot_restore_removed_authority ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test os_file_selects_os_source_even_with_a_qrng_section ... ok
+test mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var ... ok
+test qrng_file_selects_plain_http_with_defaults ... ok
+test environment_selects_the_source ... ok
+test invalid_configurations_are_rejected ... ok
+test configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test new_lab_starts_with_alice_as_its_only_member ... ok
+test modified_protected_wire_is_rejected ... ok
+test embedded_apf_binding_cannot_be_substituted_for_another_subject ... ok
+test joining_member_uses_an_embedded_apf_binding_over_the_frozen_key_package ... ok
+test other_current_members_decrypt_and_authenticated_data_round_trips ... ok
+test removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+test live_qrng_removal_excludes_retained_reader ... ignored, requires a reachable QRNG Open API endpoint selected by entropy configuration
+test qrng_unavailable_blocks_group_creation ... ok
+test qrng_source_seeds_member_signature_keys ... ok
+test qrng_unavailable_fails_closed_without_partial_membership ... ok
+test qrng_unavailable_inside_openmls_commit_leaves_group_unchanged ... ok
+test qrng_source_supplies_openmls_randomness_for_group_operations ... ok
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.26s
+exit: 0
+$ python3 -m unittest discover -s harness
+Ran 37 tests in 1.844s
+OK
+exit: 0
+$ python3 scripts/verify.py
+Ran 21 tests in 0.007s
+OK
+PASS python-oracle (21 tests)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test delegation_rejects_a_child_depth_that_is_not_strictly_lower ... ok
+test delegation_rejects_rights_the_parent_does_not_hold ... ok
+test delegation_rejects_child_validity_that_outlives_its_parent ... ok
+test delegation_rejects_resources_outside_the_parent_grant ... ok
+test release_requires_a_preexisting_reservation_and_leaves_no_operation_state_on_failure ... ok
+test malformed_cover_is_rejected_without_consuming_the_reservation ... ok
+test denied_release_from_an_independent_handle_cannot_poison_a_reserved_operation ... ok
+test persisted_operation_consumes_once_across_restarts_and_the_first_consume_progresses ... ok
+test repair_cannot_be_replayed_against_its_former_parent_branch ... ok
+test stale_reader_generation_cannot_satisfy_a_release_cover_after_reallow ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test initialization_has_the_documented_genesis_state_and_survives_restart ... ok
+test malformed_uninitialized_and_wrongly_typed_requests_are_rejected_without_mutation ... ok
+test checkpoint_history_is_ordered_hash_chained_and_disk_tampering_is_detected ... ok
+test release_rejects_administrative_rights ... ok
+test independently_opened_handles_reload_committed_state_before_each_mutation ... ok
+test reallow_after_denial_requires_fresh_keys_and_strictly_increments_generation ... ok
+test revoking_non_roster_read_does_not_fence_the_group ... ok
+test abandoned_released_operations_are_idempotently_closed_and_never_reusable ... ok
+test revoking_one_non_read_right_leaves_other_rights_and_the_read_fence_unchanged ... ok
+test persisted_envelopes_bind_digest_and_emit_requires_the_exact_bytes ... ok
+test denied_release_is_rejected_before_fence_state_and_fence_blocks_authorized_release ... ok
+test content_release_requires_an_exact_sound_cover_for_every_roster_reader ... ok
+test repair_requires_the_exact_fenced_parent_frontier_and_full_removed_reader_set ... ok
+test attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right ... ok
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test revoking_read_from_a_non_roster_subject_does_not_close_the_group_fence ... ok
+test revoking_a_non_roster_ancestor_still_fences_when_an_affected_descendant_is_in_the_roster ... ok
+test repair_can_remove_a_revoked_root_reader_when_an_authorized_reader_continues ... ok
+test release_rejects_admin_or_admit_as_content_rights_without_consuming_the_reservation ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test child_cannot_launder_parent_only_resource ... ok
+test child_originated_read_through_parent_is_allowed ... ok
+test revocation_of_origin_authority_invalidates_a_still_authorized_executor ... ok
+test direct_confused_deputy_is_rejected_while_parent_independent_write_is_allowed ... ok
+test multi_hop_and_attenuation_cannot_restore_removed_authority ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test os_file_selects_os_source_even_with_a_qrng_section ... ok
+test qrng_file_selects_plain_http_with_defaults ... ok
+test mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var ... ok
+test environment_selects_the_source ... ok
+test invalid_configurations_are_rejected ... ok
+test configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test new_lab_starts_with_alice_as_its_only_member ... ok
+test modified_protected_wire_is_rejected ... ok
+test embedded_apf_binding_cannot_be_substituted_for_another_subject ... ok
+test joining_member_uses_an_embedded_apf_binding_over_the_frozen_key_package ... ok
+test other_current_members_decrypt_and_authenticated_data_round_trips ... ok
+test removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+test live_qrng_removal_excludes_retained_reader ... ignored, requires a reachable QRNG Open API endpoint selected by entropy configuration
+test qrng_unavailable_blocks_group_creation ... ok
+test qrng_source_seeds_member_signature_keys ... ok
+test qrng_unavailable_fails_closed_without_partial_membership ... ok
+test qrng_unavailable_inside_openmls_commit_leaves_group_unchanged ... ok
+test qrng_source_supplies_openmls_randomness_for_group_operations ... ok
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.26s
+PASS rust (50 tests)
+exit: 0
+$ git diff --check
+exit: 0

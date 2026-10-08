@@ -20,6 +20,13 @@ class AuthorityCliTests(unittest.TestCase):
             self.fail(f"CLI binary is missing: {BINARY}")
 
     def run_cli(self, *args, stdin=""):
+        # Requirement correction 2026-10-08: entropy selection is configurable,
+        # so the caller's entropy variables must not leak into these tests.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("AGENT_TRUST_ENTROPY_CONFIG", "AGENT_TRUST_QRNG_BASE_URL")
+        }
         try:
             return subprocess.run(
                 [os.fspath(BINARY), *args],
@@ -28,6 +35,7 @@ class AuthorityCliTests(unittest.TestCase):
                 capture_output=True,
                 timeout=20,
                 check=False,
+                env=env,
             )
         except subprocess.TimeoutExpired as exc:
             self.fail(f"CLI timed out after 20 seconds: {exc}")
@@ -135,6 +143,7 @@ class AuthorityCliTests(unittest.TestCase):
                 "baseline_retained_reader_decrypts": True,
                 "removed_reader_rejected": True,
                 "continuing_reader_decrypts": True,
+                "entropy_source": "os",
                 "epoch_advanced": True,
                 "full_lap_mls": False,
                 "staged_keypackage_binding_verified": True,

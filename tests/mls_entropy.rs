@@ -6,135 +6,11 @@
 //! without partial membership changes. Live Entropy Core is exercised only by the
 //! ignored test at the end, and only when an endpoint is explicitly supplied.
 
-use std::{
-    sync::{Arc, Mutex},
-    thread::JoinHandle,
-    time::Duration,
-};
+mod common;
 
+use agent_trust::entropy::EntropyConfig;
 use agent_trust::mls::{EntropySource, MlsLab};
-use base64::{engine::general_purpose::STANDARD, Engine};
-use openmls_qrand::{ApiAuth, QrngClient, QrngConfig, TransportMode};
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
-
-#[derive(Default)]
-struct FakeState {
-    unavailable: bool,
-    entropy_posts: usize,
-    served_blocks: Vec<Vec<u8>>,
-    counter: u64,
-}
-
-/// Minimal QRNG Open API: `GET /capabilities` and `POST /entropy`. Served bytes
-/// are a SHA-256 counter stream: test-only and deliberately non-random, but
-/// distinct per block so MLS key-uniqueness checks behave as with real entropy.
-struct FakeQrng {
-    server: Arc<tiny_http::Server>,
-    state: Arc<Mutex<FakeState>>,
-    thread: Option<JoinHandle<()>>,
-}
-
-impl FakeQrng {
-    fn start() -> Self {
-        let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind fake QRNG"));
-        let state = Arc::new(Mutex::new(FakeState::default()));
-        let thread = {
-            let server = server.clone();
-            let state = state.clone();
-            std::thread::spawn(move || {
-                for mut request in server.incoming_requests() {
-                    let mut body = String::new();
-                    let _ = request.as_reader().read_to_string(&mut body);
-                    let (status, payload) = respond(&state, request.method(), request.url(), &body);
-                    let header = tiny_http::Header::from_bytes("Content-Type", "application/json")
-                        .expect("static header");
-                    let _ = request.respond(
-                        tiny_http::Response::from_string(payload.to_string())
-                            .with_status_code(status)
-                            .with_header(header),
-                    );
-                }
-            })
-        };
-        Self {
-            server,
-            state,
-            thread: Some(thread),
-        }
-    }
-
-    fn client(&self) -> Arc<QrngClient> {
-        let base_url = format!("http://{}", self.server.server_addr());
-        Arc::new(
-            QrngClient::connect(QrngConfig {
-                base_url: base_url.parse().expect("fake QRNG URL"),
-                transport: TransportMode::PlainHttp,
-                auth: ApiAuth::None,
-                entropy_type: None,
-                request_timeout: Duration::from_secs(5),
-                health_poll_interval: None,
-            })
-            .expect("connect to fake QRNG"),
-        )
-    }
-
-    fn set_unavailable(&self, unavailable: bool) {
-        self.state.lock().expect("fake state").unavailable = unavailable;
-    }
-
-    fn entropy_posts(&self) -> usize {
-        self.state.lock().expect("fake state").entropy_posts
-    }
-
-    fn served_blocks(&self) -> Vec<Vec<u8>> {
-        self.state.lock().expect("fake state").served_blocks.clone()
-    }
-}
-
-impl Drop for FakeQrng {
-    fn drop(&mut self) {
-        self.server.unblock();
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-}
-
-fn respond(
-    state: &Mutex<FakeState>,
-    method: &tiny_http::Method,
-    url: &str,
-    body: &str,
-) -> (u16, Value) {
-    let mut state = state.lock().expect("fake state");
-    match (method, url) {
-        (tiny_http::Method::Get, "/capabilities") => (
-            200,
-            json!({"entropy": {"min_block_size": 1, "max_block_size": 1024,
-                               "min_block_count": 1, "max_block_count": 1}}),
-        ),
-        (tiny_http::Method::Post, "/entropy") => {
-            if state.unavailable {
-                return (503, json!({"detail": "entropy unavailable"}));
-            }
-            let request: Value = serde_json::from_str(body).unwrap_or(Value::Null);
-            let Some(size) = request["block_size"].as_u64() else {
-                return (422, json!({"detail": "block_size required"}));
-            };
-            let mut block = Vec::with_capacity(size as usize);
-            while block.len() < size as usize {
-                state.counter += 1;
-                block.extend_from_slice(&Sha256::digest(state.counter.to_be_bytes()));
-            }
-            block.truncate(size as usize);
-            state.entropy_posts += 1;
-            state.served_blocks.push(block.clone());
-            (200, json!({"entropy": [STANDARD.encode(&block)]}))
-        }
-        _ => (404, json!({"detail": "not found"})),
-    }
-}
+use common::FakeQrng;
 
 fn ed25519_public(seed: &[u8]) -> Option<Vec<u8>> {
     let seed: [u8; 32] = seed.try_into().ok()?;
@@ -302,25 +178,24 @@ fn qrng_unavailable_blocks_group_creation() {
     );
 }
 
-/// Live Entropy Core smoke test. Run only against an endpoint you are
-/// authorized to use; do not record the endpoint in evidence:
+/// Live Entropy Core smoke test, configured exactly like the laboratory: set
+/// `AGENT_TRUST_ENTROPY_CONFIG=<file.toml>` or `AGENT_TRUST_QRNG_BASE_URL=<url>`.
+/// Run only against an endpoint you are authorized to use; do not record the
+/// endpoint in evidence:
 ///
-/// `QRNG_LIVE_BASE_URL=http://<host>:<port> cargo test --test mls_entropy -- --ignored`
+/// `AGENT_TRUST_ENTROPY_CONFIG=entropy.toml cargo test --test mls_entropy -- --ignored`
 #[test]
-#[ignore = "requires a reachable QRNG Open API endpoint (QRNG_LIVE_BASE_URL)"]
+#[ignore = "requires a reachable QRNG Open API endpoint selected by entropy configuration"]
 fn live_qrng_removal_excludes_retained_reader() {
-    let base_url = std::env::var("QRNG_LIVE_BASE_URL").expect("QRNG_LIVE_BASE_URL is required");
-    let client = Arc::new(
-        QrngClient::connect(QrngConfig {
-            base_url: base_url.parse().expect("QRNG_LIVE_BASE_URL must be a URL"),
-            transport: TransportMode::PlainHttp,
-            auth: ApiAuth::None,
-            entropy_type: None,
-            request_timeout: Duration::from_secs(10),
-            health_poll_interval: None,
-        })
-        .expect("connect to live QRNG"),
+    let config = EntropyConfig::from_env().expect("valid entropy configuration");
+    assert_eq!(
+        config.label(),
+        "qrng",
+        "configure a QRNG source for the live test"
     );
+    let EntropySource::Qrng(client) = config.connect().expect("connect to live QRNG") else {
+        unreachable!("a QRNG configuration yields a QRNG source");
+    };
     let mut lab = MlsLab::with_entropy(EntropySource::Qrng(client.clone())).expect("live lab");
     lab.add_member("bob").expect("bob joins");
     lab.add_member("carol").expect("carol joins");

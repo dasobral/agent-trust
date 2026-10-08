@@ -38,17 +38,58 @@ succeeds. `tests/mls_entropy.rs` checks this offline against a local fake QRNG
 Open API server. The fake server's byte stream is deterministic and exists only
 for tests.
 
-## Live Entropy Core
+## Configuration
 
-The live test is ignored by default, and its results are claimed only after it
-has actually run:
+The entropy source is chosen by configuration, so moving from the development
+fake server to a real Entropy Core endpoint needs no code change.
+`src/entropy.rs` resolves it in this order:
+
+1. `agent-trust mls-demo --entropy-config PATH`;
+2. `AGENT_TRUST_ENTROPY_CONFIG=PATH`, a TOML file;
+3. `AGENT_TRUST_QRNG_BASE_URL=URL`, a shorthand where `http://` means plain
+   HTTP, `https://` means TLS with webpki roots, and no API authentication is
+   used;
+4. otherwise the OS source. Setting both variables is an error.
+
+See [`config/entropy.example.toml`](../config/entropy.example.toml) for the file
+format. Certificate paths are relative to the file. Unknown fields are rejected,
+so a credential cannot be stored in the file. Bearer and `X-API-KEY`
+authentication take the *name* of an environment variable (`auth_secret_env`),
+and that variable is read at connect time. Any configuration or connection
+error is fatal. Nothing falls back to the OS source.
+
+`mls-demo` reports the source it used as `"entropy_source": "os" | "qrng"`.
+
+## Development fake QRNG server
+
+`scripts/fake_qrng.py` is a stdlib-only fake QRNG Open API server for
+development. Its bytes are **not random**: they are a deterministic SHA-256
+counter stream.
 
 ```bash
-QRNG_LIVE_BASE_URL=http://<host>:<port> \
+python3 scripts/fake_qrng.py --port 8002 &
+agent-trust mls-demo --entropy-config config/entropy.example.toml
+```
+
+The Rust tests use an equivalent in-process fake (`tests/common/mod.rs`). The
+CLI harness (`harness/test_entropy_cli.py`) starts the Python fake and covers
+each selection path, as well as failing closed when the configured endpoint is
+unreachable or the configuration is invalid.
+
+## Live Entropy Core
+
+The live test is ignored by default and reads the same configuration as the
+laboratory. A live result is claimed only after the test has run against a real
+endpoint:
+
+```bash
+AGENT_TRUST_ENTROPY_CONFIG=/path/to/entropy.toml \
   cargo test --locked --test mls_entropy -- --ignored --nocapture
 ```
 
-Do not record live endpoint details or credentials in `evidence/`.
+Pointing this command at the fake server checks only the test plumbing. It is
+not a live result. Do not record live endpoint details or credentials in
+`evidence/`.
 
 ## Claim boundary
 

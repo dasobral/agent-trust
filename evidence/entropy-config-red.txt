@@ -1,0 +1,54 @@
+# Red run: entropy configuration against interface stub (all loaders return 'not implemented')
+# invalid_configurations_are_rejected passes vacuously against a reject-all stub;
+# the positive parse tests are the discriminating red for that behavior.
+# date: 2026-10-08T19:00:29Z  rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+$ cargo test --locked --test entropy_config
+
+running 6 tests
+test invalid_configurations_are_rejected ... ok
+test os_file_selects_os_source_even_with_a_qrng_section ... FAILED
+test qrng_file_selects_plain_http_with_defaults ... FAILED
+test mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var ... FAILED
+test environment_selects_the_source ... FAILED
+test configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret ... FAILED
+
+failures:
+
+---- os_file_selects_os_source_even_with_a_qrng_section stdout ----
+
+thread 'os_file_selects_os_source_even_with_a_qrng_section' (72853) panicked at tests/entropy_config.rs:63:6:
+valid OS configuration: "not implemented"
+
+---- qrng_file_selects_plain_http_with_defaults stdout ----
+
+thread 'qrng_file_selects_plain_http_with_defaults' (72854) panicked at tests/entropy_config.rs:37:6:
+valid QRNG configuration: "not implemented"
+
+---- mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var stdout ----
+
+thread 'mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var' (72852) panicked at tests/entropy_config.rs:86:6:
+valid mTLS configuration: "not implemented"
+
+---- environment_selects_the_source stdout ----
+
+thread 'environment_selects_the_source' (72850) panicked at tests/entropy_config.rs:146:48:
+no variables: "not implemented"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret stdout ----
+
+thread 'configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret' (72849) panicked at tests/entropy_config.rs:202:6:
+valid configuration: "not implemented"
+
+
+failures:
+    configured_fake_qrng_drives_the_laboratory_and_receives_the_env_secret
+    environment_selects_the_source
+    mtls_paths_resolve_relative_to_the_config_file_and_auth_names_an_env_var
+    os_file_selects_os_source_even_with_a_qrng_section
+    qrng_file_selects_plain_http_with_defaults
+
+test result: FAILED. 1 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test entropy_config`
+exit: 101
