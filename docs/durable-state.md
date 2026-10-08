@@ -35,7 +35,10 @@ runs ahead of the durable state.
 - `arm_crash_before_commit(name)` makes the member's next commit processing
   write the successor state and then close the connection without COMMIT. The
   member goes offline, and the other members continue (an offline client cannot
-  block continuing members).
+  block continuing members). The crash is simulated by closing the connection
+  while the transaction is still open, which makes SQLite roll it back on close.
+  Hot-journal recovery after a hard process kill (`kill -9`, power loss) is not
+  exercised.
 - `retain_storage_copy(name, copy)` copies the member's quiescent file byte for
   byte and opens the copy in a fresh connection as a stale endpoint. This is the
   retained-state adversary from the compatibility matrix.
