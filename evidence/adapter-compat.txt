@@ -1,0 +1,26 @@
+# Phase 4.0 OpenMLS compatibility gate (dependency gate, not red/green)
+# date: 2026-10-23T17:57:10Z
+# source revision: 3e332a2385e76f177362da06d63944a27de27a8c + uncommitted tests/adapter_compat.rs
+# openmls: dasobral/openmls@6daabe33ddb616a6ed54b511d333e691db18a99f, default features only
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --test adapter_compat
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/adapter_compat.rs (target/debug/deps/adapter_compat-58effcec06f17515)
+
+running 10 tests
+test required_capabilities_reject_key_package_without_acc_extensions ... ok
+test signature_key_pair_from_raw_signs_and_verifies ... ok
+test application_messages_stay_private_under_pure_plaintext_policy ... ok
+test leaf_node_extensions_survive_key_package_into_ratchet_tree ... ok
+test epoch_authenticator_matches_across_members ... ok
+test public_group_from_external_tracks_member_frontier ... ok
+test staged_commit_group_context_equals_merged_member_context ... ok
+test sqlite_storage_round_trips_mls_group_load ... ok
+test one_commit_carries_removals_gce_and_forced_path ... ok
+test plaintext_handshake_is_processable_by_public_group ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+# exit: 0
+# notes: MlsMessageIn::into_verifiable_group_info / into_protocol_message are test-utils only (fork openmls/src/framing/message_in.rs:153-163); the adapter must use extract() and try_into_protocol_message().

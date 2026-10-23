@@ -8,6 +8,8 @@ use std::path::Path;
 
 const MAX_ID: usize = 256;
 const MAX_PAYLOAD: usize = 4096;
+/// Maximum `persist`/`emit` envelope length in hex characters (1 MiB of bytes).
+const MAX_ENVELOPE: usize = 2_097_152;
 
 pub struct Authority {
     conn: Connection,
@@ -27,6 +29,12 @@ struct State {
     consumed: Vec<Consumption>,
     #[serde(default)]
     invocations: Vec<Invocation>,
+    #[serde(default)]
+    policy_revision: u64,
+    #[serde(default)]
+    fence_revision: Option<u64>,
+    #[serde(default)]
+    repair_pending: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Grant {
@@ -60,6 +68,8 @@ struct Operation {
     writer_generation: Option<u64>,
     resource: String,
     invocation: Option<String>,
+    #[serde(default)]
+    policy_revision: Option<u64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Invocation {
@@ -80,6 +90,15 @@ struct Reader {
 struct Consumption {
     op: String,
     recipient: String,
+}
+/// Canonical policy view hashed into `policy_digest`; field order is part of the format.
+#[derive(Serialize)]
+struct PolicyView<'a> {
+    group: &'a str,
+    policy_revision: u64,
+    grants: &'a [Grant],
+    delegations: &'a [Delegation],
+    invocations: &'a [Invocation],
 }
 #[derive(Serialize)]
 struct HashInput<'a> {
@@ -131,11 +150,12 @@ impl Authority {
             }
             let group = req_id(obj, "group")?;
             let root = req_id(obj, "root")?;
+            let branch = opt_id(obj, "branch")?.unwrap_or_else(|| "genesis".into());
             let state = State {
                 group: group.clone(),
                 revision: 0,
                 epoch: 0,
-                branch: "genesis".into(),
+                branch: branch.clone(),
                 read_fenced: false,
                 roster: vec![root.clone()],
                 grants: rights(&["read", "write", "admin", "admit"])
@@ -159,9 +179,12 @@ impl Authority {
                 operations: vec![],
                 consumed: vec![],
                 invocations: vec![],
+                policy_revision: 0,
+                fence_revision: None,
+                repair_pending: None,
             };
             self.save(&state, "init")?;
-            return Ok(json!({"revision":0,"epoch":0,"branch":"genesis"}));
+            return Ok(json!({"revision":0,"epoch":0,"branch":branch}));
         }
         if !initialized {
             return Err("uninitialized".into());
@@ -181,6 +204,8 @@ impl Authority {
             "consume" => self.consume(&mut state, obj),
             "abandon" => self.abandon(&mut state, obj),
             "repair" => self.repair(&mut state, obj),
+            "repair_stage" => self.repair_stage(&mut state, obj),
+            "repair_open" => self.repair_open(&mut state, obj),
             _ => Err("malformed: unknown command".into()),
         }
     }
@@ -221,6 +246,7 @@ impl Authority {
             }
         }
         bump(s);
+        bump_policy(s);
         self.save(s, "grant")?;
         Ok(json!({"revision":s.revision}))
     }
@@ -281,6 +307,7 @@ impl Authority {
             });
         }
         bump(s);
+        bump_policy(s);
         self.save(s, "delegate")?;
         Ok(json!({"revision":s.revision}))
     }
@@ -324,10 +351,12 @@ impl Authority {
             }
         }
         if changed {
+            bump(s);
+            bump_policy(s);
             if fences_current_reader {
                 s.read_fenced = true;
+                s.fence_revision = Some(s.policy_revision);
             }
-            bump(s);
             self.save(s, "revoke")?;
         }
         Ok(json!({"revision":s.revision,"read_fenced":s.read_fenced}))
@@ -341,6 +370,15 @@ impl Authority {
         let actor = req_id(o, "actor")?;
         let subject = req_id(o, "subject")?;
         let now = req_u64(o, "now")?;
+        let frontier = match (
+            opt_id(o, "parent_branch")?,
+            opt_id(o, "new_branch")?,
+            opt_u64(o, "epoch")?,
+        ) {
+            (None, None, None) => None,
+            (Some(parent), Some(new), Some(epoch)) => Some((parent, new, epoch)),
+            _ => return Err("malformed: admit frontier".into()),
+        };
         if !effective(s, &actor, "admin", now)
             || !effective(s, &subject, "admit", now)
             || !effective(s, &subject, "read", now)
@@ -353,12 +391,25 @@ impl Authority {
         if s.roster.contains(&subject) {
             return Err("invalid_transition".into());
         }
-        s.roster.push(subject.clone());
-        s.epoch = s
+        let next_epoch = s
             .epoch
             .checked_add(1)
             .ok_or_else(|| "invalid_transition".to_string())?;
-        s.branch = format!("admit:{}:{}", s.epoch, subject);
+        let next_branch = match frontier {
+            None => format!("admit:{}:{}", next_epoch, subject),
+            Some((parent, new, epoch)) => {
+                if parent != s.branch || epoch != next_epoch {
+                    return Err("stale_frontier".into());
+                }
+                if new == parent {
+                    return Err("invalid_transition".into());
+                }
+                new
+            }
+        };
+        s.roster.push(subject);
+        s.epoch = next_epoch;
+        s.branch = next_branch;
         bump(s);
         self.save(s, "admit")?;
         Ok(json!({"epoch":s.epoch,"branch":s.branch}))
@@ -410,6 +461,7 @@ impl Authority {
             writer_generation: None,
             resource,
             invocation,
+            policy_revision: None,
         });
         bump(s);
         self.save(s, "allocate")?;
@@ -464,7 +516,7 @@ impl Authority {
             }
             requested_resources
         } else {
-            if !subset(&requested_resources, &[s.group.clone()]) {
+            if !subset(&requested_resources, std::slice::from_ref(&s.group)) {
                 return Err("invalid_invocation".into());
             }
             requested_resources
@@ -485,6 +537,7 @@ impl Authority {
             active: true,
         });
         bump(s);
+        bump_policy(s);
         self.save(s, "invoke")?;
         Ok(json!({"invocation":id}))
     }
@@ -500,7 +553,11 @@ impl Authority {
         if !matches!(right.as_str(), "read" | "write") {
             return Err("malformed: right".into());
         }
-        let revision = req_u64(o, "revision")?;
+        let frontier = match (opt_u64(o, "revision")?, opt_u64(o, "policy_revision")?) {
+            (Some(revision), None) => Frontier::State(revision),
+            (None, Some(policy)) => Frontier::Policy(policy),
+            _ => return Err("malformed: revision or policy_revision".into()),
+        };
         let epoch = req_u64(o, "epoch")?;
         let branch = req_id(o, "branch")?;
         let digest = req_payload(o, "digest")?;
@@ -508,12 +565,18 @@ impl Authority {
         if !effective(s, &actor, "write", now) {
             return Err("unauthorized".into());
         }
-        if s.read_fenced {
+        if s.read_fenced || s.repair_pending.is_some() {
             return Err("read_fenced".into());
         }
-        if revision != s.revision || epoch != s.epoch || branch != s.branch {
+        let current = match frontier {
+            Frontier::State(revision) => revision == s.revision,
+            Frontier::Policy(policy) => policy == s.policy_revision,
+        };
+        if !current || epoch != s.epoch || branch != s.branch {
             return Err("stale_frontier".into());
         }
+        let revision = s.revision;
+        let policy_revision = s.policy_revision;
         if !s.roster.contains(&actor) {
             return Err("unauthorized".into());
         }
@@ -573,10 +636,11 @@ impl Authority {
         operation.digest = Some(digest.clone());
         operation.roster = readers;
         operation.writer_generation = Some(writer);
+        operation.policy_revision = Some(policy_revision);
         bump(s);
-        self.save(s, "release")?;
+        let event_hash = self.save(s, "release")?;
         Ok(
-            json!({"op":op,"revision":revision,"epoch":epoch,"branch":branch,"digest":digest,"executor":actor,"invocation":s.operations[position].invocation,"effective_right":right,"resource":operation_resource}),
+            json!({"op":op,"revision":revision,"policy_revision":policy_revision,"epoch":epoch,"branch":branch,"digest":digest,"event_hash":event_hash,"executor":actor,"invocation":s.operations[position].invocation,"effective_right":right,"resource":operation_resource}),
         )
     }
 
@@ -587,7 +651,7 @@ impl Authority {
     ) -> Result<Value, String> {
         let op = req_id(o, "op")?;
         let digest = req_payload(o, "digest")?;
-        let envelope = req_hex(o, "envelope")?;
+        let envelope = req_envelope(o, "envelope")?;
         let x = s
             .operations
             .iter_mut()
@@ -614,7 +678,7 @@ impl Authority {
 
     fn emit(&self, s: &State, o: &serde_json::Map<String, Value>) -> Result<Value, String> {
         let op = req_id(o, "op")?;
-        let envelope = req_hex(o, "envelope")?;
+        let envelope = req_envelope(o, "envelope")?;
         let x = s
             .operations
             .iter()
@@ -640,6 +704,9 @@ impl Authority {
         let op = req_id(o, "op")?;
         let recipient = req_id(o, "recipient")?;
         let now = req_u64(o, "now")?;
+        if s.repair_pending.is_some() {
+            return Err("read_fenced".into());
+        }
         let release = s
             .operations
             .iter()
@@ -719,6 +786,7 @@ impl Authority {
         if !req_bool(o, "update_path")?
             || !req_bool(o, "confirmed")?
             || !req_bool(o, "durable")?
+            || s.repair_pending.is_some()
             || !s.read_fenced
             || parent != s.branch
             || new == parent
@@ -744,9 +812,78 @@ impl Authority {
         s.epoch = epoch;
         s.branch = new;
         s.read_fenced = false;
+        s.fence_revision = None;
         bump(s);
         self.save(s, "repair")?;
         Ok(json!({"epoch":s.epoch,"branch":s.branch,"revision":s.revision}))
+    }
+
+    /// D-3 step one: commit the repaired epoch and roster while the read fence stays closed.
+    fn repair_stage(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        let parent = req_id(o, "parent_branch")?;
+        let new = req_id(o, "new_branch")?;
+        let epoch = req_u64(o, "epoch")?;
+        let policy_revision = req_u64(o, "policy_revision")?;
+        let removed = req_ids(o, "removed")?;
+        if !req_bool(o, "update_path")?
+            || !req_bool(o, "durable")?
+            || !s.read_fenced
+            || parent != s.branch
+            || new == parent
+            || epoch
+                != s.epoch
+                    .checked_add(1)
+                    .ok_or_else(|| "invalid_repair".to_string())?
+            || policy_revision != s.policy_revision
+            || s.fence_revision
+                .is_some_and(|fence| policy_revision < fence)
+        {
+            return Err("invalid_repair".into());
+        }
+        let expected: BTreeSet<String> = s
+            .roster
+            .iter()
+            .filter(|n| !active_without_time(s, n, "read"))
+            .cloned()
+            .collect();
+        let got: BTreeSet<String> = removed.into_iter().collect();
+        if expected != got || got.is_empty() {
+            return Err("invalid_repair".into());
+        }
+        s.roster.retain(|n| !got.contains(n));
+        s.epoch = epoch;
+        s.branch = new.clone();
+        s.repair_pending = Some(new);
+        bump(s);
+        self.save(s, "repair_stage")?;
+        Ok(json!({"epoch":s.epoch,"branch":s.branch,"policy_revision":s.policy_revision}))
+    }
+
+    /// D-3 step two: open the read fence once the staged repair is confirmed.
+    fn repair_open(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        let branch = req_id(o, "branch")?;
+        let confirmed = req_bool(o, "confirmed")?;
+        if !confirmed
+            || s.repair_pending.as_deref() != Some(branch.as_str())
+            || branch != s.branch
+            || s.roster.iter().any(|n| !active_without_time(s, n, "read"))
+        {
+            return Err("invalid_repair".into());
+        }
+        s.read_fenced = false;
+        s.repair_pending = None;
+        s.fence_revision = None;
+        bump(s);
+        self.save(s, "repair_open")?;
+        Ok(json!({"epoch":s.epoch,"branch":s.branch}))
     }
 
     fn checkpoint(&self, s: &State) -> Result<Value, String> {
@@ -778,7 +915,7 @@ impl Authority {
                 .push(json!({"sequence":sequence,"previous":previous,"hash":hash,"event":event}));
         }
         Ok(
-            json!({"group":s.group,"revision":s.revision,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root,"history":history}),
+            json!({"group":s.group,"revision":s.revision,"policy_revision":s.policy_revision,"policy_digest":policy_digest(s)?,"fence_revision":s.fence_revision,"repair_pending":s.repair_pending,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root,"history":history}),
         )
     }
 
@@ -797,7 +934,8 @@ impl Authority {
             .ok_or_else(|| "uninitialized".to_string())?;
         serde_json::from_str(&raw).map_err(|_| "corrupt_history".into())
     }
-    fn save(&mut self, state: &State, kind: &str) -> Result<(), String> {
+    /// Appends one hash-chained event and the new snapshot; returns the event hash.
+    fn save(&mut self, state: &State, kind: &str) -> Result<String, String> {
         let snapshot = serde_json::to_value(state).map_err(|_| "malformed".to_string())?;
         let event = json!({"kind":kind,"snapshot":snapshot});
         let seq: u64 = self
@@ -829,13 +967,13 @@ impl Authority {
                 rusqlite::params![
                     seq as i64,
                     previous,
-                    hash,
+                    &hash,
                     serde_json::to_string(&event).map_err(|_| "malformed".to_string())?
                 ],
             )
             .map_err(db)?;
         self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[state_raw]).map_err(db)?;
-        Ok(())
+        Ok(hash)
     }
     fn validate_history(&self) -> Result<(), String> {
         let mut stmt = self
@@ -898,6 +1036,25 @@ fn event_hash(seq: u64, previous: &str, event: &Value) -> Result<String, String>
 }
 fn bump(s: &mut State) {
     s.revision = s.revision.saturating_add(1);
+}
+fn bump_policy(s: &mut State) {
+    s.policy_revision = s.policy_revision.saturating_add(1);
+}
+fn policy_digest(s: &State) -> Result<String, String> {
+    let bytes = serde_json::to_vec(&PolicyView {
+        group: &s.group,
+        policy_revision: s.policy_revision,
+        grants: &s.grants,
+        delegations: &s.delegations,
+        invocations: &s.invocations,
+    })
+    .map_err(|_| "corrupt_history".to_string())?;
+    Ok(hex::encode(Sha256::digest(bytes)))
+}
+/// Release frontier form: baseline state `revision` or R-3 `policy_revision`.
+enum Frontier {
+    State(u64),
+    Policy(u64),
 }
 fn rights(xs: &[&str]) -> Vec<String> {
     xs.iter().map(|x| (*x).to_string()).collect()
@@ -1006,6 +1163,20 @@ fn req_id(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String>
     }
     Ok(s.to_string())
 }
+fn opt_id(o: &serde_json::Map<String, Value>, k: &str) -> Result<Option<String>, String> {
+    if o.contains_key(k) {
+        req_id(o, k).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+fn opt_u64(o: &serde_json::Map<String, Value>, k: &str) -> Result<Option<u64>, String> {
+    if o.contains_key(k) {
+        req_u64(o, k).map(Some)
+    } else {
+        Ok(None)
+    }
+}
 fn req_payload(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
     let s = req_id(o, k)?;
     if s.len() > MAX_PAYLOAD {
@@ -1063,12 +1234,15 @@ fn req_ids(o: &serde_json::Map<String, Value>, k: &str) -> Result<Vec<String>, S
     }
     Ok(out)
 }
-fn req_hex(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
-    let s = req_payload(o, k)?;
-    if s.len() % 2 != 0 || hex::decode(&s).is_err() {
+fn req_envelope(o: &serde_json::Map<String, Value>, k: &str) -> Result<String, String> {
+    let s = o
+        .get(k)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("malformed: {k}"))?;
+    if s.is_empty() || s.len() > MAX_ENVELOPE || s.len() % 2 != 0 || hex::decode(s).is_err() {
         return Err(format!("malformed: {k}"));
     }
-    Ok(s)
+    Ok(s.to_string())
 }
 fn check_cover(
     raw: Option<&Value>,

@@ -1,0 +1,89 @@
+# Phase 4.0 kernel corrections — RED (unchanged src/authority.rs)
+# date: 2026-10-23T17:55:08Z
+# source revision: 3e332a2385e76f177362da06d63944a27de27a8c + uncommitted tests/authority_corrections.rs
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --test authority_corrections
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/authority_corrections.rs (target/debug/deps/authority_corrections-6b0c9c77cf98ccdd)
+
+running 10 tests
+test init_accepts_genesis_frontier_and_defaults_to_genesis ... FAILED
+test policy_revision_ignores_allocate_persist_and_consume ... FAILED
+test policy_digest_changes_exactly_when_policy_changes ... FAILED
+test release_with_stale_policy_revision_is_stale_frontier ... FAILED
+test release_with_policy_revision_survives_unrelated_allocate ... FAILED
+test admit_with_adapter_frontier_requires_exact_parent_and_next_epoch ... FAILED
+test repair_stage_keeps_fence_closed_until_repair_open ... FAILED
+test release_response_exposes_its_history_event_hash ... FAILED
+test admit_without_adapter_frontier_keeps_fixture_branch ... ok
+test persist_accepts_envelopes_up_to_max_envelope_and_rejects_larger ... FAILED
+
+failures:
+
+---- init_accepts_genesis_frontier_and_defaults_to_genesis stdout ----
+
+thread 'init_accepts_genesis_frontier_and_defaults_to_genesis' (77029) panicked at tests/authority_corrections.rs:318:5:
+assertion `left == right` failed
+  left: Object {"branch": String("genesis"), "epoch": Number(0), "revision": Number(0)}
+ right: Object {"branch": String("mls-genesis-0a1b"), "epoch": Number(0), "revision": Number(0)}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- policy_revision_ignores_allocate_persist_and_consume stdout ----
+
+thread 'policy_revision_ignores_allocate_persist_and_consume' (77032) panicked at tests/authority_corrections.rs:190:10:
+checkpoint must expose policy_revision as u64
+
+---- policy_digest_changes_exactly_when_policy_changes stdout ----
+
+thread 'policy_digest_changes_exactly_when_policy_changes' (77031) panicked at tests/authority_corrections.rs:196:10:
+checkpoint must expose policy_digest as a string
+
+---- release_with_stale_policy_revision_is_stale_frontier stdout ----
+
+thread 'release_with_stale_policy_revision_is_stale_frontier' (77035) panicked at tests/authority_corrections.rs:190:10:
+checkpoint must expose policy_revision as u64
+
+---- release_with_policy_revision_survives_unrelated_allocate stdout ----
+
+thread 'release_with_policy_revision_survives_unrelated_allocate' (77034) panicked at tests/authority_corrections.rs:190:10:
+checkpoint must expose policy_revision as u64
+
+---- admit_with_adapter_frontier_requires_exact_parent_and_next_epoch stdout ----
+
+thread 'admit_with_adapter_frontier_requires_exact_parent_and_next_epoch' (77027) panicked at tests/authority_corrections.rs:348:5:
+assertion `left == right` failed
+  left: Object {"branch": String("admit:1:alice"), "epoch": Number(1)}
+ right: Object {"branch": String("mls-epoch-1"), "epoch": Number(1)}
+
+---- repair_stage_keeps_fence_closed_until_repair_open stdout ----
+
+thread 'repair_stage_keeps_fence_closed_until_repair_open' (77036) panicked at tests/authority_corrections.rs:671:10:
+fence_revision is set when a revoke closes the fence
+
+---- release_response_exposes_its_history_event_hash stdout ----
+
+thread 'release_response_exposes_its_history_event_hash' (77033) panicked at tests/authority_corrections.rs:190:10:
+checkpoint must expose policy_revision as u64
+
+---- persist_accepts_envelopes_up_to_max_envelope_and_rejects_larger stdout ----
+
+thread 'persist_accepts_envelopes_up_to_max_envelope_and_rejects_larger' (77030) panicked at tests/authority_corrections.rs:66:10:
+contract request should succeed: "malformed: envelope"
+
+
+failures:
+    admit_with_adapter_frontier_requires_exact_parent_and_next_epoch
+    init_accepts_genesis_frontier_and_defaults_to_genesis
+    persist_accepts_envelopes_up_to_max_envelope_and_rejects_larger
+    policy_digest_changes_exactly_when_policy_changes
+    policy_revision_ignores_allocate_persist_and_consume
+    release_response_exposes_its_history_event_hash
+    release_with_policy_revision_survives_unrelated_allocate
+    release_with_stale_policy_revision_is_stale_frontier
+    repair_stage_keeps_fence_closed_until_repair_open
+
+test result: FAILED. 1 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--test authority_corrections`
+# exit: 101

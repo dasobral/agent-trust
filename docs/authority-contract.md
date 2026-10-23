@@ -31,3 +31,33 @@ Requests use `command` discriminator. Error strings begin a stable code followed
 Errors: `malformed`, `uninitialized`, `already_initialized`, `unauthorized`, `invalid_generation`, `invalid_delegation`, `duplicate_operation`, `invalid_transition`, `stale_frontier`, `read_fenced`, `unsound_cover`, `binding_mismatch`, `not_persisted`, `replay`, `invalid_repair`, `corrupt_history`.
 
 Expiry is evaluated from trusted adapter time `now` at release and consume. If any roster read grant's chain has expired, new content releases fail closed even before an explicit revoke. A later explicit revoke drives removal. Do not allow expired ancestor grants to authorize descendants. Production time-source trust and authentication are separate adapter gates.
+
+## Requirement corrections for the adapter (approved 2026-10-23)
+
+Daniel approved these corrections on 23 October 2026 (`docs/adapter-contract.md` §10 and §13). They are additive. A request without the new fields behaves exactly as described above, and every existing assertion stays valid. The trusted adapter always supplies the new fields. Kernel fixtures and tests may still omit them.
+
+- **R-2 `init`:** optional `branch` (identifier string). When present, the genesis branch is that value instead of `genesis`. The response is `{revision:0, epoch:0, branch}`.
+- **R-1 `admit`:** optional `parent_branch`, `new_branch` (identifier strings) and `epoch` (u64). Either all three are present or none; a partial set is `malformed`. The existing authorization, fence and roster checks run first, unchanged. Then the kernel requires `parent_branch == branch` and `epoch == current epoch + 1`, otherwise `stale_frontier`. It also requires `new_branch != parent_branch`, otherwise `invalid_transition`. On success it sets epoch and branch to the supplied values instead of `admit:<epoch>:<subject>`. The response is `{epoch, branch}`.
+- **R-3 policy revision:** the state gains `policy_revision` (u64, 0 at init) and `fence_revision` (u64 or null, null at init).
+  - `policy_revision` advances by exactly one on each successful `grant`, `delegate` and `invoke`, and on a `revoke` that changes a grant. Nothing else advances it: allocate, release, persist, emit, consume, abandon, admit, repair, `repair_stage`, `repair_open` and failed requests leave it unchanged.
+  - `policy_digest` is the lowercase hex SHA-256 of the canonical serialization of `{group, policy_revision, grants, delegations, invocations}`, in stored order. It changes exactly when `policy_revision` changes.
+  - When a revoke closes the read fence, `fence_revision` becomes the `policy_revision` after that revoke. Opening the fence resets it to null.
+  - `checkpoint` adds `policy_revision`, `policy_digest` and `fence_revision`.
+  - `release` accepts `policy_revision` in place of `revision`. Supplying both is `malformed`; supplying neither is `malformed`. With `policy_revision`, the kernel requires equality with the current `policy_revision` (otherwise `stale_frontier`) and does not compare state `revision`. The epoch, branch and every other check are unchanged.
+  - Every successful `release` response adds `policy_revision` and `event_hash`. `event_hash` is the history hash of the event that recorded this release, and it equals that entry's `hash` in `checkpoint.history` (supports R-4). In the `policy_revision` form, the response `revision` is the state revision at which the release was evaluated.
+- **R-6 envelope bound:** `persist` and `emit` accept an `envelope` hex string of up to 2,097,152 characters (1 MiB of bytes, `MAX_ENVELOPE`). A longer string is `malformed`. All other fields keep their existing bounds.
+- **D-3 two-step repair:** two adapter-only commands are added next to the unchanged `repair`.
+  - `repair_stage`: `parent_branch`, `new_branch`, `epoch`, `policy_revision`, `removed`, `update_path`, `durable`. It applies the existing `repair` checks, except two. `policy_revision` must equal the current `policy_revision` and be at least `fence_revision`, and state `revision` is not compared. On success it advances epoch and branch, removes the readers, keeps the read fence closed, and records `repair_pending = new_branch`. While a repair is pending, every content release and consume stays `read_fenced`. The response is `{epoch, branch, policy_revision}`.
+  - `repair_open`: `branch`, `confirmed`. It requires a pending repair, `branch` equal to both the current branch and `repair_pending`, `confirmed` true, and no remaining roster reader without an active read grant. Otherwise it returns `invalid_repair`. On success it opens the fence, clears `repair_pending` and resets `fence_revision`. The response is `{epoch, branch}`.
+  - `checkpoint` adds `repair_pending` (string or null).
+  - As with `repair`, the booleans are fixture inputs for the kernel alone. In integration, the adapter derives them from checked MLS evidence, and these commands are never exposed to workers.
+- **R-7 fresh keys:** there is no kernel change. In integration, the adapter derives `grant.fresh_keys` from a new KeyPackage or a new-signer update commit.
+
+Clarifications made during the phase 4.0 implementation. They only affect a store with a pending staged repair, or one fenced before the upgrade.
+
+- Legacy `repair` while `repair_pending` is set returns `invalid_repair`. Another `repair_stage` on top of the staged branch is allowed, but only if a new revocation has created new required removals.
+- While `repair_pending` is set, `consume` returns `read_fenced` before its frontier binding check.
+- A second fencing revoke while the fence is closed moves `fence_revision` to the newer policy revision.
+- If `fence_revision` is null when `repair_stage` runs (a store fenced before the upgrade), only the check that `policy_revision` equals the current value applies.
+- Before R-6, envelopes were also limited by the shared 256-character identifier bound. `MAX_ENVELOPE` replaces that limit for `persist` and `emit` only.
+- Known cost: every history event stores a full state snapshot, envelopes included. Large envelopes therefore grow the history roughly quadratically. Phase 4.3 should keep exact envelope bytes in the adapter store and give the kernel only bounded data. This is a candidate follow-up correction; it does not affect the R-6 tests.
