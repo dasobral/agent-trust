@@ -2,7 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Read only your assigned phase, `docs/adapter-contract.md`, and the files that phase lists.
 
-**Status:** Approved by Daniel on 2026-10-23 (`docs/adapter-contract.md` §13, D-1 to D-6 as proposed). Phase 4.0 complete (evidence: `evidence/adapter-compat.txt`, `evidence/kernel-corrections-red.txt`, `evidence/kernel-corrections-green.txt`). Proposed R-8 (D-7) awaits approval.
+**Status:** Approved by Daniel on 2026-10-23 (`docs/adapter-contract.md` §13, D-1 to D-6 as proposed). Phase 4.0 is complete. Evidence: `evidence/adapter-compat.txt`, `evidence/kernel-corrections-red.txt` and `evidence/kernel-corrections-green.txt`.
+
+Phase 4.1 and the approved R-8 kernel correction are complete. R-8 was tested in `tests/authority_resource_contract.rs`. Evidence: `evidence/adapter-identity-red.txt`, `evidence/resource-attenuation-red.txt` and `evidence/phase-4.1-r8-green.txt`.
+
+Proposed R-9 (D-8) is open.
 
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
@@ -99,8 +103,8 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 **Interfaces:**
 - Produces: `Adapter<P: OpenMlsProvider>`, `Clock`, `SignedRequest` (contract §4.8), APF key generation and storage (§7), and client key generation from a provider-rand seed (§8).
 
-- [ ] Land the interface skeleton. Every method returns `Err("not_implemented")`, and the crate compiles.
-- [ ] Write the tests:
+- [x] Land the interface skeleton. Every method returns `Err("not_implemented")`, and the crate compiles.
+- [x] Write the tests:
   - `apf_key_is_drawn_from_provider_rand`
   - `apf_private_key_never_appears_in_kernel_database_or_trace`
   - `client_signature_key_derives_from_provider_rand_seed`
@@ -109,8 +113,8 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
   - `replayed_or_decreasing_sequence_is_unauthenticated`
   - `request_body_actor_and_now_fields_cannot_override_adapter_values`
   - `unknown_actor_is_unauthenticated`
-- [ ] Run red and retain the evidence.
-- [ ] Implement, then run green and the standard gate.
+- [x] Run red and retain the evidence.
+- [x] Implement, then run green and the standard gate.
 
 **Claim after 4.1:** in-process requests are authenticated by registered signature keys, with adapter-owned time. This is not network authentication (Task 5).
 
@@ -212,6 +216,10 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 - Consumes: contract §6.
 - Produces: restartable adapter, sequencer and clients, plus a `Barrier` hook enum (B1–B8) available to tests without timing sleeps.
 
+- [ ] Also cover the gaps found in phase 4.1. The adapter store and the kernel are two SQLite files, so they never commit together:
+  - A crash after the kernel commits but before the adapter store commits leaves a kernel change with no registered key and no trace event. This currently fails closed, because the subject cannot authenticate. Fix it with an intent log reconciled against kernel history on `open`.
+  - A crash in the middle of `Adapter::create` leaves files that block both `create` and `open`.
+  - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
 - [ ] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`
   - `b2_crash_after_release_before_persist_abandons_permanently`

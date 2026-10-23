@@ -51,6 +51,12 @@ Daniel approved these corrections on 23 October 2026 (`docs/adapter-contract.md`
   - `repair_open`: `branch`, `confirmed`. It requires a pending repair, `branch` equal to both the current branch and `repair_pending`, `confirmed` true, and no remaining roster reader without an active read grant. Otherwise it returns `invalid_repair`. On success it opens the fence, clears `repair_pending` and resets `fence_revision`. The response is `{epoch, branch}`.
   - `checkpoint` adds `repair_pending` (string or null).
   - As with `repair`, the booleans are fixture inputs for the kernel alone. In integration, the adapter derives them from checked MLS evidence, and these commands are never exposed to workers.
+- **R-8 resource attenuation (approved 2026-10-23, amendment A-1):**
+  - `release` requires the operation resource to be in the `resources` of every delegation on the actor's chain, from the actor's own record up to the root record. Otherwise it returns `unauthorized` and the reservation stays `allocated`.
+  - For an operation bound to an invocation, the same check also applies to the chain of every origin and executor in the invocation chain.
+  - A subject without a delegation record (a direct root-anchored `grant`) holds only `[group]`.
+  - `allocate` is unchanged and makes no authorization decision.
+  - `init` accepts an optional `resources` array of identifier strings, without duplicates, for the root delegation. It must contain `group`, otherwise the request is `malformed`. The default is `[group]`.
 - **R-7 fresh keys:** there is no kernel change. In integration, the adapter derives `grant.fresh_keys` from a new KeyPackage or a new-signer update commit.
 
 Clarifications made during the phase 4.0 implementation. They only affect a store with a pending staged repair, or one fenced before the upgrade.

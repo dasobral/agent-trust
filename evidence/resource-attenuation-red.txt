@@ -1,0 +1,57 @@
+# R-8 resource attenuation — RED (unchanged src/authority.rs)
+# date: 2026-10-23T18:13:43Z
+# source revision: faea9db2e12fda075d1adac0c495f057012203c3 + uncommitted tests/authority_resource_contract.rs
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --test authority_resource_contract
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/authority_resource_contract.rs (target/debug/deps/authority_resource_contract-a5db7c7e4e98a65c)
+
+running 6 tests
+test init_resources_must_contain_the_group_and_be_well_formed ... FAILED
+test invocation_release_requires_resource_in_origin_and_executor_chains ... FAILED
+test root_resources_at_init_bound_every_descendant ... FAILED
+test allocate_still_makes_no_authorization_decision ... ok
+test direct_release_outside_delegated_resources_is_unauthorized ... FAILED
+test direct_grant_subjects_hold_only_the_group_resource ... FAILED
+
+failures:
+
+---- init_resources_must_contain_the_group_and_be_well_formed stdout ----
+
+thread 'init_resources_must_contain_the_group_and_be_well_formed' (145019) panicked at tests/authority_resource_contract.rs:407:29:
+init resources without the group must be malformed, got {"branch":"genesis","epoch":0,"revision":0}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- invocation_release_requires_resource_in_origin_and_executor_chains stdout ----
+
+thread 'invocation_release_requires_resource_in_origin_and_executor_chains' (145020) panicked at tests/authority_resource_contract.rs:76:21:
+delegation within the parent's resources must succeed (R-8c: init resources bound the root record): request failed with invalid_delegation
+
+---- root_resources_at_init_bound_every_descendant stdout ----
+
+thread 'root_resources_at_init_bound_every_descendant' (145021) panicked at tests/authority_resource_contract.rs:76:21:
+delegation within the parent's resources must succeed (R-8c: init resources bound the root record): request failed with invalid_delegation
+
+---- direct_release_outside_delegated_resources_is_unauthorized stdout ----
+
+thread 'direct_release_outside_delegated_resources_is_unauthorized' (145018) panicked at tests/authority_resource_contract.rs:65:22:
+R-8: sib's delegation covers only the group resource: expected unauthorized, but request succeeded with Object {"branch": String("admit:1:sib"), "digest": String("aa"), "effective_right": String("write"), "epoch": Number(1), "event_hash": String("dfa8f1721a3f186070c507dd2f67c980b4030a83ff190d2080f5ec1bbc4bac1c"), "executor": String("sib"), "invocation": Null, "op": String("sib-kv-write"), "policy_revision": Number(1), "resource": String("backend:kv"), "revision": Number(5)}
+
+---- direct_grant_subjects_hold_only_the_group_resource stdout ----
+
+thread 'direct_grant_subjects_hold_only_the_group_resource' (145017) panicked at tests/authority_resource_contract.rs:65:22:
+R-8: a subject without a delegation record holds only [group]: expected unauthorized, but request succeeded with Object {"branch": String("admit:1:direct"), "digest": String("aa"), "effective_right": String("write"), "epoch": Number(1), "event_hash": String("7f3681db83972fedf3ae1f8b7ccfe3ab4e21c2da5126d7f9664cade03441ef6c"), "executor": String("direct"), "invocation": Null, "op": String("direct-kv-write"), "policy_revision": Number(3), "resource": String("backend:kv"), "revision": Number(9)}
+
+
+failures:
+    direct_grant_subjects_hold_only_the_group_resource
+    direct_release_outside_delegated_resources_is_unauthorized
+    init_resources_must_contain_the_group_and_be_well_formed
+    invocation_release_requires_resource_in_origin_and_executor_chains
+    root_resources_at_init_bound_every_descendant
+
+test result: FAILED. 1 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--test authority_resource_contract`
+# exit: 101

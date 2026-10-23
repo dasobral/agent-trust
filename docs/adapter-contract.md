@@ -192,6 +192,41 @@ struct {
 - The adapter, never the caller, fills `actor` and `now` in kernel requests.
 - `now` comes from an adapter `Clock` trait. Tests inject a deterministic clock.
 
+### 4.9 Phase 4.1 interface (coordinator clarifications C-1 to C-6)
+
+These clarifications fill in §4.8 for plan phase 4.1. C-1 refines the approved design and is flagged to Daniel in the phase report.
+
+- **C-1, key registration.** A subject's request key is registered when the subject is created:
+  - `delegate` MUST carry `subject_key`: the child's Ed25519 public key, 32 bytes, lowercase hex.
+  - A `grant` that creates a previously unknown subject MUST carry `subject_key`. A `grant` to a known subject MUST NOT carry it.
+  - The adapter removes `subject_key` before calling the kernel.
+  - A key registered to one subject MUST NOT be registered again, for that subject or any other.
+  - A missing, malformed or unexpected `subject_key` is `malformed: subject_key`. A key that is already registered is `binding_mismatch`. In both cases the kernel is not called.
+  - The child generates its own key (§8). The parent only submits the public half.
+  - Phase 4.2 binds admitted leaf keys to this registered key.
+- **C-2, reserved fields.** A request body is one JSON object with a `command` string. A body containing `actor` or `now` is `malformed: reserved field`, and the kernel is not called. The adapter sets both from the authenticated actor and the `Clock`.
+- **C-3, routed commands.** In phase 4.1, `handle` routes only `grant`, `delegate`, `revoke`, `invoke` and `allocate`.
+  - Adapter-only commands (`init`, `admit`, `repair`, `repair_stage`, `repair_open`) are `unauthorized`.
+  - `release`, `persist`, `emit`, `consume` and `abandon` are `malformed: unsupported command` until phase 4.3 routes them.
+  - Any other command is `malformed: unknown command`.
+  - `checkpoint` is a trusted local read through `Adapter::checkpoint`, not a request.
+- **C-4, order of checks.** The adapter applies these checks in this order:
+  1. It decodes the request and requires a registered actor (`unauthenticated`).
+  2. It verifies the signature over `RequestTBS` (§4.8) with the actor's registered key (`unauthenticated`).
+  3. It requires `sequence` to be greater than the actor's last accepted sequence (`unauthenticated`).
+  4. It durably records the sequence.
+  5. It parses and checks the body (`malformed`).
+  6. It calls the kernel.
+
+  A sequence that passes step 3 stays consumed even if a later step fails. Failures at steps 1–3 leave the adapter store and the kernel unchanged.
+- **C-5, storage layout.** `Adapter::create(dir, …)` creates three files and fails if any of them already exists:
+  - `authority.sqlite`, the kernel;
+  - `adapter.sqlite`, with registered keys, sequences and the trace;
+  - `apf-signing-key`, the 32-byte Ed25519 seed, with mode `0600` on Unix.
+
+  `Adapter::open` reloads them. The seed MUST NOT be written to either database or to the trace. Each handled request appends one trace event `{actor, sequence, command, outcome}`, where `outcome` is `"ok"` or the error code. A request that fails before its actor is known is traced with `actor: null`.
+- **C-6, key generation.** `ClientIdentity::generate` and the APF key both take a 32-byte seed from `OpenMlsRand::random_array` and build `SignatureKeyPair::from_raw(ED25519, seed, public)`. `public` is derived with `ed25519_dalek::SigningKey::from_bytes`. A rand failure is `entropy_unavailable`, and nothing is created.
+
 ## 5. Flows
 
 ### 5.1 Genesis
@@ -331,7 +366,7 @@ Each correction changes an accepted requirement. Daniel must approve it before t
 | R-5 | Trace contract v2 for real-commit admission and repair confirmation. Owned by the oracle's test author. | v1 tests unchanged |
 | R-6 | Envelope bound: an envelope carries an MLS message plus a certificate, which can exceed `MAX_PAYLOAD` (4096 hex characters, `src/authority.rs:10`). Introduce a separate `MAX_ENVELOPE` (proposed 1 MiB) for `persist` and `emit`. | None |
 | R-7 | Fresh-key evidence: in adapter mode, the kernel `fresh_keys` input is derived by the adapter from a new KeyPackage or a new-signer update (§5.5) | None |
-| R-8 | **Proposed 2026-10-23, not approved (D-7).** Resource attenuation on every release path. Found by the Task 5 design session and confirmed in source. Details below this table. | One new red test; existing tests use only the group resource |
+| R-8 | **Approved 2026-10-23 (D-7)**, with amendment A-1 below. Resource attenuation on every release path. Found by the Task 5 design session and confirmed in source. Details below this table. | One new red test; existing tests use only the group resource |
 
 **R-8 details.**
 
@@ -344,6 +379,8 @@ Proposed correction:
 - **R-8a.** `allocate` and `release` require the operation resource to be in the `resources` of every delegation on the actor's chain, up to the root. Otherwise the request is `unauthorized`, and a failed release leaves the reservation unchanged.
 - **R-8b.** For an invocation release, the same check applies to both the origin's chain and the executor's chain.
 - **R-8c.** `init` accepts an optional `resources` list for the root delegation. The default is `[group]`, and the group must be in the list. Without R-8c, no subject could ever hold a non-group resource such as `backend:kv`, because `delegate` already requires a subset of the parent's resources.
+
+Amendment A-1 (coordinator, 2026-10-23): the R-8a check applies at `release` only. `allocate` stays a reservation that makes no authorization decision, as the kernel contract states. The existing assertion `tests/confused_deputy_red.rs::child_cannot_launder_parent_only_resource` allocates on a resource outside the delegation and expects only the release to be refused. Checking at `allocate` would break that assertion. A refused release leaves the reservation `allocated`. A subject that has no delegation record (a direct root-anchored `grant`) is bounded to `[group]`.
 
 ## 11. Claim gate for `full_lap_mls`
 
@@ -369,4 +406,5 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
 - **D-4:** Confirmation by a designated member C ≠ committer R with matching `epoch_authenticator_hash`. Proposed fallback when R is the only continuing member: R alone confirms, recorded as weaker evidence.
 - **D-5:** Accept the HPKE randomness limitation (§8) for Task 4. The alternative is a fork change that routes hpke-rs randomness through `OpenMlsRand`. That change belongs to the separate OpenMLS fork project.
 - **D-6:** Proposed extension codepoints `0xf043` and `0xf044` (private-use range, next to the existing `0xf042`).
-- **D-7 (open):** Approve R-8a–c (resource attenuation on every release path, and root resources at init). It is not part of the D-1 to D-6 approval and is not implemented. Its red test goes to a test author only after approval.
+- **D-8 (open, proposed R-9):** `invoke` still limits a root invocation's resources to `[group]` (`src/authority.rs`, `invoke`). With R-8c, a subject can hold a non-group resource such as `backend:kv` but cannot delegate work on it through an invocation. The proposal is to bound a root invocation's resources by the origin's delegated resources instead of `[group]`. This was found by the R-8 test author. It is not approved and not implemented.
+- **D-7 (approved 2026-10-23):** R-8a–c, with amendment A-1. The approval was relayed by the parent session, quoting Daniel: "I approve R-8 (D-7). Forward it to the adapter session to implement test-first."

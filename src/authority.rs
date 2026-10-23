@@ -151,6 +151,17 @@ impl Authority {
             let group = req_id(obj, "group")?;
             let root = req_id(obj, "root")?;
             let branch = opt_id(obj, "branch")?.unwrap_or_else(|| "genesis".into());
+            // R-8c: optional root delegation resources; default `[group]`, must contain the group.
+            let root_resources = match obj.get("resources") {
+                None => vec![group.clone()],
+                Some(_) => {
+                    let resources = req_ids(obj, "resources")?;
+                    if !resources.contains(&group) {
+                        return Err("malformed: resources".into());
+                    }
+                    resources
+                }
+            };
             let state = State {
                 group: group.clone(),
                 revision: 0,
@@ -171,7 +182,7 @@ impl Authority {
                     subject: root.clone(),
                     parent: root.clone(),
                     rights: rights(&["read", "write", "admin", "admit"]),
-                    resources: vec![group],
+                    resources: root_resources,
                     expires_at: u64::MAX,
                     not_before: 0,
                     depth: 8,
@@ -610,6 +621,10 @@ impl Authority {
             != operation_resource
         {
             return Err("binding_mismatch".into());
+        }
+        // R-8a: the actor's own delegation chain must hold the operation resource.
+        if !resource_held(s, &actor, &operation_resource) {
+            return Err("unauthorized".into());
         }
         if let Some(invocation_id) = s.operations[position].invocation.clone() {
             if !invocation_valid(
@@ -1114,6 +1129,28 @@ fn chain_valid(s: &State, subject: &str, right: &str, now: u64) -> bool {
         current = &d.parent;
     }
 }
+/// R-8: `resource` is in the `resources` of every delegation from `subject` up to the root.
+/// A subject without a delegation record (a direct root-anchored grant) holds only `[group]`.
+fn resource_held(s: &State, subject: &str, resource: &str) -> bool {
+    let mut current = subject;
+    let mut seen = HashSet::new();
+    loop {
+        if !seen.insert(current.to_string()) {
+            return false;
+        }
+        let d = match s.delegations.iter().find(|d| d.subject == current) {
+            Some(d) => d,
+            None => return current == subject && resource == s.group,
+        };
+        if !d.resources.iter().any(|r| r == resource) {
+            return false;
+        }
+        if d.parent == d.subject {
+            return true;
+        }
+        current = &d.parent;
+    }
+}
 fn invocation_valid(
     s: &State,
     id: &str,
@@ -1138,6 +1175,12 @@ fn invocation_valid(
         return false;
     }
     if !effective(s, &invocation.origin, right, now) {
+        return false;
+    }
+    // R-8b: origin and executor chains must both hold the resource at every hop.
+    if !resource_held(s, &invocation.origin, resource)
+        || !resource_held(s, &invocation.executor, resource)
+    {
         return false;
     }
     if let Some(parent) = &invocation.parent {

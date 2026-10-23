@@ -1,0 +1,77 @@
+# Phase 4.1 adapter identity — RED (interface skeleton src/adapter.rs)
+# date: 2026-10-23T18:10:59Z
+# source revision: faea9db2e12fda075d1adac0c495f057012203c3 + uncommitted phase 4.1 skeleton and tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --test adapter_identity
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/adapter_identity.rs (target/debug/deps/adapter_identity-8d21215faeba6f64)
+
+running 8 tests
+test client_signature_key_derives_from_provider_rand_seed ... FAILED
+test valid_signed_request_reaches_kernel ... FAILED
+test bad_signature_is_unauthenticated_and_kernel_unchanged ... FAILED
+test apf_private_key_never_appears_in_kernel_database_or_trace ... FAILED
+test apf_key_is_drawn_from_provider_rand ... FAILED
+test request_body_actor_and_now_fields_cannot_override_adapter_values ... FAILED
+test replayed_or_decreasing_sequence_is_unauthenticated ... FAILED
+test unknown_actor_is_unauthenticated ... FAILED
+
+failures:
+
+---- client_signature_key_derives_from_provider_rand_seed stdout ----
+
+thread 'client_signature_key_derives_from_provider_rand_seed' (133920) panicked at tests/adapter_identity.rs:373:50:
+client identity generation: "not_implemented"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- valid_signed_request_reaches_kernel stdout ----
+
+thread 'valid_signed_request_reaches_kernel' (133924) panicked at tests/adapter_identity.rs:490:71:
+to_be_signed: "not_implemented"
+
+---- bad_signature_is_unauthenticated_and_kernel_unchanged stdout ----
+
+thread 'bad_signature_is_unauthenticated_and_kernel_unchanged' (133919) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+---- apf_private_key_never_appears_in_kernel_database_or_trace stdout ----
+
+thread 'apf_private_key_never_appears_in_kernel_database_or_trace' (133918) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+---- apf_key_is_drawn_from_provider_rand stdout ----
+
+thread 'apf_key_is_drawn_from_provider_rand' (133917) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+---- request_body_actor_and_now_fields_cannot_override_adapter_values stdout ----
+
+thread 'request_body_actor_and_now_fields_cannot_override_adapter_values' (133922) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+---- replayed_or_decreasing_sequence_is_unauthenticated stdout ----
+
+thread 'replayed_or_decreasing_sequence_is_unauthenticated' (133921) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+---- unknown_actor_is_unauthenticated stdout ----
+
+thread 'unknown_actor_is_unauthenticated' (133923) panicked at tests/adapter_identity.rs:55:6:
+adapter create should succeed: "not_implemented"
+
+
+failures:
+    apf_key_is_drawn_from_provider_rand
+    apf_private_key_never_appears_in_kernel_database_or_trace
+    bad_signature_is_unauthenticated_and_kernel_unchanged
+    client_signature_key_derives_from_provider_rand_seed
+    replayed_or_decreasing_sequence_is_unauthenticated
+    request_body_actor_and_now_fields_cannot_override_adapter_values
+    unknown_actor_is_unauthenticated
+    valid_signed_request_reaches_kernel
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test adapter_identity`
+# exit: 101
