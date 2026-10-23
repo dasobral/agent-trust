@@ -525,6 +525,37 @@ Each client uses `openmls_sqlite_storage::SqliteStorageProvider` 0.3.0 from the 
 
 Crash tests use explicit barrier hooks. They do not use sleeps.
 
+### 6.1 Phase 4.5 recovery interface (coordinator clarifications C-31 to C-34)
+
+- **C-31, write-ahead intents.** The adapter is the kernel's only writer. Before any kernel mutation, it durably writes an intent to `adapter.sqlite`, in the same store transaction that consumes the request's sequence (C-4).
+  - The intent records the command kind, the request body, the kernel `revision` before the call, and every input needed to finish the request without the client: for example the exact commit bytes for `submit_commit`, or the subject key for a registration.
+  - After the kernel call, the sequencer merge and the final store transaction (effects plus trace event), the intent is deleted in that same final transaction.
+- **C-32, recovery on `open`.** For each remaining intent, `Adapter::open` decides whether the kernel applied it. The kernel applied it if and only if its `revision` is exactly the recorded revision plus one and the last history event's `kind` matches the intent's kernel command.
+  - **If applied,** the adapter finishes the remaining steps:
+    - it merges the stored commit into the sequencer when the sequencer is still at the parent;
+    - it re-signs the release certificate, consume receipt or ack deterministically from kernel state (Ed25519 is deterministic, so the bytes are identical);
+    - it applies the store effects (owner row, certificate, key registration or rotation, repair record, confirmation, offer deletion);
+    - it appends a trace event with outcome `recovered`.
+  - **If not applied,** it deletes the intent and appends a trace event with outcome `crashed`.
+  - With these rules, `open` succeeds after a crash at any adapter crash point, and the kernel, the sequencer and the store agree afterwards. `binding_mismatch: sequencer frontier` remains only for states that recovery cannot explain.
+- **C-33, crash points and client restart.**
+  - `Adapter::crash_after(point)` arms a one-shot crash at `CrashPoint::AfterIntent`, `AfterKernel`, `AfterSequencer`, or `GenesisAfterKernel` (inside `GenesisPending::complete`).
+  - The next request that reaches that point stops there and returns `crashed`. Every later call on that adapter value also returns `crashed`, so the test must drop it and reopen.
+  - The crash points can only make the adapter stop early. They never change what a completed step does.
+  - `ClientEndpoint::load(group, subject, identity, provider, apf_public_key, pending_commit, pending_identity)` reloads a member from its provider's storage. The application supplies the exact bytes of a commit it staged and submitted, because the client keeps them only in memory. It also supplies the new identity of a staged rekey whose ack was not yet applied.
+  - After a reload, a client reaches an acked successor only through `apply_ack`, and it discards a pending commit that was never acked through `discard_pending`.
+  - A client whose storage was rolled back to an older frontier is unready: `protect` and `receive` fail on the frontier binding. It can catch up only by applying the missing acks in order.
+- **C-34, interrupted genesis.**
+  - `GenesisPending::complete` first writes a `genesis.incomplete` marker and removes it last.
+  - `begin_genesis` and `create` treat a directory holding that marker as interrupted. They remove exactly the adapter files and their sidecars, then proceed.
+  - `open` on such a directory is `uninitialized: interrupted genesis`.
+
+- **C-35, resolved while authoring the phase 4.5 tests.**
+  - `AfterSequencer` on a command with no sequencer step (for example `delegate`, `release` or `confirm_repair`) means after the kernel call and before the final store transaction.
+  - Nothing is traced at crash time. The intent keeps the actor, the sequence and the command, and recovery appends exactly one trace event with outcome `recovered` or `crashed`.
+  - A crashed request's sequence stays consumed, so replaying it is `unauthenticated`.
+  - Recovery leaves every pre-existing store row unchanged. New tables are allowed.
+
 ## 7. APF signing key
 
 - The adapter generates one Ed25519 key at genesis, from a seed drawn through the configured rand provider (§8).
@@ -552,6 +583,59 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 - Kernel-level events map to `docs/trace-contract.md` version 1.
 - Real admission advances the epoch, but the v1 oracle `admit` does not (`docs/trace-contract.md`, `admit`). The oracle's test author therefore owns a trace contract v2 for real-commit admission (R-5).
 - The adapter MUST NOT import the oracle, and the oracle MUST NOT import production modules.
+
+### 9.1 Phase 4.7b interface (coordinator clarifications C-36 to C-38)
+
+- **C-36, lab protocol** (`agent-trust lab --dir PATH --seed N`, implemented in `src/lab.rs`).
+  - The lab drives one in-process adapter and in-memory client endpoints through their public APIs only. It reads line-delimited JSON requests `{"op": …}` on standard input and writes one line per request: `{"ok": …}` or `{"error": "<code…>"}`. Processing continues after an error, and the exit status is 0 at end of input.
+  - The adapter and clients use the provider's configured randomness (RustCrypto, OS-seeded). The seed drives only the delivery schedule, through a deterministic test-only generator that is not used for cryptography. Time comes from a fixed clock.
+  - Requests:
+    - `genesis {group, root}`;
+    - `delegate {subject, rights}`, by the root on the group resource;
+    - `admit {subject, by}`, the full candidate flow, with every current member applying the ack;
+    - `send {from, op, payload}`: allocate, release with an honest cover, protect, persist and emit, then queue the envelope for every reader;
+    - `deliver {}`: one seeded scheduling round over the queue (reorder, drop, duplicate). For each delivery attempt it runs receive, consume and deliver, and returns each attempt's `{to, op, outcome}`. A dropped attempt stays queued and is retransmitted byte-identically.
+    - `revoke {subject, right}`;
+    - `repair {by}`: plan, stage, submit, every member applies the ack, then confirmations from the committer and one other continuing member (or the committer alone);
+    - `rekey {subject, right, generation}`: the offer by the root, `stage_rekey`, submit, every member applies the ack;
+    - `export_trace {}`, which returns `{trace}` (C-37);
+    - `summary {}`, which returns `{members, epoch, branch, delivered, duplicate_deliveries, deliveries_without_consume}`.
+  - The lab never reports `full_lap_mls`.
+  - `agent-trust export-trace --dir PATH` prints the C-37 trace of an existing adapter directory as JSON.
+- **C-37, trace export.** `export_v2_trace(dir)` derives a trace contract v2 trace of accepted transitions only (V2.5). It reads only the persisted kernel history and the adapter store, never client state.
+  - **Mapping from adapter and kernel records to v2 events:**
+    - kernel `init` → v2 `init`, with the root's registered key under `keys`;
+    - a non-member `grant` → `allow`;
+    - `delegate` → one `allow` per delegated right, in right-code order;
+    - an effective `revoke` → one `deny` per subject whose grant it deactivated, sorted by subject;
+    - `invoke` → no event;
+    - `admit` → `admit`, with the committer from the adapter trace, the subject's registered key, and the certificate hash as `key_package`;
+    - `allocate`, `release`, `persist`, `emit` and `consume` → the same-named events, with the cover rebuilt from the stored release certificate;
+    - `repair_stage` → `repair_stage`, with the committer from the repair record;
+    - each stored confirmation → `confirm`;
+    - `repair_open` → `repair_open`, with the recorded evidence;
+    - `rekey` → `rekey`, with the offer's admin as actor and the new key.
+  - **Policy revisions.** They are renumbered so each exported `release` and `repair_stage` carries the count of exported policy events, because the kernel's `invoke` advances `policy_revision` while v2 does not model it.
+  - **Recovery events.** Before a recipient's first `consume` at a frontier, the export emits `recover {client, epoch, branch}`. The evidence is that the client's consume was accepted at that frontier.
+  - **Ordering.** Events follow the adapter trace order, which matches kernel history order because the adapter is the kernel's only writer.
+- **C-38, claim gate.** `scripts/verify.py` runs every gate: `cargo test --locked --all-targets`, every Python harness test (not only `test_oracle*`), and the integration harness.
+  - `evidence/manifest.json` gets `full_lap_mls: true` only when every gate passed in that run, the integration harness's exported lab traces were accepted by the oracle, and its mutated broken controls were rejected. Any unmet or failed gate makes it `false` and makes the verifier exit nonzero.
+  - The manifest always records `bridge_remove_etk: "open"`, `live_entropy_core: "unmet"` and `hpke_randomness: "excluded"`.
+  - `mls-demo` (the legacy `MlsLab`) keeps reporting `full_lap_mls: false`, because its claim concerns only that lab.
+
+- **C-39, resolved while authoring the phase 4.7b tests.** These refine C-36 and C-38.
+  - **Request encoding.** Every lab request is `{"op": "<request>", "args": {…}}`, so `send`'s own `op` field cannot collide with the request key.
+  - **`deliver`.** It returns `{"ok": [{to, op, outcome}, …]}`, where `outcome` is `"delivered"`, `"dropped"` (the entry stays queued) or a rejection code. Only a copy of a pair that was already delivered may be rejected. An empty list means the queue is empty.
+  - **Recipients.** A send's recipients are the roster readers other than the sender.
+  - **Payloads.** They are even-length lowercase hex.
+  - **Summary.** `summary.delivered` is an integer count.
+  - **Faults.** Seeded reorder, drop and duplicate are observable per attempt. A seed is deterministic: rerunning it repeats its schedule.
+  - **Lab directories.** A lab starts on a new adapter. `genesis` on an existing directory is an `error` and leaves that directory unchanged.
+  - **Verifier gates.**
+    - The gates run in this order: a cargo build or check, the `python-oracle` gate first among the Python gates, `cargo test --locked --all-targets`, a full harness discover, then `harness.test_integration` with a named-test check.
+    - The integration gate counts as passed only if `test_lab_scenario_trace_is_accepted_by_oracle` and `test_broken_controls_are_rejected_by_oracle` ran and passed. A skipped or absent named test is a failure.
+    - `verify.MANIFEST_PATH` is read at call time.
+    - `claim_boundary` in the manifest carries `full_lap_mls` and the three fixed boundary fields on every run, and a stale `true` is overwritten by `false`.
 
 ## 10. Requirement corrections
 
@@ -588,6 +672,15 @@ Amendment A-2 (coordinator, 2026-10-23): `tests/authority_resource_contract.rs`,
 
 Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` test `grant_to_a_current_member_requires_rekey` asserts that a grant to a current member is `unauthorized` (C-25). Under C-28 that grant becomes a pending offer, `{pending: true}`, with the kernel unchanged. A test author, not the implementer, updates that assertion and keeps the kernel-unchanged check.
 
+**R-11 (approved 2026-10-23, D-11): the policy binding moves from `acc_context` into the canonical ack.** The source is `formal/R-11-proposal.md`, from the formalization review session.
+- (a) `acc_context` becomes static: `{version = 2, apf_key_id, group}`, set at genesis and never changed by any commit. Every successor `GroupContext` contains the genesis `acc_context` byte for byte.
+- (b) No commit carries a GroupContextExtensions proposal, and the sequencer rejects any commit that does. Admission, repair and rekey commits carry only Add or Remove proposals, or none, plus the update path their kind requires.
+- (c) `CanonicalAckTBS` (§4.6) gains `uint64 policy_revision; opaque policy_digest<V>;`, set from the kernel at the canonical step. For `kind` = repair the rule moves here unchanged: `policy_revision ≥ fence_revision`, and `policy_digest` equals the kernel digest at that revision.
+- Why: the formal companion derives key confinement from the ETK theorem for RFC 9420. ETK does not model GroupContextExtensions proposals, and no proof uses the group-context binding.
+- What is given up: MLS's confirmation tag no longer covers the policy revision. Members learn it from the APF-signed ack, which is already the source of truth for the parent compare-and-swap.
+- Effect on existing tests: assertions that read `policy_revision` or `policy_digest` from `acc_context`, or that expect a GroupContextExtensions proposal in a repair commit, are rewritten by their test authors against the ack, under a recorded amendment. The affected suites are `adapter_admission`, `adapter_compat`, `adapter_entropy`, `adapter_rekey`, `adapter_recovery`, `adapter_release`, `adapter_repair` and `adapter_repair_stacked`.
+- It is implemented test-first after the current phase (4.5 and 4.7b). It is not yet implemented.
+
 ## 11. Claim gate for `full_lap_mls`
 
 `full_lap_mls` MAY be reported `true` only when all of the following hold in one recorded run:
@@ -616,6 +709,10 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
   - A current member whose write, admin or admit right is re-granted (or newly granted) must install fresh keys and a new `authz_incarnation` with an update commit (`self_update_with_new_signer`, §5.5). That commit advances the MLS epoch, but the kernel has no command that advances its frontier except `admit` and `repair`.
   - The proposal is an adapter-only kernel command `rekey {subject, right, generation, parent_branch, new_branch, epoch}`. It applies the grant with `fresh_keys` true and advances the frontier by CAS, in one transaction, after the sequencer has validated the update commit (`kind` = update). Validation covers: sender = subject, no proposals, a path, a new signature key, and an incarnation equal to the new active rights.
   - It is implemented in phase 4.4b, under C-28 and amendment A-3.
+- **D-11 (approved 2026-10-23): R-11, the policy binding moves into the canonical ack.**
+  - The approval was relayed by the formalization review session, quoting Daniel: "I approve D-11: R-11 as proposed in formal/R-11-proposal.md, to be merged into docs/adapter-contract.md and implemented test-first after the current phase."
+  - The coordinator asks Daniel to confirm before implementation starts, because the relay came from outside the adapter's session group.
+  - It is scheduled after phases 4.5 and 4.7b.
 - **D-10 (approved 2026-10-23, option 1): stacked repair.**
   - The approval was relayed by the parent session, quoting Daniel: "I approve D-10 option 1: allow a stacked repair, confirm only the latest. Forward it to the adapter session to implement test-first."
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.

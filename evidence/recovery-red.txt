@@ -1,0 +1,114 @@
+# Phase 4.5 durability and crash recovery — RED (crash_after is a no-op skeleton; ClientEndpoint::load returns not_implemented)
+# date: 2026-10-23T21:03:31Z
+# source revision: 4bbc4ee43521f91ad0a5377b221f5b9d31dd026c + uncommitted phase 4.5 skeletons and tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# note: adapter_restart_reloads_sequencer_certificates_and_request_sequences is a regression guard that already passes.
+# command: cargo test --locked --test adapter_recovery
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/adapter_recovery.rs (target/debug/deps/adapter_recovery-ee7708f13ae0f6e3)
+
+running 14 tests
+test interrupted_genesis_can_restart ... FAILED
+test rekey_identity_survives_client_restart ... FAILED
+test kernel_ahead_of_sequencer_recovers_on_open ... FAILED
+test kernel_ahead_of_store_recovers_on_open ... FAILED
+test crash_before_kernel_discards_intent ... FAILED
+test b4_crash_after_decrypt_before_consume_never_delivers ... FAILED
+test b6_crash_after_stage_before_ack_never_merges ... FAILED
+test b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge ... FAILED
+test b1_crash_after_allocate_allows_release_after_restart ... FAILED
+test b2_crash_after_release_before_persist_abandons_permanently ... FAILED
+test b5_crash_after_consume_rejects_replay ... FAILED
+test b3_crash_after_persist_reemits_identical_bytes ... FAILED
+test b8_client_storage_rollback_is_unready_until_exact_frontier ... FAILED
+test adapter_restart_reloads_sequencer_certificates_and_request_sequences ... ok
+
+failures:
+
+---- interrupted_genesis_can_restart stdout ----
+
+thread 'interrupted_genesis_can_restart' (428096) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- rekey_identity_survives_client_restart stdout ----
+
+thread 'rekey_identity_survives_client_restart' (428099) panicked at tests/adapter_recovery.rs:545:31:
+bob reloads from its storage, got not_implemented
+
+---- kernel_ahead_of_sequencer_recovers_on_open stdout ----
+
+thread 'kernel_ahead_of_sequencer_recovers_on_open' (428097) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- kernel_ahead_of_store_recovers_on_open stdout ----
+
+thread 'kernel_ahead_of_store_recovers_on_open' (428098) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- crash_before_kernel_discards_intent stdout ----
+
+thread 'crash_before_kernel_discards_intent' (428095) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b4_crash_after_decrypt_before_consume_never_delivers stdout ----
+
+thread 'b4_crash_after_decrypt_before_consume_never_delivers' (428090) panicked at tests/adapter_recovery.rs:545:31:
+root reloads from its storage, got not_implemented
+
+---- b6_crash_after_stage_before_ack_never_merges stdout ----
+
+thread 'b6_crash_after_stage_before_ack_never_merges' (428092) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge stdout ----
+
+thread 'b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge' (428093) panicked at tests/adapter_recovery.rs:545:31:
+bob reloads from its storage, got not_implemented
+
+---- b1_crash_after_allocate_allows_release_after_restart stdout ----
+
+thread 'b1_crash_after_allocate_allows_release_after_restart' (428087) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b2_crash_after_release_before_persist_abandons_permanently stdout ----
+
+thread 'b2_crash_after_release_before_persist_abandons_permanently' (428088) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b5_crash_after_consume_rejects_replay stdout ----
+
+thread 'b5_crash_after_consume_rejects_replay' (428091) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b3_crash_after_persist_reemits_identical_bytes stdout ----
+
+thread 'b3_crash_after_persist_reemits_identical_bytes' (428089) panicked at tests/common/mod.rs:243:18:
+request should be rejected with crashed
+
+---- b8_client_storage_rollback_is_unready_until_exact_frontier stdout ----
+
+thread 'b8_client_storage_rollback_is_unready_until_exact_frontier' (428094) panicked at tests/adapter_recovery.rs:545:31:
+bob reloads from its storage, got not_implemented
+
+
+failures:
+    b1_crash_after_allocate_allows_release_after_restart
+    b2_crash_after_release_before_persist_abandons_permanently
+    b3_crash_after_persist_reemits_identical_bytes
+    b4_crash_after_decrypt_before_consume_never_delivers
+    b5_crash_after_consume_rejects_replay
+    b6_crash_after_stage_before_ack_never_merges
+    b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge
+    b8_client_storage_rollback_is_unready_until_exact_frontier
+    crash_before_kernel_discards_intent
+    interrupted_genesis_can_restart
+    kernel_ahead_of_sequencer_recovers_on_open
+    kernel_ahead_of_store_recovers_on_open
+    rekey_identity_survives_client_restart
+
+test result: FAILED. 1 passed; 13 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.86s
+
+error: test failed, to rerun pass `--test adapter_recovery`
+# exit: 101

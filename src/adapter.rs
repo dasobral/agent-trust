@@ -9,6 +9,8 @@
 //! and the full-adapter grant rules (§4.12, §5.4, the read part of §5.5).
 //! Phase 4.4b surface: rekey offers, update commits and key rotation for current members
 //! (C-28, C-29, the non-read part of §5.5).
+//! Phase 4.5 surface: write-ahead intents, recovery on `open`, crash points and the
+//! interrupted-genesis marker (§6, C-31 to C-35).
 //! The kernel stays key-free; only this adapter calls `Authority::execute`.
 
 use std::fs::{File, OpenOptions};
@@ -84,6 +86,13 @@ const MAX_MESSAGE_HEX: usize = 2_097_152;
 const FULL_MODE: &str = "full";
 /// C-11 error code for every sequencer rejection at steps 2-6.
 const NONCANONICAL: &str = "noncanonical_commit";
+/// C-34 marker of a directory whose `create` or genesis has not finished.
+const GENESIS_MARKER: &str = "genesis.incomplete";
+/// C-33 error code of a request stopped at an armed crash point, and of every later call
+/// on the crashed adapter value; also the C-32 trace outcome of a discarded intent.
+const CRASHED: &str = "crashed";
+/// C-32 trace outcome of an intent that the kernel applied and recovery finished.
+const RECOVERED: &str = "recovered";
 
 /// Trusted time source for every kernel `now` input.
 pub trait Clock {
@@ -215,6 +224,11 @@ pub struct Adapter<P: OpenMlsProvider, C: Clock> {
     store: Connection,
     /// The public sequencer; `None` for a policy-only adapter from `create` (C-8).
     sequencer: Option<Sequencer>,
+    /// The one-shot crash point armed by `crash_after` (C-33).
+    crash: Option<CrashPoint>,
+    /// Set once a crash point fired, or once a failure after a committed kernel call left
+    /// an intent to recover: every later call is `crashed` (C-33).
+    crashed: bool,
 }
 
 impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
@@ -229,8 +243,10 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     ) -> Result<Self, String> {
         let root_key = parse_public_key(root_public_key).ok_or("malformed: root_public_key")?;
 
-        // C-5: refuse before drawing entropy if any file (or a database sidecar) exists.
+        // C-34: an interrupted `create` or genesis is cleaned before the C-5 refusal.
         let paths = AdapterPaths::new(dir);
+        clear_interrupted(&paths)?;
+        // C-5: refuse before drawing entropy if any file (or a database sidecar) exists.
         for path in paths.all_with_sidecars() {
             if exists(&path)? {
                 return Err(format!("already_initialized: {} exists", file_name(&path)));
@@ -244,6 +260,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         // Claim all three names atomically (`create_new`); undo every claim on failure.
         let mut claimed = Claimed::default();
         let result = (|| {
+            // C-34: the marker is written first and removed last.
+            claimed.claim_marker(&paths.marker)?;
             let mut key_file = claimed.claim(&paths.key, true)?;
             claimed.claim(&paths.authority, false)?;
             claimed.claim(&paths.adapter, false)?;
@@ -258,6 +276,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
 
             let store = init_store(&paths.adapter, group, apf.public(), root, &root_key, None)?;
             sync_dir(dir);
+            remove_marker(&paths)?;
             Ok((kernel, store))
         })();
 
@@ -271,6 +290,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 kernel,
                 store,
                 sequencer: None,
+                crash: None,
+                crashed: false,
             }),
             Err(err) => {
                 claimed.undo();
@@ -279,9 +300,15 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         }
     }
 
-    /// Reopens an existing adapter directory.
+    /// Reopens an existing adapter directory. Every remaining write-ahead intent is
+    /// reconciled against the kernel history first (C-32); only then must the sequencer
+    /// sit at the kernel frontier.
     pub fn open(dir: &Path, provider: P, clock: C) -> Result<Self, String> {
         let paths = AdapterPaths::new(dir);
+        // C-34: an interrupted genesis is never opened.
+        if exists(&paths.marker)? {
+            return Err("uninitialized: interrupted genesis".into());
+        }
         for path in [&paths.authority, &paths.adapter, &paths.key] {
             if !exists(path)? {
                 return Err(format!("uninitialized: {} missing", file_name(path)));
@@ -308,6 +335,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         store.execute_batch(REPAIR_TABLES).map_err(db)?;
         // Stores written before phase 4.4b gain the offers table (C-28).
         store.execute_batch(OFFERS_TABLE).map_err(db)?;
+        // Stores written before phase 4.5 gain the intent tables (C-31, C-32).
+        store.execute_batch(INTENT_TABLES).map_err(db)?;
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -319,27 +348,19 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             return Err("binding_mismatch: group".into());
         }
 
-        // C-8: a full adapter reloads its sequencer, which must sit at the kernel frontier.
+        // C-8: a full adapter reloads its sequencer.
         let sequencer = match meta_opt(&store, "mode")?.as_deref() {
             None => None,
             Some(FULL_MODE) => {
                 if !exists(&paths.sequencer)? {
                     return Err(format!("uninitialized: {SEQUENCER_FILE} missing"));
                 }
-                let sequencer = Sequencer::open(&paths.sequencer, &group)?;
-                if sequencer.frontier()? != checkpoint_frontier(&checkpoint)? {
-                    return Err("binding_mismatch: sequencer frontier".into());
-                }
-                let acc = sequencer.acc_context()?;
-                if acc.apf_key_id != Sha256::digest(apf.public()).as_slice() || acc.group != group {
-                    return Err("binding_mismatch: sequencer acc_context".into());
-                }
-                Some(sequencer)
+                Some(Sequencer::open(&paths.sequencer, &group)?)
             }
             Some(_) => return Err("malformed: adapter store mode".into()),
         };
 
-        Ok(Self {
+        let mut adapter = Self {
             provider,
             clock,
             group,
@@ -347,7 +368,27 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             kernel,
             store,
             sequencer,
-        })
+            crash: None,
+            crashed: false,
+        };
+        // C-32: finish or discard every intent a crash left behind.
+        adapter.recover()?;
+
+        // C-8: the sequencer must now sit at the kernel frontier. A state that recovery
+        // cannot explain still fails closed here.
+        let checkpoint = adapter.kernel_checkpoint()?;
+        if let Some(sequencer) = &adapter.sequencer {
+            if sequencer.frontier()? != checkpoint_frontier(&checkpoint)? {
+                return Err("binding_mismatch: sequencer frontier".into());
+            }
+            let acc = sequencer.acc_context()?;
+            if acc.apf_key_id != Sha256::digest(adapter.apf.public()).as_slice()
+                || acc.group != adapter.group
+            {
+                return Err("binding_mismatch: sequencer acc_context".into());
+            }
+        }
+        Ok(adapter)
     }
 
     /// The APF Ed25519 public key.
@@ -360,16 +401,28 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Sha256::digest(self.apf.public()).to_vec()
     }
 
-    /// Authenticates and routes one client request (C-2 to C-4).
+    /// Authenticates and routes one client request (C-2 to C-4, C-31).
+    ///
+    /// C-4 steps 1-5 and every check that precedes the kernel call run in one immediate
+    /// store transaction. A request that needs a kernel mutation leaves that transaction
+    /// with its sequence consumed and its write-ahead intent durable (C-31). The kernel
+    /// call, the sequencer merge and the final store transaction (effects, trace event,
+    /// intent deletion) follow; `open` reconciles an intent that a crash left behind.
     pub fn handle(&mut self, request: &SignedRequest) -> Result<Value, String> {
-        // C-4 steps 1-4 in one immediate store transaction.
-        let actor = self.authenticate(request)?;
-        // C-4 steps 5-6 in a second one, held across the kernel call.
-        self.route(&actor, request)
+        if self.crashed {
+            return Err(CRASHED.into());
+        }
+        match self.begin(request)? {
+            Begun::Done(outcome) => outcome,
+            Begun::Kernel(pending) => self.finish(pending),
+        }
     }
 
     /// Trusted local read of the kernel checkpoint.
     pub fn checkpoint(&mut self) -> Result<Value, String> {
+        if self.crashed {
+            return Err(CRASHED.into());
+        }
         self.kernel.execute(json!({"command":"checkpoint"}))
     }
 
@@ -391,40 +444,6 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             rows.collect()
         };
         read().unwrap_or_default()
-    }
-
-    /// C-4 steps 1-4. Returns the authenticated actor once its sequence is durable.
-    /// A failure appends only its trace event: keys, sequences and the kernel are unchanged.
-    fn authenticate(&mut self, request: &SignedRequest) -> Result<String, String> {
-        self.store.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
-        let checked = self.check_signed(request);
-        let (traced_actor, write) = match &checked {
-            Ok(()) => (Some(request.actor.as_str()), None),
-            Err((known, err)) => (known.then_some(request.actor.as_str()), Some(err.clone())),
-        };
-        let result = (|| -> rusqlite::Result<()> {
-            match &write {
-                None => {
-                    self.store.execute(
-                        "INSERT INTO adapter_sequences(actor, last_sequence) VALUES (?1, ?2)
-                         ON CONFLICT(actor) DO UPDATE SET last_sequence = excluded.last_sequence",
-                        params![request.actor, request.sequence.to_string()],
-                    )?;
-                }
-                Some(err) => {
-                    append_trace(&self.store, traced_actor, request.sequence, None, err)?;
-                }
-            }
-            self.store.execute_batch("COMMIT")
-        })();
-        if let Err(err) = result {
-            let _ = self.store.execute_batch("ROLLBACK");
-            return Err(db(err));
-        }
-        match checked {
-            Ok(()) => Ok(request.actor.clone()),
-            Err((_, err)) => Err(err),
-        }
     }
 
     /// C-4 steps 1-3 inside the open transaction. The error carries whether the actor
@@ -474,138 +493,340 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(())
     }
 
-    /// C-4 steps 5-6, then key registration and the trace event, in one store transaction.
-    fn route(&mut self, actor: &str, request: &SignedRequest) -> Result<Value, String> {
+    /// The first store transaction of a request: C-4 steps 1-5 and every pre-kernel check.
+    /// A failure before step 4 appends only its trace event. Otherwise the sequence is
+    /// consumed and the request either completes here (no kernel mutation) or leaves a
+    /// durable intent for `finish` (C-31). Only an infrastructure failure is `Err`, and
+    /// it rolls the whole transaction back.
+    fn begin(&mut self, request: &SignedRequest) -> Result<Begun, String> {
         self.store.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
-        let (command, outcome) = match self.prepare(actor, &request.body) {
-            Err((command, err)) => (command, Err(err)),
-            Ok((command, Routed::Kernel(kernel_request, registration))) => {
-                let outcome = self.kernel.execute(kernel_request);
-                let outcome = outcome.map(|value| {
-                    let effect = match registration {
-                        Some((subject, key)) => Effect::Register(subject, key),
-                        // C-17: the allocating actor is recorded with the trace event.
-                        None if command == "allocate" => match value["op"].as_str() {
-                            Some(op) => Effect::Allocated(op.to_owned(), actor.to_owned()),
-                            None => Effect::None,
-                        },
-                        None => Effect::None,
-                    };
-                    (value, effect)
-                });
-                (Some(command), outcome)
+        match self.begin_inner(request) {
+            Ok(begun) => match self.store.execute_batch("COMMIT") {
+                Ok(()) => Ok(begun),
+                Err(err) => {
+                    let _ = self.store.execute_batch("ROLLBACK");
+                    Err(db(err))
+                }
+            },
+            Err(err) => {
+                let _ = self.store.execute_batch("ROLLBACK");
+                Err(err)
             }
-            Ok((command, Routed::Content(content))) => {
-                let outcome = self.content(actor, content);
-                (Some(command), outcome)
-            }
-            Ok((command, Routed::Certificate(preimage))) => {
-                let outcome = self.issue_certificate(actor, &preimage);
-                (Some(command), outcome.map(|value| (value, Effect::None)))
-            }
-            Ok((command, Routed::Offer(offer))) => {
-                let outcome = self.check_offer(actor, &offer);
-                (
-                    Some(command),
-                    outcome.map(|()| (json!({"pending": true}), Effect::Offered(offer))),
+        }
+    }
+
+    fn begin_inner(&mut self, request: &SignedRequest) -> Result<Begun, String> {
+        // C-4 steps 1-3.
+        if let Err((known, err)) = self.check_signed(request) {
+            let actor = known.then_some(request.actor.as_str());
+            append_trace(&self.store, actor, request.sequence, None, &err).map_err(db)?;
+            return Ok(Begun::Done(Err(err)));
+        }
+        // C-4 step 4: the sequence stays consumed whatever happens next.
+        self.store
+            .execute(
+                "INSERT INTO adapter_sequences(actor, last_sequence) VALUES (?1, ?2)
+                 ON CONFLICT(actor) DO UPDATE SET last_sequence = excluded.last_sequence",
+                params![request.actor, request.sequence.to_string()],
+            )
+            .map_err(db)?;
+        let actor = request.actor.clone();
+        // C-4 step 5 and the checks of every flow that precede its kernel call.
+        let (command, checked) = match self.check(&actor, &request.body) {
+            Ok(checked) => checked,
+            Err((command, err)) => {
+                append_trace(
+                    &self.store,
+                    Some(&actor),
+                    request.sequence,
+                    command.as_deref(),
+                    &err,
                 )
-            }
-            Ok((command, Routed::Submit(AckKind::Update, parent, commit))) => {
-                let outcome = self.sequence_update(actor, &parent, &commit);
-                (
-                    Some(command),
-                    outcome.map(|(value, record)| (value, Effect::Rekeyed(record))),
-                )
-            }
-            Ok((command, Routed::Submit(AckKind::Repair, parent, commit))) => {
-                let outcome = self.sequence_repair(actor, &parent, &commit);
-                (
-                    Some(command),
-                    outcome.map(|(value, record)| (value, Effect::RepairStaged(record))),
-                )
-            }
-            Ok((command, Routed::Submit(_, parent, commit))) => {
-                let outcome = self.sequence_commit(actor, &parent, &commit);
-                (
-                    Some(command),
-                    outcome.map(|(value, record)| (value, Effect::Admitted(record))),
-                )
-            }
-            Ok((command, Routed::RepairPlan)) => {
-                let outcome = self.repair_plan(actor);
-                (Some(command), outcome.map(|value| (value, Effect::None)))
-            }
-            Ok((command, Routed::Confirm(confirmation))) => {
-                let outcome = self.confirm_repair(actor, &confirmation);
-                (
-                    Some(command),
-                    outcome.map(|(value, record)| (value, Effect::Confirmed(record))),
-                )
+                .map_err(db)?;
+                return Ok(Begun::Done(Err(err)));
             }
         };
-        let result = (|| -> rusqlite::Result<()> {
-            match &outcome {
-                Ok((_, effect)) => {
-                    match effect {
-                        Effect::None => {}
-                        Effect::Register(subject, key) => {
-                            self.store.execute(
-                                "INSERT INTO adapter_keys(actor, public_key) VALUES (?1, ?2)",
-                                params![subject, key.as_slice()],
-                            )?;
-                        }
-                        Effect::Admitted(record) => insert_certificate(&self.store, record)?,
-                        Effect::Allocated(op, owner) => {
-                            self.store.execute(
-                                "INSERT INTO adapter_operations(op, actor) VALUES (?1, ?2)",
-                                params![op, owner],
-                            )?;
-                        }
-                        Effect::Released(op, certificate) => {
-                            self.store.execute(
-                                "UPDATE adapter_operations SET certificate = ?2
-                                 WHERE op = ?1 AND certificate IS NULL",
-                                params![op, certificate],
-                            )?;
-                        }
-                        Effect::Persisted(op, envelope) => {
-                            self.store.execute(
-                                "UPDATE adapter_operations SET envelope = ?2
-                                 WHERE op = ?1 AND envelope IS NULL",
-                                params![op, envelope],
-                            )?;
-                        }
-                        Effect::RepairStaged(record) => insert_repair(&self.store, record)?,
-                        Effect::Confirmed(record) => insert_confirmation(&self.store, record)?,
-                        Effect::Offered(offer) => insert_offer(&self.store, offer)?,
-                        Effect::Rekeyed(record) => rotate_key(&self.store, record)?,
-                    }
-                    append_trace(
-                        &self.store,
-                        Some(actor),
-                        request.sequence,
-                        command.as_deref(),
-                        "ok",
-                    )?;
-                }
-                Err(err) => {
-                    append_trace(
-                        &self.store,
-                        Some(actor),
-                        request.sequence,
-                        command.as_deref(),
-                        err,
-                    )?;
-                }
+        match checked {
+            Checked::Done(value, effect) => {
+                apply_effect(&self.store, &effect).map_err(db)?;
+                append_trace(
+                    &self.store,
+                    Some(&actor),
+                    request.sequence,
+                    Some(&command),
+                    "ok",
+                )
+                .map_err(db)?;
+                Ok(Begun::Done(Ok(value)))
             }
+            Checked::Kernel(step) => {
+                // C-31: the intent records the kernel revision before the call.
+                let revision = self.kernel_checkpoint()?["revision"]
+                    .as_u64()
+                    .ok_or("malformed: kernel revision")?;
+                let record = step.finish.record()?;
+                self.store
+                    .execute(
+                        "INSERT INTO adapter_intents(actor, sequence, command, kernel_command,
+                                                     revision, body, plan)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            actor,
+                            request.sequence.to_string(),
+                            command,
+                            step.kind,
+                            revision.to_string(),
+                            request.body,
+                            record.to_string()
+                        ],
+                    )
+                    .map_err(db)?;
+                let id = self.store.last_insert_rowid();
+                Ok(Begun::Kernel(Box::new(Pending {
+                    id,
+                    actor,
+                    sequence: request.sequence,
+                    command,
+                    step: *step,
+                })))
+            }
+        }
+    }
+
+    /// C-4 step 6 and the rest of a request whose intent is durable. The crash points
+    /// only stop it early (C-33). Any failure after a committed kernel call leaves the
+    /// intent in place and poisons this value, so `open` finishes the request (C-32).
+    fn finish(&mut self, pending: Box<Pending>) -> Result<Value, String> {
+        let Pending {
+            id,
+            actor,
+            sequence,
+            command,
+            step,
+        } = *pending;
+        let KernelStep {
+            request,
+            mut finish,
+            ..
+        } = step;
+        if self.trip(CrashPoint::AfterIntent) {
+            return Err(CRASHED.into());
+        }
+        let response = match self.kernel.execute(request) {
+            Ok(response) => response,
+            Err(err) => {
+                self.close(id, &actor, sequence, &command, &Effect::None, &err)?;
+                return Err(err);
+            }
+        };
+        if self.trip(CrashPoint::AfterKernel) {
+            return Err(CRASHED.into());
+        }
+        if let Err(err) = self.merge_step(&mut finish) {
+            self.crashed = true;
+            return Err(err);
+        }
+        // C-35: without a sequencer step this is still after the kernel call and before
+        // the final store transaction.
+        if self.trip(CrashPoint::AfterSequencer) {
+            return Err(CRASHED.into());
+        }
+        let (value, effect) = match self.outputs(&actor, finish, response) {
+            Ok(outputs) => outputs,
+            Err(err) => {
+                self.crashed = true;
+                return Err(err);
+            }
+        };
+        self.close(id, &actor, sequence, &command, &effect, "ok")?;
+        Ok(value)
+    }
+
+    /// The final store transaction of a request with an intent: its effect, its one
+    /// trace event and the deletion of the intent (C-31). A failure poisons this value.
+    fn close(
+        &mut self,
+        id: i64,
+        actor: &str,
+        sequence: u64,
+        command: &str,
+        effect: &Effect,
+        outcome: &str,
+    ) -> Result<(), String> {
+        let result = (|| -> rusqlite::Result<()> {
+            self.store.execute_batch("BEGIN IMMEDIATE")?;
+            apply_effect(&self.store, effect)?;
+            append_trace(&self.store, Some(actor), sequence, Some(command), outcome)?;
+            self.store
+                .execute("DELETE FROM adapter_intents WHERE id = ?1", [id])?;
             self.store.execute_batch("COMMIT")
         })();
         if let Err(err) = result {
-            // The kernel may already have committed; see the crash gap in the phase report.
             let _ = self.store.execute_batch("ROLLBACK");
+            self.crashed = true;
             return Err(db(err));
         }
-        outcome.map(|(value, _)| value)
+        Ok(())
+    }
+
+    /// Fires the armed crash point if it is `point` (C-33).
+    fn trip(&mut self, point: CrashPoint) -> bool {
+        if self.crash == Some(point) {
+            self.crash = None;
+            self.crashed = true;
+            return true;
+        }
+        false
+    }
+
+    /// The sequencer step of a commit: merges the staged commit after the kernel CAS.
+    fn merge_step(&mut self, finish: &mut Finish) -> Result<(), String> {
+        if let Finish::Commit(step) = finish {
+            if let Some(staged) = step.staged.take() {
+                self.sequencer
+                    .as_mut()
+                    .ok_or("uninitialized: no group")?
+                    .merge(staged)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The response and the store effect of a committed kernel call. Every signature is
+    /// deterministic Ed25519 over kernel state, so recovery produces identical bytes.
+    fn outputs(
+        &self,
+        actor: &str,
+        finish: Finish,
+        response: Value,
+    ) -> Result<(Value, Effect), String> {
+        match finish {
+            Finish::Fixed(effect) => Ok((response, effect)),
+            Finish::Release { op, right, cover } => {
+                let mut response = response;
+                // §4.5: signed in the adapter step that observes the committed release.
+                let certificate = self.release_certificate(
+                    actor,
+                    &op,
+                    right,
+                    &json!({ "cover": cover }),
+                    &response,
+                )?;
+                let signed = certificate.sign(&self.apf)?;
+                response["certificate"] = json!(hex::encode(&signed));
+                Ok((response, Effect::Released(op, signed)))
+            }
+            Finish::Consume { op, certificate } => {
+                let mut response = response;
+                // C-15.
+                let receipt = ConsumeReceipt {
+                    apf_key_id: self.apf_key_id(),
+                    group: self.group.clone(),
+                    op,
+                    recipient: actor.to_owned(),
+                    release_certificate_hash: Sha256::digest(&certificate).to_vec(),
+                }
+                .sign(&self.apf)?;
+                response["receipt"] = json!(hex::encode(receipt));
+                Ok((response, Effect::None))
+            }
+            Finish::Commit(step) => {
+                let ack = CanonicalAck {
+                    apf_key_id: self.apf_key_id(),
+                    group: self.group.clone(),
+                    parent: step.parent.clone(),
+                    successor: step.successor.clone(),
+                    commit_hash: step.commit_hash.clone(),
+                    kind: step.kind,
+                }
+                .sign(&self.apf)?;
+                Ok((
+                    json!({
+                        "epoch":step.successor.epoch, "branch":step.successor.branch,
+                        "ack":hex::encode(ack)
+                    }),
+                    step.effect,
+                ))
+            }
+            Finish::Confirm(record) => Ok((
+                json!({"opened": true, "evidence": record.evidence}),
+                Effect::Confirmed(record),
+            )),
+        }
+    }
+
+    /// C-4 step 5 and the checks that precede the kernel call. A flow that mutates no
+    /// kernel state completes here; every other one returns its kernel step.
+    fn check(
+        &mut self,
+        actor: &str,
+        body: &[u8],
+    ) -> Result<(String, Checked), (Option<String>, String)> {
+        let (command, routed) = self.prepare(actor, body)?;
+        let fail = |err: String| (Some(command.clone()), err);
+        let checked = match routed {
+            Routed::Kernel(request, registration) => {
+                let effect = match registration {
+                    Some((subject, key)) => Effect::Register(subject, key),
+                    // C-17: the allocating actor is recorded with the trace event.
+                    None if command == "allocate" => match request["op"].as_str() {
+                        Some(op) => Effect::Allocated(op.to_owned(), actor.to_owned()),
+                        None => Effect::None,
+                    },
+                    None => Effect::None,
+                };
+                Checked::Kernel(Box::new(KernelStep {
+                    kind: command.clone(),
+                    request,
+                    finish: Finish::Fixed(effect),
+                }))
+            }
+            Routed::Content(content) => self.check_content(actor, content).map_err(fail)?,
+            Routed::Certificate(preimage) => Checked::Done(
+                self.issue_certificate(actor, &preimage).map_err(fail)?,
+                Effect::None,
+            ),
+            Routed::Offer(offer) => {
+                self.check_offer(actor, &offer).map_err(fail)?;
+                Checked::Done(json!({"pending": true}), Effect::Offered(offer))
+            }
+            Routed::Submit(kind, parent, commit) => {
+                let (kernel_command, checked) = match kind {
+                    AckKind::Admit => ("admit", self.check_commit(actor, &parent, &commit)),
+                    AckKind::Repair => ("repair_stage", self.check_repair(actor, &parent, &commit)),
+                    AckKind::Update => ("rekey", self.check_update(actor, &parent, &commit)),
+                };
+                let (request, step) = checked.map_err(fail)?;
+                Checked::Kernel(Box::new(KernelStep {
+                    kind: kernel_command.to_owned(),
+                    request,
+                    finish: Finish::Commit(Box::new(step)),
+                }))
+            }
+            Routed::RepairPlan => {
+                Checked::Done(self.repair_plan(actor).map_err(fail)?, Effect::None)
+            }
+            Routed::Confirm(confirmation) => {
+                let record = self
+                    .check_confirmation(actor, &confirmation)
+                    .map_err(fail)?;
+                match record.evidence {
+                    // The fence opens through kernel `repair_open` (C-23).
+                    Some(_) => Checked::Kernel(Box::new(KernelStep {
+                        kind: "repair_open".to_owned(),
+                        request: json!({
+                            "command":"repair_open", "branch":record.branch, "confirmed":true,
+                        }),
+                        finish: Finish::Confirm(record),
+                    })),
+                    None => Checked::Done(
+                        json!({"opened": false, "evidence": null}),
+                        Effect::Confirmed(record),
+                    ),
+                }
+            }
+        };
+        Ok((command, checked))
     }
 
     /// C-4 step 5: parses and checks the body (C-1 to C-3, C-10) and builds the kernel
@@ -776,6 +997,9 @@ struct AdapterPaths {
     adapter: PathBuf,
     key: PathBuf,
     sequencer: PathBuf,
+    /// The C-34 interrupted-genesis marker.
+    marker: PathBuf,
+    dir: PathBuf,
 }
 
 impl AdapterPaths {
@@ -785,6 +1009,8 @@ impl AdapterPaths {
             adapter: dir.join(ADAPTER_FILE),
             key: dir.join(APF_KEY_FILE),
             sequencer: dir.join(SEQUENCER_FILE),
+            marker: dir.join(GENESIS_MARKER),
+            dir: dir.to_path_buf(),
         }
     }
 
@@ -850,6 +1076,18 @@ impl Claimed {
         }
     }
 
+    /// Creates the C-34 marker exclusively and makes it durable before any other file.
+    fn claim_marker(&mut self, path: &Path) -> Result<(), String> {
+        let marker = self.claim(path, false)?;
+        marker
+            .sync_all()
+            .map_err(|_| format!("malformed: cannot write {GENESIS_MARKER}"))?;
+        if let Some(dir) = path.parent() {
+            sync_dir(dir);
+        }
+        Ok(())
+    }
+
     /// Removes every claimed file and the SQLite sidecars this call created next to them.
     fn undo(self) {
         for path in self.paths {
@@ -861,6 +1099,32 @@ impl Claimed {
             let _ = std::fs::remove_file(path);
         }
     }
+}
+
+/// C-34: a directory holding the marker is an interrupted `create` or genesis. Exactly
+/// the adapter files and their SQLite sidecars are removed, then the marker, last, so an
+/// interrupted cleanup is retried. Without the marker nothing is touched.
+fn clear_interrupted(paths: &AdapterPaths) -> Result<(), String> {
+    if !exists(&paths.marker)? {
+        return Ok(());
+    }
+    for path in paths.genesis_with_sidecars() {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(_) => return Err(format!("malformed: cannot remove {}", file_name(&path))),
+        }
+    }
+    sync_dir(&paths.dir);
+    remove_marker(paths)
+}
+
+/// Removes the C-34 marker and makes the removal durable.
+fn remove_marker(paths: &AdapterPaths) -> Result<(), String> {
+    std::fs::remove_file(&paths.marker)
+        .map_err(|_| format!("malformed: cannot remove {GENESIS_MARKER}"))?;
+    sync_dir(&paths.dir);
+    Ok(())
 }
 
 fn exists(path: &Path) -> Result<bool, String> {
@@ -994,6 +1258,7 @@ fn init_store(
         .execute_batch(OPERATIONS_TABLE)
         .and_then(|()| store.execute_batch(REPAIR_TABLES))
         .and_then(|()| store.execute_batch(OFFERS_TABLE))
+        .and_then(|()| store.execute_batch(INTENT_TABLES))
     {
         let _ = store.execute_batch("ROLLBACK");
         return Err(db(err));
@@ -1474,8 +1739,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     ) -> Result<GenesisPending<P, C>, String> {
         let root_key = parse_public_key(root_public_key).ok_or("malformed: root_public_key")?;
 
-        // C-8: refuse an existing file as `create` does, before drawing entropy.
-        for path in AdapterPaths::new(dir).genesis_with_sidecars() {
+        // C-34: an interrupted genesis is cleaned first. C-8: then refuse an existing file
+        // as `create` does, before drawing entropy.
+        let paths = AdapterPaths::new(dir);
+        clear_interrupted(&paths)?;
+        for path in paths.genesis_with_sidecars() {
             if exists(&path)? {
                 return Err(format!("already_initialized: {} exists", file_name(&path)));
             }
@@ -1535,11 +1803,15 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             apf,
             founder_certificate,
             acc_context,
+            crash: None,
         })
     }
 
     /// The current kernel frontier.
     pub fn frontier(&mut self) -> Result<Frontier, String> {
+        if self.crashed {
+            return Err(CRASHED.into());
+        }
         let checkpoint = self.kernel.execute(json!({"command":"checkpoint"}))?;
         checkpoint_frontier(&checkpoint)
     }
@@ -1593,15 +1865,16 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(json!({"certificate": hex::encode(certificate)}))
     }
 
-    /// C-10 `submit_commit` with the C-11 checks in order. Steps 2-7 change neither the
-    /// sequencer nor the kernel on failure: the commit is staged on the in-memory
-    /// `PublicGroup` and merged only after the kernel `admit` has committed.
-    fn sequence_commit(
+    /// C-10 `submit_commit` with the C-11 checks 1-6 in order. Nothing changes on
+    /// failure: the commit is staged on the in-memory `PublicGroup`. Returns the step 7
+    /// kernel `admit` request and the step 8 commit step, which `finish` merges only after
+    /// the kernel has committed.
+    fn check_commit(
         &mut self,
         actor: &str,
         parent: &Frontier,
         commit: &[u8],
-    ) -> Result<(Value, CertificateRecord), String> {
+    ) -> Result<(Value, CommitStep), String> {
         let now = self.clock.now();
         // Step 1 (the group itself was checked in `prepare`).
         let current = self.frontier()?;
@@ -1638,27 +1911,13 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
 
         // Step 7: the kernel CAS and authorization; its errors pass through.
         let successor = context_frontier(staged.group_context())?;
-        self.kernel.execute(json!({
+        let request = json!({
             "command":"admit", "actor":actor, "subject":subject, "now":now,
             "parent_branch":current.branch, "new_branch":successor.branch,
             "epoch":successor.epoch,
-        }))?;
+        });
 
-        // Step 8. A failure from here on leaves the kernel ahead of the sequencer; see the
-        // crash gap in the phase report.
-        self.sequencer
-            .as_mut()
-            .ok_or("uninitialized: no group")?
-            .merge(staged)?;
-        let ack = CanonicalAck {
-            apf_key_id: self.apf_key_id(),
-            group: self.group.clone(),
-            parent: current,
-            successor: successor.clone(),
-            commit_hash: Sha256::digest(commit).to_vec(),
-            kind: AckKind::Admit,
-        }
-        .sign(&self.apf)?;
+        // Step 8 after the kernel: merge, the retained certificate and the ack.
         let record = CertificateRecord {
             signature_key: key_package.leaf_node().signature_key().as_slice().to_vec(),
             subject,
@@ -1667,8 +1926,16 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             certificate,
         };
         Ok((
-            json!({"epoch":successor.epoch, "branch":successor.branch, "ack":hex::encode(ack)}),
-            record,
+            request,
+            CommitStep {
+                kind: AckKind::Admit,
+                parent: current,
+                successor,
+                commit_hash: Sha256::digest(commit).to_vec(),
+                actor_key,
+                staged: Some(staged),
+                effect: Effect::Admitted(record),
+            },
         ))
     }
 
@@ -1761,6 +2028,8 @@ pub struct GenesisPending<P: OpenMlsProvider, C: Clock> {
     apf: SignatureKeyPair,
     founder_certificate: Vec<u8>,
     acc_context: Vec<u8>,
+    /// The crash point armed by `crash_after` (C-33).
+    crash: Option<CrashPoint>,
 }
 
 impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
@@ -1779,7 +2048,8 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
     }
 
     /// Validates the root's group, writes the adapter files and initializes the kernel
-    /// at the genesis frontier (C-8, §5.1 steps 4-5).
+    /// at the genesis frontier (C-8, §5.1 steps 4-5). The C-34 marker is written before
+    /// every other file and removed last.
     pub fn complete(self, group_info: &[u8], ratchet_tree: &[u8]) -> Result<Adapter<P, C>, String> {
         // §5.1 step 4 in memory: nothing is written unless the group validates.
         let frontier = self.validate(group_info, ratchet_tree)?;
@@ -1795,12 +2065,15 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             apf,
             founder_certificate,
             acc_context,
+            crash,
             ..
         } = self;
         let acc = AccContext::decode(&acc_context)?;
         let paths = AdapterPaths::new(&dir);
         let mut claimed = Claimed::default();
+        let mut crashed = false;
         let result = (|| {
+            claimed.claim_marker(&paths.marker)?;
             let mut key_file = claimed.claim(&paths.key, true)?;
             claimed.claim(&paths.authority, false)?;
             claimed.claim(&paths.adapter, false)?;
@@ -1817,6 +2090,11 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             kernel.execute(
                 json!({"command":"init", "group":group, "root":root, "branch":frontier.branch}),
             )?;
+            // C-33: stop here, leaving every file and the marker in place (C-34).
+            if crash == Some(CrashPoint::GenesisAfterKernel) {
+                crashed = true;
+                return Err(CRASHED.to_string());
+            }
             let checkpoint = kernel.execute(json!({"command":"checkpoint"}))?;
             if checkpoint["policy_revision"] != json!(acc.policy_revision)
                 || checkpoint["policy_digest"] != json!(hex::encode(&acc.policy_digest))
@@ -1849,6 +2127,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 return Err("binding_mismatch: sequencer frontier".to_string());
             }
             sync_dir(&dir);
+            remove_marker(&paths)?;
             Ok((kernel, store, sequencer))
         })();
         drop(seed);
@@ -1862,9 +2141,13 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 kernel,
                 store,
                 sequencer: Some(sequencer),
+                crash: None,
+                crashed: false,
             }),
             Err(err) => {
-                claimed.undo();
+                if !crashed {
+                    claimed.undo();
+                }
                 Err(err)
             }
         }
@@ -2084,64 +2367,60 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(content)
     }
 
-    /// C-16: runs one checked content command and returns the response with the store
-    /// effect that commits together with its trace event.
-    fn content(&mut self, actor: &str, content: Content) -> Result<(Value, Effect), String> {
+    /// C-16: the pre-kernel checks of one content command. `emit` mutates no kernel
+    /// state and completes here; every other command returns its kernel step, whose
+    /// certificate (§4.5), receipt (C-15) or envelope is produced or stored in `finish`.
+    fn check_content(&mut self, actor: &str, content: Content) -> Result<Checked, String> {
         let now = self.clock.now();
-        match content {
+        let step = |kind: &str, request: Value, finish: Finish| {
+            Checked::Kernel(Box::new(KernelStep {
+                kind: kind.to_owned(),
+                request,
+                finish,
+            }))
+        };
+        Ok(match content {
             Content::Release(request, op, right) => {
-                let mut response = self.kernel.execute(request.clone())?;
-                // §4.5: signed in the same adapter step that observes the committed kernel
-                // release. A failure from here on leaves a released operation without a
-                // certificate; it can only be abandoned (B2).
-                let certificate =
-                    self.release_certificate(actor, &op, right, &request, &response)?;
-                let signed = certificate.sign(&self.apf)?;
-                response["certificate"] = json!(hex::encode(&signed));
-                Ok((response, Effect::Released(op, signed)))
+                let cover = request["cover"].clone();
+                step("release", request, Finish::Release { op, right, cover })
             }
             Content::Persist(op, envelope, bytes) => {
                 let released = self.check_envelope(&op, &envelope)?;
-                let response = self.kernel.execute(json!({
+                let request = json!({
                     "command":"persist", "op":op, "digest":released.digest,
                     "envelope":hex::encode(&bytes), "actor":actor, "now":now,
-                }))?;
-                Ok((response, Effect::Persisted(op, bytes)))
+                });
+                step(
+                    "persist",
+                    request,
+                    Finish::Fixed(Effect::Persisted(op, bytes)),
+                )
             }
             Content::Emit(op, bytes) => {
+                // Kernel `emit` is a read: it saves no history event.
                 let response = self.kernel.execute(json!({
                     "command":"emit", "op":op, "envelope":hex::encode(&bytes),
                     "actor":actor, "now":now,
                 }))?;
-                Ok((response, Effect::None))
+                Checked::Done(response, Effect::None)
             }
             Content::Consume(op) => {
                 // Only an operation released through this adapter can have been persisted.
                 let certificate = self
                     .stored_certificate(&op)?
                     .ok_or_else(|| "not_persisted".to_string())?;
-                let mut response = self.kernel.execute(json!({
+                let request = json!({
                     "command":"consume", "op":op, "recipient":actor, "actor":actor, "now":now,
-                }))?;
-                // C-15. A failure from here on is a consumed, undelivered message (B5).
-                let receipt = ConsumeReceipt {
-                    apf_key_id: self.apf_key_id(),
-                    group: self.group.clone(),
-                    op,
-                    recipient: actor.to_owned(),
-                    release_certificate_hash: Sha256::digest(&certificate).to_vec(),
-                }
-                .sign(&self.apf)?;
-                response["receipt"] = json!(hex::encode(receipt));
-                Ok((response, Effect::None))
+                });
+                step("consume", request, Finish::Consume { op, certificate })
             }
             Content::Abandon(op) => {
-                let response = self.kernel.execute(json!({
+                let request = json!({
                     "command":"abandon", "op":op, "actor":actor, "now":now,
-                }))?;
-                Ok((response, Effect::None))
+                });
+                step("abandon", request, Finish::Fixed(Effect::None))
             }
-        }
+        })
     }
 
     /// The release certificate TBS for a committed kernel release (§4.5, C-14).
@@ -2432,15 +2711,15 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         }))
     }
 
-    /// C-22 `submit_commit {kind: "repair"}` with its checks in order. Steps 1-5 change
-    /// neither the sequencer nor the kernel on failure: the commit is staged on the
-    /// in-memory `PublicGroup` and merged only after kernel `repair_stage` has committed.
-    fn sequence_repair(
+    /// C-22 `submit_commit {kind: "repair"}` with its checks 1-5 in order. Nothing
+    /// changes on failure: the commit is staged on the in-memory `PublicGroup`. Returns
+    /// the step 6 kernel `repair_stage` request and the step 7 commit step.
+    fn check_repair(
         &mut self,
         actor: &str,
         parent: &Frontier,
         commit: &[u8],
-    ) -> Result<(Value, RepairRecord), String> {
+    ) -> Result<(Value, CommitStep), String> {
         // Step 1 (the group itself was checked in `prepare`).
         let checkpoint = self.kernel_checkpoint()?;
         let current = checkpoint_frontier(&checkpoint)?;
@@ -2530,42 +2809,38 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         }
 
         // Step 6: the kernel CAS; the Remove set and the path are proven above. Kernel
-        // errors pass through.
+        // errors pass through. `durable` is backed by the write-ahead intent, durable
+        // before the kernel call, which lets `open` finish the merge and the repair
+        // record after any crash (C-31, C-32).
         let successor = context_frontier(staged.group_context())?;
-        self.kernel.execute(json!({
+        let request = json!({
             "command":"repair_stage", "parent_branch":current.branch,
             "new_branch":successor.branch, "epoch":successor.epoch,
             "policy_revision":plan.policy_revision, "removed":plan.removed,
             "update_path":true, "durable":true,
-        }))?;
+        });
 
-        // Step 7. A failure from here on leaves the kernel ahead of the sequencer or the
-        // adapter store; see the crash gaps in the phase report.
-        self.sequencer
-            .as_mut()
-            .ok_or("uninitialized: no group")?
-            .merge(staged)?;
+        // Step 7 after the kernel: merge, the repair record and the ack.
         let commit_hash = Sha256::digest(commit).to_vec();
-        let ack = CanonicalAck {
-            apf_key_id: self.apf_key_id(),
-            group: self.group.clone(),
-            parent: current.clone(),
-            successor: successor.clone(),
-            commit_hash: commit_hash.clone(),
-            kind: AckKind::Repair,
-        }
-        .sign(&self.apf)?;
         let record = RepairRecord {
             successor: successor.clone(),
-            parent: current,
+            parent: current.clone(),
             committer: actor.to_owned(),
             removed: serde_json::to_string(&plan.removed)
                 .map_err(|_| "malformed: removed".to_string())?,
-            commit_hash,
+            commit_hash: commit_hash.clone(),
         };
         Ok((
-            json!({"epoch":successor.epoch, "branch":successor.branch, "ack":hex::encode(ack)}),
-            record,
+            request,
+            CommitStep {
+                kind: AckKind::Repair,
+                parent: current,
+                successor,
+                commit_hash,
+                actor_key,
+                staged: Some(staged),
+                effect: Effect::RepairStaged(record),
+            },
         ))
     }
 
@@ -2581,11 +2856,14 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     /// `binding_mismatch`. The fence opens through kernel `repair_open` once the
     /// committer's hash and an equal one from another continuing member are held, or on
     /// the committer's alone when it is the only continuing member.
-    fn confirm_repair(
+    ///
+    /// Returns the record to store; when it carries evidence, `check` routes the kernel
+    /// `repair_open` and the record is stored with its trace event after it.
+    fn check_confirmation(
         &mut self,
         actor: &str,
         bytes: &[u8],
-    ) -> Result<(Value, ConfirmationRecord), String> {
+    ) -> Result<ConfirmationRecord, String> {
         let checkpoint = self.kernel_checkpoint()?;
         let pending = checkpoint["repair_pending"]
             .as_str()
@@ -2653,20 +2931,12 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 })
                 .then_some(PAIR)
         });
-        if evidence.is_some() {
-            self.kernel.execute(json!({
-                "command":"repair_open", "branch":pending, "confirmed":true,
-            }))?;
-        }
-        Ok((
-            json!({"opened": evidence.is_some(), "evidence": evidence}),
-            ConfirmationRecord {
-                branch: pending,
-                actor: actor.to_owned(),
-                hash,
-                evidence,
-            },
-        ))
+        Ok(ConfirmationRecord {
+            branch: pending,
+            actor: actor.to_owned(),
+            hash,
+            evidence,
+        })
     }
 
     /// The committer recorded for the repair that produced `branch`.
@@ -2890,16 +3160,16 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(found.is_some())
     }
 
-    /// C-28 `submit_commit {kind: "update"}` with its checks in order. Steps 1-5 change
-    /// neither the sequencer, the kernel nor the key registry on failure: the commit is
-    /// staged on the in-memory `PublicGroup`, merged only after kernel `rekey` has
-    /// committed, and the key is rotated with the trace event (`rotate_key`).
-    fn sequence_update(
+    /// C-28 `submit_commit {kind: "update"}` with its checks 1-5 in order. Nothing
+    /// changes on failure: the commit is staged on the in-memory `PublicGroup`. Returns
+    /// the step 6 kernel `rekey` request and the step 7 commit step; the key is rotated
+    /// with the trace event (`rotate_key`).
+    fn check_update(
         &mut self,
         actor: &str,
         parent: &Frontier,
         commit: &[u8],
-    ) -> Result<(Value, RekeyRecord), String> {
+    ) -> Result<(Value, CommitStep), String> {
         let now = self.clock.now();
         // Step 1 (the group itself was checked in `prepare`).
         let checkpoint = self.kernel_checkpoint()?;
@@ -2985,37 +3255,607 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         // Step 6: the kernel applies the offered grant with fresh keys, proven above, and
         // advances the frontier by CAS. Its errors pass through; the offer stays pending.
         let successor = context_frontier(staged.group_context())?;
-        self.kernel.execute(json!({
+        let request = json!({
             "command":"rekey", "actor":offer.admin, "subject":actor,
             "right":offer.right.name(), "generation":offer.generation,
             "parent_branch":current.branch, "new_branch":successor.branch,
             "epoch":successor.epoch, "now":now,
-        }))?;
+        });
 
-        // Step 7. A failure from here on leaves the kernel ahead of the sequencer or the
-        // key registry; see the crash gaps in the phase report.
-        self.sequencer
-            .as_mut()
-            .ok_or("uninitialized: no group")?
-            .merge(staged)?;
-        let ack = CanonicalAck {
-            apf_key_id: self.apf_key_id(),
-            group: self.group.clone(),
-            parent: current,
-            successor: successor.clone(),
-            commit_hash: Sha256::digest(commit).to_vec(),
-            kind: AckKind::Update,
-        }
-        .sign(&self.apf)?;
+        // Step 7 after the kernel: merge, key rotation, offer deletion and the ack.
         let record = RekeyRecord {
             subject: actor.to_owned(),
-            old_key: actor_key,
+            old_key: actor_key.clone(),
             new_key,
             successor: successor.clone(),
         };
         Ok((
-            json!({"epoch":successor.epoch, "branch":successor.branch, "ack":hex::encode(ack)}),
-            record,
+            request,
+            CommitStep {
+                kind: AckKind::Update,
+                parent: current,
+                successor,
+                commit_hash: Sha256::digest(commit).to_vec(),
+                actor_key,
+                staged: Some(staged),
+                effect: Effect::Rekeyed(record),
+            },
         ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.5: write-ahead intents, recovery on `open` and crash points (§6, C-31 to C-35)
+// ---------------------------------------------------------------------------
+
+/// C-31 write-ahead intents, and C-32 recovered responses.
+///
+/// An intent row is written in the store transaction that consumes the request's
+/// sequence, before the kernel call, and deleted in the final store transaction. It keeps
+/// the trace fields (`actor`, `sequence`, `command`), the history `kind` the kernel call
+/// appends (`kernel_command`), the kernel `revision` before the call, the exact request
+/// body, and `plan`: every input needed to finish the request without the client.
+///
+/// `adapter_recovered` keeps what recovery re-signed (certificate, receipt or ack) for
+/// the request it finished; it holds signatures only, never key material.
+const INTENT_TABLES: &str = "CREATE TABLE IF NOT EXISTS adapter_intents (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     actor TEXT NOT NULL,
+     sequence TEXT NOT NULL,
+     command TEXT NOT NULL,
+     kernel_command TEXT NOT NULL,
+     revision TEXT NOT NULL,
+     body BLOB NOT NULL,
+     plan TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS adapter_recovered (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     actor TEXT NOT NULL,
+     sequence TEXT NOT NULL,
+     command TEXT NOT NULL,
+     response TEXT NOT NULL);";
+
+/// A one-shot crash point for recovery tests (C-33). Arming one only makes the adapter
+/// stop early; it never changes what a completed step does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrashPoint {
+    /// The intent and the sequence are durable; the kernel was not called.
+    AfterIntent,
+    /// The kernel committed; the sequencer merge and the final store write did not run.
+    AfterKernel,
+    /// The sequencer merged; the final store write did not run.
+    AfterSequencer,
+    /// Inside `GenesisPending::complete`, after kernel `init`.
+    GenesisAfterKernel,
+}
+
+/// The outcome of a request's first store transaction.
+enum Begun {
+    /// The request completed (or failed) without a kernel mutation.
+    Done(Result<Value, String>),
+    /// The intent is durable; the kernel call is next.
+    Kernel(Box<Pending>),
+}
+
+/// A request with a durable intent (C-31).
+struct Pending {
+    id: i64,
+    actor: String,
+    sequence: u64,
+    command: String,
+    step: KernelStep,
+}
+
+/// The result of every check that precedes a request's kernel call.
+enum Checked {
+    /// A flow without a kernel mutation: its response and its store effect.
+    Done(Value, Effect),
+    Kernel(Box<KernelStep>),
+}
+
+/// One kernel mutation and what follows it.
+struct KernelStep {
+    /// The history event `kind` the call appends (C-32).
+    kind: String,
+    request: Value,
+    finish: Finish,
+}
+
+/// What follows a committed kernel call.
+enum Finish {
+    /// A store effect fixed before the call; the response is the kernel's.
+    Fixed(Effect),
+    /// C-16: the release certificate is signed over the kernel response.
+    Release {
+        op: String,
+        right: Right,
+        cover: Value,
+    },
+    /// C-15: the consume receipt for the stored release certificate.
+    Consume { op: String, certificate: Vec<u8> },
+    /// C-11 step 8, C-22 step 7, C-28 step 7: merge, ack and the store effect.
+    Commit(Box<CommitStep>),
+    /// C-23: the confirmation that opened the fence.
+    Confirm(ConfirmationRecord),
+}
+
+/// A canonical commit after its sequencer checks.
+struct CommitStep {
+    kind: AckKind,
+    parent: Frontier,
+    successor: Frontier,
+    commit_hash: Vec<u8>,
+    /// The committer's registered key when the commit was checked.
+    actor_key: Vec<u8>,
+    /// The staged commit to merge; `None` once merged, or when rebuilt from an intent.
+    staged: Option<StagedCommit>,
+    effect: Effect,
+}
+
+/// The store change of an accepted request, in the transaction of its trace event.
+fn apply_effect(store: &Connection, effect: &Effect) -> rusqlite::Result<()> {
+    match effect {
+        Effect::None => {}
+        Effect::Register(subject, key) => {
+            store.execute(
+                "INSERT INTO adapter_keys(actor, public_key) VALUES (?1, ?2)",
+                params![subject, key.as_slice()],
+            )?;
+        }
+        Effect::Admitted(record) => insert_certificate(store, record)?,
+        Effect::Allocated(op, owner) => {
+            store.execute(
+                "INSERT INTO adapter_operations(op, actor) VALUES (?1, ?2)",
+                params![op, owner],
+            )?;
+        }
+        Effect::Released(op, certificate) => {
+            store.execute(
+                "UPDATE adapter_operations SET certificate = ?2
+                 WHERE op = ?1 AND certificate IS NULL",
+                params![op, certificate],
+            )?;
+        }
+        Effect::Persisted(op, envelope) => {
+            store.execute(
+                "UPDATE adapter_operations SET envelope = ?2
+                 WHERE op = ?1 AND envelope IS NULL",
+                params![op, envelope],
+            )?;
+        }
+        Effect::RepairStaged(record) => insert_repair(store, record)?,
+        Effect::Confirmed(record) => insert_confirmation(store, record)?,
+        Effect::Offered(offer) => insert_offer(store, offer)?,
+        Effect::Rekeyed(record) => rotate_key(store, record)?,
+    }
+    Ok(())
+}
+
+// -- intent records -------------------------------------------------------------------
+
+fn frontier_record(frontier: &Frontier) -> Value {
+    json!({"epoch": frontier.epoch, "branch": frontier.branch})
+}
+
+fn frontier_from(value: &Value) -> Result<Frontier, String> {
+    Ok(Frontier {
+        epoch: value["epoch"].as_u64().ok_or_else(corrupt_intent)?,
+        branch: text_from(&value["branch"])?,
+    })
+}
+
+fn corrupt_intent() -> String {
+    "corrupt_history: adapter intent".to_string()
+}
+
+fn text_from(value: &Value) -> Result<String, String> {
+    value.as_str().map(str::to_owned).ok_or_else(corrupt_intent)
+}
+
+fn hex_from(value: &Value) -> Result<Vec<u8>, String> {
+    hex::decode(value.as_str().ok_or_else(corrupt_intent)?).map_err(|_| corrupt_intent())
+}
+
+fn key_from(value: &Value) -> Result<[u8; KEY_LEN], String> {
+    hex_from(value)?.try_into().map_err(|_| corrupt_intent())
+}
+
+fn ack_kind_name(kind: AckKind) -> &'static str {
+    match kind {
+        AckKind::Admit => "admit",
+        AckKind::Repair => "repair",
+        AckKind::Update => "update",
+    }
+}
+
+fn ack_kind_from(value: &Value) -> Result<AckKind, String> {
+    match value.as_str() {
+        Some("admit") => Ok(AckKind::Admit),
+        Some("repair") => Ok(AckKind::Repair),
+        Some("update") => Ok(AckKind::Update),
+        _ => Err(corrupt_intent()),
+    }
+}
+
+fn evidence_from(value: &Value) -> Result<Option<&'static str>, String> {
+    match value {
+        Value::Null => Ok(None),
+        Value::String(text) if text == PAIR => Ok(Some(PAIR)),
+        Value::String(text) if text == SINGLE => Ok(Some(SINGLE)),
+        _ => Err(corrupt_intent()),
+    }
+}
+
+fn confirmation_record(record: &ConfirmationRecord) -> Value {
+    json!({
+        "branch": record.branch, "actor": record.actor,
+        "hash": hex::encode(&record.hash), "evidence": record.evidence,
+    })
+}
+
+fn confirmation_from(value: &Value) -> Result<ConfirmationRecord, String> {
+    Ok(ConfirmationRecord {
+        branch: text_from(&value["branch"])?,
+        actor: text_from(&value["actor"])?,
+        hash: hex_from(&value["hash"])?,
+        evidence: evidence_from(&value["evidence"])?,
+    })
+}
+
+/// The JSON record of a store effect fixed before a kernel call.
+fn effect_record(effect: &Effect) -> Result<Value, String> {
+    Ok(match effect {
+        Effect::None => json!({"type": "none"}),
+        Effect::Register(subject, key) => {
+            json!({"type": "register", "subject": subject, "key": hex::encode(key)})
+        }
+        Effect::Admitted(record) => json!({
+            "type": "admitted", "signature_key": hex::encode(&record.signature_key),
+            "subject": record.subject, "epoch": record.epoch, "branch": record.branch,
+            "certificate": hex::encode(&record.certificate),
+        }),
+        Effect::Allocated(op, owner) => json!({"type": "allocated", "op": op, "owner": owner}),
+        Effect::Persisted(op, envelope) => {
+            json!({"type": "persisted", "op": op, "envelope": hex::encode(envelope)})
+        }
+        Effect::RepairStaged(record) => json!({
+            "type": "repair_staged", "successor": frontier_record(&record.successor),
+            "parent": frontier_record(&record.parent), "committer": record.committer,
+            "removed": record.removed, "commit_hash": hex::encode(&record.commit_hash),
+        }),
+        Effect::Confirmed(record) => {
+            json!({"type": "confirmed", "record": confirmation_record(record)})
+        }
+        Effect::Rekeyed(record) => json!({
+            "type": "rekeyed", "subject": record.subject,
+            "old_key": hex::encode(&record.old_key), "new_key": hex::encode(record.new_key),
+            "successor": frontier_record(&record.successor),
+        }),
+        // Both are decided without a kernel mutation or after it, never in an intent.
+        Effect::Released(..) | Effect::Offered(_) => {
+            return Err("malformed: effect outside an intent".into())
+        }
+    })
+}
+
+fn effect_from(value: &Value) -> Result<Effect, String> {
+    Ok(match value["type"].as_str() {
+        Some("none") => Effect::None,
+        Some("register") => {
+            Effect::Register(text_from(&value["subject"])?, key_from(&value["key"])?)
+        }
+        Some("admitted") => Effect::Admitted(CertificateRecord {
+            signature_key: hex_from(&value["signature_key"])?,
+            subject: text_from(&value["subject"])?,
+            epoch: value["epoch"].as_u64().ok_or_else(corrupt_intent)?,
+            branch: text_from(&value["branch"])?,
+            certificate: hex_from(&value["certificate"])?,
+        }),
+        Some("allocated") => {
+            Effect::Allocated(text_from(&value["op"])?, text_from(&value["owner"])?)
+        }
+        Some("persisted") => {
+            Effect::Persisted(text_from(&value["op"])?, hex_from(&value["envelope"])?)
+        }
+        Some("repair_staged") => Effect::RepairStaged(RepairRecord {
+            successor: frontier_from(&value["successor"])?,
+            parent: frontier_from(&value["parent"])?,
+            committer: text_from(&value["committer"])?,
+            removed: text_from(&value["removed"])?,
+            commit_hash: hex_from(&value["commit_hash"])?,
+        }),
+        Some("confirmed") => Effect::Confirmed(confirmation_from(&value["record"])?),
+        Some("rekeyed") => Effect::Rekeyed(RekeyRecord {
+            subject: text_from(&value["subject"])?,
+            old_key: hex_from(&value["old_key"])?,
+            new_key: key_from(&value["new_key"])?,
+            successor: frontier_from(&value["successor"])?,
+        }),
+        _ => return Err(corrupt_intent()),
+    })
+}
+
+impl Finish {
+    /// The `plan` column of the intent (C-31). Commit bytes stay in the request body.
+    fn record(&self) -> Result<Value, String> {
+        Ok(match self {
+            Finish::Fixed(effect) => json!({"type": "fixed", "effect": effect_record(effect)?}),
+            Finish::Release { op, right, cover } => {
+                json!({"type": "release", "op": op, "right": right.name(), "cover": cover})
+            }
+            Finish::Consume { op, .. } => json!({"type": "consume", "op": op}),
+            Finish::Commit(step) => json!({
+                "type": "commit", "kind": ack_kind_name(step.kind),
+                "parent": frontier_record(&step.parent),
+                "successor": frontier_record(&step.successor),
+                "commit_hash": hex::encode(&step.commit_hash),
+                "actor_key": hex::encode(&step.actor_key),
+                "effect": effect_record(&step.effect)?,
+            }),
+            Finish::Confirm(record) => {
+                json!({"type": "confirm", "record": confirmation_record(record)})
+            }
+        })
+    }
+}
+
+/// The raw `adapter_intents` columns, in table order.
+type IntentColumns = (i64, String, String, String, String, String, Vec<u8>, String);
+
+/// One stored intent (C-31).
+struct Intent {
+    id: i64,
+    actor: String,
+    sequence: u64,
+    command: String,
+    kernel_command: String,
+    revision: u64,
+    body: Vec<u8>,
+    plan: Value,
+}
+
+/// The commit bytes of a stored `submit_commit` body.
+fn submitted_commit(body: &[u8]) -> Result<Vec<u8>, String> {
+    let Value::Object(fields) = serde_json::from_slice(body).map_err(|_| corrupt_intent())? else {
+        return Err(corrupt_intent());
+    };
+    parse_submit_body(&fields)
+        .map(|(_, _, commit)| commit)
+        .map_err(|_| corrupt_intent())
+}
+
+/// The fields of the kernel release response for `op`, rebuilt from the last history
+/// event, which recovery has shown to be that release (C-32).
+fn release_response(checkpoint: &Value, op: &str) -> Result<Value, String> {
+    let last = checkpoint["history"]
+        .as_array()
+        .and_then(|history| history.last())
+        .ok_or("corrupt_history: kernel history")?;
+    let operation = last["event"]["snapshot"]["operations"]
+        .as_array()
+        .and_then(|operations| operations.iter().find(|o| o["op"] == json!(op)))
+        .ok_or("corrupt_history: released operation")?;
+    if operation["status"] != json!("released") {
+        return Err("corrupt_history: released operation".into());
+    }
+    Ok(json!({
+        "op": op, "epoch": operation["epoch"], "branch": operation["branch"],
+        "digest": operation["digest"], "policy_revision": operation["policy_revision"],
+        "resource": operation["resource"], "invocation": operation["invocation"],
+        "event_hash": last["hash"],
+    }))
+}
+
+impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
+    /// Arms `point` for the next request that reaches it (C-33). Only requests with a
+    /// kernel mutation pass the three request points; `GenesisAfterKernel` is armed on
+    /// `GenesisPending` and is never reached here.
+    pub fn crash_after(&mut self, point: CrashPoint) {
+        self.crash = Some(point);
+    }
+
+    /// C-32: reconciles every remaining intent, oldest first. The kernel applied an
+    /// intent if and only if its `revision` is the recorded one plus one and its last
+    /// history event has the intent's kind; the adapter is the kernel's only writer, so
+    /// no other request can explain that event.
+    fn recover(&mut self) -> Result<(), String> {
+        let intents = self.intents()?;
+        for intent in intents {
+            let checkpoint = self.kernel_checkpoint()?;
+            let revision = checkpoint["revision"]
+                .as_u64()
+                .ok_or("malformed: kernel revision")?;
+            let last_kind = checkpoint["history"]
+                .as_array()
+                .and_then(|history| history.last())
+                .and_then(|event| event["event"]["kind"].as_str());
+            let applied = intent.revision.checked_add(1) == Some(revision)
+                && last_kind == Some(intent.kernel_command.as_str());
+            if applied {
+                self.finish_intent(intent, &checkpoint)?;
+            } else {
+                // Nothing of the request reached the kernel: one `crashed` trace event.
+                self.close(
+                    intent.id,
+                    &intent.actor,
+                    intent.sequence,
+                    &intent.command,
+                    &Effect::None,
+                    CRASHED,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn intents(&self) -> Result<Vec<Intent>, String> {
+        let read = || -> rusqlite::Result<Vec<IntentColumns>> {
+            let mut stmt = self.store.prepare(
+                "SELECT id, actor, sequence, command, kernel_command, revision, body, plan
+                 FROM adapter_intents ORDER BY id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            })?;
+            rows.collect()
+        };
+        read()
+            .map_err(db)?
+            .into_iter()
+            .map(
+                |(id, actor, sequence, command, kernel_command, revision, body, plan)| {
+                    Ok(Intent {
+                        id,
+                        actor,
+                        sequence: sequence.parse().map_err(|_| corrupt_intent())?,
+                        command,
+                        kernel_command,
+                        revision: revision.parse().map_err(|_| corrupt_intent())?,
+                        body,
+                        plan: serde_json::from_str(&plan).map_err(|_| corrupt_intent())?,
+                    })
+                },
+            )
+            .collect()
+    }
+
+    /// The `Finish` of a stored intent.
+    fn finish_from(&self, intent: &Intent) -> Result<Finish, String> {
+        let plan = &intent.plan;
+        Ok(match plan["type"].as_str() {
+            Some("fixed") => Finish::Fixed(effect_from(&plan["effect"])?),
+            Some("release") => Finish::Release {
+                op: text_from(&plan["op"])?,
+                right: plan["right"]
+                    .as_str()
+                    .and_then(Right::from_name)
+                    .ok_or_else(corrupt_intent)?,
+                cover: plan["cover"].clone(),
+            },
+            Some("consume") => {
+                let op = text_from(&plan["op"])?;
+                // The certificate checked before the kernel call; it is written once.
+                let certificate = self
+                    .stored_certificate(&op)?
+                    .ok_or("corrupt_history: consumed operation without certificate")?;
+                Finish::Consume { op, certificate }
+            }
+            Some("commit") => Finish::Commit(Box::new(CommitStep {
+                kind: ack_kind_from(&plan["kind"])?,
+                parent: frontier_from(&plan["parent"])?,
+                successor: frontier_from(&plan["successor"])?,
+                commit_hash: hex_from(&plan["commit_hash"])?,
+                actor_key: hex_from(&plan["actor_key"])?,
+                staged: None,
+                effect: effect_from(&plan["effect"])?,
+            })),
+            Some("confirm") => Finish::Confirm(confirmation_from(&plan["record"])?),
+            _ => return Err(corrupt_intent()),
+        })
+    }
+
+    /// C-32 applied branch: the sequencer merge when it is still at the parent, the
+    /// deterministic re-signing, the store effect, one `recovered` trace event and the
+    /// deletion of the intent, the last three in one store transaction.
+    fn finish_intent(&mut self, intent: Intent, checkpoint: &Value) -> Result<(), String> {
+        let finish = self.finish_from(&intent)?;
+        let response = match &finish {
+            Finish::Commit(step) => {
+                self.recover_sequencer(&intent, step, checkpoint)?;
+                Value::Null
+            }
+            Finish::Release { op, .. } => release_response(checkpoint, op)?,
+            Finish::Consume { op, .. } => json!({"op": op, "recipient": intent.actor}),
+            Finish::Fixed(_) | Finish::Confirm(_) => Value::Null,
+        };
+        let (value, effect) = self.outputs(&intent.actor, finish, response)?;
+        let result = (|| -> rusqlite::Result<()> {
+            self.store.execute_batch("BEGIN IMMEDIATE")?;
+            apply_effect(&self.store, &effect)?;
+            self.store.execute(
+                "INSERT INTO adapter_recovered(actor, sequence, command, response)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    intent.actor,
+                    intent.sequence.to_string(),
+                    intent.command,
+                    value.to_string()
+                ],
+            )?;
+            append_trace(
+                &self.store,
+                Some(&intent.actor),
+                intent.sequence,
+                Some(&intent.command),
+                RECOVERED,
+            )?;
+            self.store
+                .execute("DELETE FROM adapter_intents WHERE id = ?1", [intent.id])?;
+            self.store.execute_batch("COMMIT")
+        })();
+        if let Err(err) = result {
+            let _ = self.store.execute_batch("ROLLBACK");
+            return Err(db(err));
+        }
+        Ok(())
+    }
+
+    /// Merges a commit the kernel applied but the sequencer did not, from the exact
+    /// commit bytes of the intent. The commit is processed again exactly as before the
+    /// kernel call, with the committer's key recorded then, and must reach the kernel's
+    /// successor frontier. A sequencer at neither frontier is a state recovery cannot
+    /// explain.
+    fn recover_sequencer(
+        &mut self,
+        intent: &Intent,
+        step: &CommitStep,
+        checkpoint: &Value,
+    ) -> Result<(), String> {
+        if checkpoint_frontier(checkpoint)? != step.successor {
+            return Err("binding_mismatch: recovered kernel frontier".into());
+        }
+        let sequencer = self.sequencer.as_ref().ok_or("uninitialized: no group")?;
+        let at = sequencer.frontier()?;
+        if at == step.successor {
+            return Ok(());
+        }
+        if at != step.parent {
+            return Err("binding_mismatch: sequencer frontier".into());
+        }
+        let commit = submitted_commit(&intent.body)?;
+        if Sha256::digest(&commit).as_slice() != step.commit_hash {
+            return Err(corrupt_intent());
+        }
+        let (staged, _) = sequencer
+            .process_commit(
+                self.provider.crypto(),
+                &commit,
+                &intent.actor,
+                &step.actor_key,
+            )
+            .map_err(|_| "binding_mismatch: recovered commit".to_string())?;
+        if context_frontier(staged.group_context())? != step.successor {
+            return Err("binding_mismatch: recovered commit frontier".into());
+        }
+        self.sequencer
+            .as_mut()
+            .ok_or("uninitialized: no group")?
+            .merge(staged)
+    }
+}
+
+impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
+    /// Arms a crash inside `complete` (C-33, C-34). Only `GenesisAfterKernel` is a
+    /// genesis point; the request points are armed on the completed `Adapter`.
+    pub fn crash_after(&mut self, point: CrashPoint) {
+        self.crash = Some(point);
     }
 }

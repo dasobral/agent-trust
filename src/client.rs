@@ -979,3 +979,89 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         Ok(StagedRekey { commit, parent })
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4.5: client restart (C-33, §6 B4 to B8)
+// ---------------------------------------------------------------------------
+
+impl<P: OpenMlsProvider> ClientEndpoint<P> {
+    /// Reloads a member from its provider's storage (C-33). `pending_commit` is the exact
+    /// commit this member staged and submitted before restarting; `pending_identity` is the
+    /// new identity of a staged rekey whose ack was not yet applied.
+    ///
+    /// OpenMLS keeps the group, its secrets, the decryption state and a staged commit in
+    /// storage; the client keeps only the commit bytes and a rekey's new identity in
+    /// memory, so the application supplies them. The reloaded member is at its stored
+    /// frontier: it reaches an acked successor only through `apply_ack`, and a rolled-back
+    /// storage stays unready until the missing acks are applied in order (C-24).
+    ///
+    /// The stored leaf must carry `subject` and `identity`'s key, and the group must carry
+    /// exactly one `acc_context` for the pinned APF key. A supplied pending commit requires
+    /// a staged commit in storage whose path leaf carries the key it will merge with:
+    /// `pending_identity`'s for a rekey, otherwise `identity`'s. Mismatches are
+    /// `binding_mismatch`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn load(
+        group: &str,
+        subject: &str,
+        identity: ClientIdentity,
+        provider: P,
+        apf_public_key: &[u8],
+        pending_commit: Option<&[u8]>,
+        pending_identity: Option<ClientIdentity>,
+    ) -> Result<Self, String> {
+        if pending_identity.is_some() && pending_commit.is_none() {
+            return Err("malformed: pending identity without a pending commit".into());
+        }
+        let state = MlsGroup::load(provider.storage(), &GroupId::from_slice(group.as_bytes()))
+            .map_err(mls)?
+            .ok_or("uninitialized: group missing from storage")?;
+
+        let apf_key_id = Sha256::digest(apf_public_key).to_vec();
+        let accs = unknown_payloads(
+            state.public_group().group_context().extensions(),
+            ACC_CONTEXT_EXTENSION_TYPE,
+        );
+        let [acc] = accs.as_slice() else {
+            return Err("binding_mismatch: acc_context count".into());
+        };
+        let acc = AccContext::decode(acc).map_err(|_| "binding_mismatch: acc_context")?;
+        if acc.apf_key_id != apf_key_id || acc.group != group {
+            return Err("binding_mismatch: acc_context".into());
+        }
+
+        // A removed member's inactive state has no own leaf; it stays inactive.
+        if let Some(own) = state.own_leaf_node() {
+            if credential_identity(own.credential()).as_deref() != Some(subject.as_bytes())
+                || own.signature_key().as_slice() != identity.public_key()
+            {
+                return Err("binding_mismatch: stored leaf".into());
+            }
+        }
+
+        if pending_commit.is_some() {
+            let staged = state
+                .pending_commit()
+                .ok_or("binding_mismatch: no staged commit in storage")?;
+            let merged_key = pending_identity
+                .as_ref()
+                .map_or(identity.public_key(), ClientIdentity::public_key);
+            let path_key = staged
+                .update_path_leaf_node()
+                .map(|leaf| leaf.signature_key().as_slice());
+            if path_key != Some(merged_key) {
+                return Err("binding_mismatch: pending identity".into());
+            }
+        }
+
+        Ok(Self {
+            provider,
+            identity,
+            group: state,
+            subject: subject.to_owned(),
+            apf_public_key: apf_public_key.to_vec(),
+            pending: pending_commit.map(<[u8]>::to_vec),
+            pending_identity,
+        })
+    }
+}

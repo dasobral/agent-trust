@@ -10,7 +10,14 @@ Phase 4.2 and the approved R-9 correction are complete. Phase 4.2 tests are in `
 
 Phase 4.3 is complete. Tests: `tests/adapter_release.rs`. Evidence: `evidence/adapter-release-red.txt` and `evidence/phase-4.3-green.txt`.
 
-Phase 4.4 is complete: 4.4a, 4.4b with the approved R-10, and the approved D-10 stacked repair. Next is phase 4.5.
+Phase 4.4 is complete: 4.4a, 4.4b with the approved R-10, and the approved D-10 stacked repair. Phase 4.5 is complete. Tests: `tests/adapter_recovery.rs`. Evidence: `evidence/recovery-red.txt` and `evidence/recovery-green.txt`.
+
+Gaps that remain after phase 4.5:
+- There is no API to fetch an artifact that recovery re-signed (ack, certificate or receipt); such artifacts are stored in `adapter_recovered`.
+- Client storage writes are not atomic.
+- The application must persist the seed of a rekey's new identity.
+- Recovery assumes a single adapter process per directory.
+- The trace still grows without bound, and kernel history still grows roughly quadratically.
 
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
@@ -227,7 +234,7 @@ This phase is split in two:
 - Consumes: contract §6.
 - Produces: restartable adapter, sequencer and clients, plus a `Barrier` hook enum (B1–B8) available to tests without timing sleeps.
 
-- [ ] Also cover the gaps found in phase 4.1. The adapter store and the kernel are two SQLite files, so they never commit together:
+- [x] Also cover the gaps found in phase 4.1. The adapter store and the kernel are two SQLite files, so they never commit together:
   - A crash after the kernel commits but before the adapter store commits leaves a kernel change with no registered key and no trace event. This currently fails closed, because the subject cannot authenticate. Fix it with an intent log reconciled against kernel history on `open`.
   - A crash in the middle of `Adapter::create` leaves files that block both `create` and `open`.
   - Phase 4.2: if kernel `admit` commits but the sequencer merge fails, `open` refuses with `binding_mismatch: sequencer frontier`. That fails closed but has no recovery; it needs an intent log of the commit bytes.
@@ -246,7 +253,7 @@ This phase is split in two:
   - Phase 4.4b: if the store commit is lost after the merge, the old key keeps authenticating and the offer row remains. This needs a write-ahead rekey intent plus reconciliation of leaf keys on `open`.
   - Phase 4.4b: the client's new identity exists only in memory between `stage_rekey` and `apply_ack`, so a client restart loses it.
   - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
-- [ ] Write the tests:
+- [x] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`
   - `b2_crash_after_release_before_persist_abandons_permanently`
   - `b3_crash_after_persist_reemits_identical_bytes`
@@ -256,8 +263,8 @@ This phase is split in two:
   - `b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge`
   - `b8_client_storage_rollback_is_unready_until_exact_frontier`
   - `adapter_restart_reloads_sequencer_certificates_and_request_sequences`
-- [ ] Run red and retain the evidence.
-- [ ] Implement, then run green and the standard gate.
+- [x] Run red and retain the evidence.
+- [x] Implement, then run green and the standard gate.
 
 **Claim after 4.5:** recovery behaves as specified at the eight enumerated barriers. This is finite coverage, not a proof.
 

@@ -351,3 +351,94 @@ pub fn files_in(dir: &Path) -> Vec<(String, Vec<u8>)> {
     out.sort();
     out
 }
+
+// ---------------------------------------------------------------------------
+// File-backed client storage (phase 4.5, `docs/adapter-contract.md` §6, C-33)
+// ---------------------------------------------------------------------------
+
+/// serde_json codec for `openmls_sqlite_storage` (the codec of `tests/adapter_compat.rs`).
+#[derive(Default)]
+pub struct JsonStorageCodec;
+
+impl openmls_sqlite_storage::Codec for JsonStorageCodec {
+    type Error = serde_json::Error;
+
+    fn to_vec<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, Self::Error> {
+        serde_json::to_vec(value)
+    }
+
+    fn from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, Self::Error> {
+        serde_json::from_slice(slice)
+    }
+}
+
+/// An `OpenMlsProvider` with stock RustCrypto crypto, a pluggable rand and durable
+/// `SqliteStorageProvider` storage in one file. Dropping the provider closes the file;
+/// opening the same path again models a client restart.
+pub struct FileProvider<R: OpenMlsRand> {
+    crypto: RustCrypto,
+    storage: openmls_sqlite_storage::SqliteStorageProvider<
+        JsonStorageCodec,
+        openmls_sqlite_storage::Connection,
+    >,
+    rand: R,
+    path: std::path::PathBuf,
+}
+
+impl<R: OpenMlsRand> FileProvider<R> {
+    /// Opens (or creates) the storage file at `path` and runs the storage migrations.
+    pub fn open(path: &Path, rand: R) -> Self {
+        let connection =
+            openmls_sqlite_storage::Connection::open(path).expect("open client storage file");
+        let mut storage = openmls_sqlite_storage::SqliteStorageProvider::<
+            JsonStorageCodec,
+            openmls_sqlite_storage::Connection,
+        >::new(connection);
+        storage.run_migrations().expect("client storage migrations");
+        Self {
+            crypto: RustCrypto::default(),
+            storage,
+            rand,
+            path: path.to_path_buf(),
+        }
+    }
+
+    /// The storage file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Writes a consistent copy of the complete storage file to `to` (`VACUUM INTO`,
+    /// through a second connection). Models a storage snapshot taken outside the client.
+    pub fn snapshot(&self, to: &Path) {
+        let connection =
+            rusqlite::Connection::open(&self.path).expect("open client storage for snapshot");
+        connection
+            .execute(
+                "VACUUM INTO ?1",
+                [to.to_str().expect("UTF-8 snapshot path")],
+            )
+            .expect("snapshot client storage");
+    }
+}
+
+impl<R: OpenMlsRand> OpenMlsProvider for FileProvider<R> {
+    type CryptoProvider = RustCrypto;
+    type RandProvider = R;
+    type StorageProvider = openmls_sqlite_storage::SqliteStorageProvider<
+        JsonStorageCodec,
+        openmls_sqlite_storage::Connection,
+    >;
+
+    fn storage(&self) -> &Self::StorageProvider {
+        &self.storage
+    }
+
+    fn crypto(&self) -> &Self::CryptoProvider {
+        &self.crypto
+    }
+
+    fn rand(&self) -> &Self::RandProvider {
+        &self.rand
+    }
+}
