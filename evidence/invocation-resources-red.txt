@@ -1,0 +1,71 @@
+# R-9 root invocation resources — RED (unchanged src/authority.rs), incl. A-2 scenario C
+# date: 2026-10-23T18:36:10Z
+# source revision: 96e4a10de853570feaed37c2b9ff4828a605d6f4 + uncommitted R-9 tests and A-2 edit
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --no-fail-fast --test authority_invocation_resources --test authority_resource_contract
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/authority_invocation_resources.rs (target/debug/deps/authority_invocation_resources-26e109376b63813f)
+
+running 4 tests
+test root_invocation_on_an_origin_held_resource_releases ... FAILED
+test executor_resource_check_still_applies_to_root_invocations ... FAILED
+test root_invocation_on_a_resource_the_origin_lacks_is_invalid ... FAILED
+test nested_invocations_stay_bounded_by_their_parent ... ok
+
+failures:
+
+---- root_invocation_on_an_origin_held_resource_releases stdout ----
+
+thread 'root_invocation_on_an_origin_held_resource_releases' (187199) panicked at tests/authority_invocation_resources.rs:189:21:
+R-9: the origin holds backend:kv, so a root invocation may name it: invocation must be issued, got invalid_invocation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- executor_resource_check_still_applies_to_root_invocations stdout ----
+
+thread 'executor_resource_check_still_applies_to_root_invocations' (187196) panicked at tests/authority_invocation_resources.rs:189:21:
+R-9: the origin holds backend:kv: invocation must be issued, got invalid_invocation
+
+---- root_invocation_on_a_resource_the_origin_lacks_is_invalid stdout ----
+
+thread 'root_invocation_on_a_resource_the_origin_lacks_is_invalid' (187198) panicked at tests/authority_invocation_resources.rs:189:21:
+R-9: an origin holding backend:kv may name it: invocation must be issued, got invalid_invocation
+
+
+failures:
+    executor_resource_check_still_applies_to_root_invocations
+    root_invocation_on_a_resource_the_origin_lacks_is_invalid
+    root_invocation_on_an_origin_held_resource_releases
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `--test authority_invocation_resources`
+     Running tests/authority_resource_contract.rs (target/debug/deps/authority_resource_contract-a5db7c7e4e98a65c)
+
+running 6 tests
+test init_resources_must_contain_the_group_and_be_well_formed ... ok
+test allocate_still_makes_no_authorization_decision ... ok
+test direct_release_outside_delegated_resources_is_unauthorized ... ok
+test direct_grant_subjects_hold_only_the_group_resource ... ok
+test root_resources_at_init_bound_every_descendant ... ok
+test invocation_release_requires_resource_in_origin_and_executor_chains ... FAILED
+
+failures:
+
+---- invocation_release_requires_resource_in_origin_and_executor_chains stdout ----
+
+thread 'invocation_release_requires_resource_in_origin_and_executor_chains' (187205) panicked at tests/authority_resource_contract.rs:65:22:
+R-9 (A-2): the origin's chain lacks the resource although the executor holds it: expected invalid_invocation, but request succeeded with "invocation:7"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    invocation_release_requires_resource_in_origin_and_executor_chains
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `--test authority_resource_contract`
+error: 2 targets failed:
+    `--test authority_invocation_resources`
+    `--test authority_resource_contract`
+# exit: 101

@@ -450,13 +450,18 @@ fn init_resources_must_contain_the_group_and_be_well_formed() {
 
 /// Invocation releases (R-8b).
 ///
-/// `invoke` is unchanged by R-8: a root invocation may carry only the group
-/// resource, and a nested invocation a subset of its parent. An invocation can
-/// therefore never carry `backend:kv`, and an invocation-bound release on
-/// `backend:kv` is already refused by the invocation-resource check. The
-/// resource attenuation of the origin and executor chains is made observable
-/// with subjects delegated only `["backend:kv"]`, whose chains lack the group
-/// resource that the invocation does carry. Before R-8 those releases succeed.
+/// Under R-9 (amendment A-2) a root invocation may name only resources that the
+/// origin holds under the R-8 chain check, and a nested invocation a subset of
+/// its parent invocation. An origin whose chain lacks `backend:kv` therefore
+/// cannot mint an invocation that names it. Root invocations on `backend:kv`
+/// from an origin that holds it are covered in
+/// `tests/authority_invocation_resources.rs`. The release-time attenuation of
+/// the executor chains is made observable with subjects delegated only
+/// `["backend:kv"]`, whose chains lack the group resource that the invocation
+/// does carry; before R-8 those releases succeed. Scenario C is the origin
+/// case: under A-2 an origin delegated only `["backend:kv"]` is refused at
+/// `invoke` with `invalid_invocation`, and the release-time origin check stays
+/// in the kernel as defense in depth.
 #[test]
 fn invocation_release_requires_resource_in_origin_and_executor_chains() {
     // Scenario A: parent holds [g, kv]; child holds [g].
@@ -642,27 +647,27 @@ fn invocation_release_requires_resource_in_origin_and_executor_chains() {
             "an origin holding the group authorizes the executor",
         );
 
-        let invocation = invoke(
-            &mut authority,
-            "kv-origin",
-            "parent",
-            &["write"],
-            &[GROUP],
-            None,
+        // Amendment A-2 (R-9): a root invocation may name only resources the
+        // origin holds. kv-origin holds only backend:kv, so the invocation on
+        // the group is refused at `invoke` instead of at the later release.
+        // The release-time origin check stays in the kernel as defense in depth.
+        let before = checkpoint(&mut authority);
+        code(
+            try_invoke(
+                &mut authority,
+                "kv-origin",
+                "parent",
+                &["write"],
+                &[GROUP],
+                None,
+            ),
+            "invalid_invocation",
+            "R-9 (A-2): the origin's chain lacks the resource although the executor holds it",
         );
-        allocate(
-            &mut authority,
-            "parent",
-            "origin-lacks-group",
-            GROUP,
-            Some(&invocation),
-        );
-        refused(
-            &mut authority,
-            "parent",
-            "origin-lacks-group",
-            GROUP,
-            "R-8b: the origin's chain lacks the resource although the executor holds it",
+        assert_eq!(
+            checkpoint(&mut authority),
+            before,
+            "R-9 (A-2): a refused invoke must leave the whole checkpoint unchanged"
         );
     }
 

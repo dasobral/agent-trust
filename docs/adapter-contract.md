@@ -227,6 +227,65 @@ These clarifications fill in §4.8 for plan phase 4.1. C-1 refines the approved 
   `Adapter::open` reloads them. The seed MUST NOT be written to either database or to the trace. Each handled request appends one trace event `{actor, sequence, command, outcome}`, where `outcome` is `"ok"` or the error code. A request that fails before its actor is known is traced with `actor: null`.
 - **C-6, key generation.** `ClientIdentity::generate` and the APF key both take a 32-byte seed from `OpenMlsRand::random_array` and build `SignatureKeyPair::from_raw(ED25519, seed, public)`. `public` is derived with `ed25519_dalek::SigningKey::from_bytes`. A rand failure is `entropy_unavailable`, and nothing is created.
 
+### 4.10 Phase 4.2 interface (coordinator clarifications C-7 to C-12)
+
+These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read-only kernel command. C-8 keeps the phase 4.1 constructor as a policy-only mode. Both are flagged to Daniel in the phase report.
+
+- **C-7, kernel `subject_status`.** This is an adapter-only, read-only command with fields `subject` and `now`.
+  - It returns `{subject, known, rights, expires_at}`.
+  - `rights` lists the subject's grant records in the order read, write, admin, admit. Each entry is `{right, generation, active, effective}`, where `effective` is the kernel's chain-valid check at `now`.
+  - `expires_at` is the subject's delegation `expires_at`, or null when the subject has no delegation record.
+  - An unknown subject gives `known: false` and `rights: []`.
+  - It changes neither `revision` nor `policy_revision`, and appends no history event. A worker request for it is `unauthorized`.
+- **C-8, two constructors.**
+  - `Adapter::create` (phase 4.1) stays a policy-only adapter with no MLS group. On it, `admission_certificate` and `submit_commit` are `uninitialized: no group`.
+  - The full adapter comes from `Adapter::begin_genesis`, which returns a `GenesisPending`, followed by `GenesisPending::complete`. `begin_genesis` writes no file: it refuses an existing file as `create` does, draws the APF seed, and computes the founder certificate and the genesis `acc_context`.
+  - `policy_digest` comes from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel `policy_digest` equals the digest in `acc_context`. On any failure nothing remains.
+  - `Adapter::open` reloads either kind.
+- **C-9, encodings** (`src/wire.rs`).
+  - Every structure in §4.1–§4.6 is encoded with the TLS presentation language: `VLBytes` for each `opaque<V>`, big-endian fixed-width integers, and a vector of structs as a `VLBytes` of their concatenation.
+  - The certificates (§4.4, founder, §4.6) are `struct { TBS tbs; opaque signature<V>; }` and are signed over the TLS encoding of `tbs`.
+  - Right codes: read 1, write 2, admin 3, admit 4.
+  - `AuthzIncarnation.rights` is sorted by right code.
+  - The founder certificate TBS is `{ opaque label<V> = "agent-trust/founder/v1"; opaque apf_key_id<V>; opaque group<V>; opaque subject<V>; RightGeneration rights<V>; opaque signature_key<V>; }`.
+  - The MLS group id is the UTF-8 kernel group name.
+- **C-10, routed requests.** `handle` routes two new commands. They are adapter flows, not kernel commands.
+  - `admission_certificate {key_package_preimage}`, with lowercase hex. It is sent by the candidate, signed with its registered key. The adapter calls `subject_status` at `now` and requires `read` and `admit` to be active and effective, otherwise `unauthorized`. It returns `{certificate}` in hex: a v2 certificate with the current generations, `policy_revision`, `not_after` = `expires_at` (or `u64::MAX` when null), and `SHA-256(preimage)`.
+  - `submit_commit {kind: "admit", parent_epoch, parent_branch, commit}`, with the commit as lowercase hex `MlsMessage` bytes. It returns `{epoch, branch, ack}`, where `ack` is the hex canonical acknowledgement.
+- **C-11, sequencer checks for `submit_commit`**, in this order. Failures 2–7 leave the sequencer and the kernel unchanged.
+  1. Without a group, the result is `uninitialized`. If `parent_epoch` and `parent_branch` differ from the current kernel frontier, the result is `stale_frontier`.
+  2. The commit must be a `PublicMessage` commit for this group and epoch that `PublicGroup::process_message` accepts.
+  3. The sender leaf's credential identity must equal the authenticated actor, and its signature key must equal the actor's registered key.
+  4. The commit must contain exactly one Add proposal and no other proposal, with an UpdatePath.
+  5. The added KeyPackage must pass every certificate check:
+     - exactly one `0xf042` extension that decodes as a v2 certificate and verifies under the APF key;
+     - `apf_key_id` and `group` match;
+     - the hash of `KeyPackage::canonical_binding_bytes(0xf042)` equals the certified hash;
+     - the credential identity equals the certificate subject, and the leaf signature key equals that subject's registered key;
+     - the certified `read_generation` and `admit_generation` equal the current kernel generations, and those grants are effective at `now`;
+     - `not_after ≥ now`;
+     - the leaf has exactly one `authz_incarnation`, whose `subject` equals the certificate subject, whose `rights` equal the subject's active kernel generations exactly, and whose `admission_cert_hash` is 32 zero bytes.
+  6. The successor `GroupContext` must carry the same `acc_context` bytes as the parent.
+
+  Failures at steps 2–6 are `noncanonical_commit`.
+  7. Kernel `admit {actor, subject, parent_branch, new_branch, epoch}`, with the successor frontier from `StagedCommit::group_context()`. Kernel errors pass through, for example `unauthorized` for a sender without `admin`, or `stale_frontier`.
+  8. The adapter merges into the sequencer, keeps the certificate indexed by the leaf signature key, signs the canonical ack with `kind` = admit, and returns it.
+- **C-12, client rules** (`src/client.rs`, `ClientEndpoint<P>`).
+  - A member's MLS signature key is its registered request key (`ClientIdentity`).
+  - `stage_add` stages, without merging, a commit with one Add and a forced UpdatePath. It does not validate the certificate: the sequencer is the gate.
+  - `apply_ack(commit, ack)` follows these rules, and on any error leaves the client unchanged at its parent frontier:
+    - An invalid APF signature is `unauthenticated`.
+    - If `commit_hash` differs from `SHA-256(commit)`, or the parent differs from the client's frontier, the result is `binding_mismatch`.
+    - The client merges its own pending commit when the bytes match. Otherwise it processes the commit, and a computed successor frontier that differs from the ack is `binding_mismatch`.
+  - `JoinCandidate::join(welcome, ack)` verifies the ack. It requires `kind` = admit, a joined frontier equal to the ack, and exactly one `acc_context` whose `apf_key_id` matches the pinned APF key. Otherwise it returns `binding_mismatch`, or `unauthenticated` for a bad signature.
+  - `mls_parts_mut` exposes the raw OpenMLS group, provider and signer. It exists for adversarial tests only, and honest code never uses it.
+- **C-13, resolved while authoring the phase 4.2 tests.**
+  - In every TLS structure, a `branch` field is the 64-character lowercase hex string as ASCII bytes. This applies to `CanonicalAck` parent and successor and to `ConfirmationTBS`.
+  - `subject_status` is adapter-only (C-3), so a worker request for it is `unauthorized`.
+  - Certificate issuance (C-10) does not parse the preimage. It certifies the hash of the bytes an authorized candidate sends, and the sequencer (C-11 step 5) is the only structural gate.
+  - The root's `expires_at` in `subject_status` is `u64::MAX`, the value of its self-anchored record. It is null only for a subject without a delegation record.
+  - Each `admission_certificate` and `submit_commit` request adds exactly one trace event (C-5).
+
 ## 5. Flows
 
 ### 5.1 Genesis
@@ -382,6 +441,10 @@ Proposed correction:
 
 Amendment A-1 (coordinator, 2026-10-23): the R-8a check applies at `release` only. `allocate` stays a reservation that makes no authorization decision, as the kernel contract states. The existing assertion `tests/confused_deputy_red.rs::child_cannot_launder_parent_only_resource` allocates on a resource outside the delegation and expects only the release to be refused. Checking at `allocate` would break that assertion. A refused release leaves the reservation `allocated`. A subject that has no delegation record (a direct root-anchored `grant`) is bounded to `[group]`.
 
+**R-9 (approved 2026-10-23, D-8, with amendment A-2): root invocation resources.** This corrects one existing scenario (A-2). A root invocation (one without `parent_invocation`) may name only resources that the origin holds under R-8. The test is `resource_held(origin, resource)` for every requested resource; the earlier rule was a subset of `[group]`. Anything else is `invalid_invocation`. Nested invocations stay bounded by their parent invocation, and every release-time check from R-8 still applies.
+
+Amendment A-2 (coordinator, 2026-10-23): `tests/authority_resource_contract.rs`, test `invocation_release_requires_resource_in_origin_and_executor_chains`, scenario C issues a root invocation on `g` from an origin that holds only `backend:kv`, and expects the later release to be refused. Under R-9 the invocation itself is refused with `invalid_invocation`, which is strictly tighter. A test author, not the implementer, updates that one scenario to assert the refusal at `invoke`. The release-time origin check stays in place as defense in depth.
+
 ## 11. Claim gate for `full_lap_mls`
 
 `full_lap_mls` MAY be reported `true` only when all of the following hold in one recorded run:
@@ -406,5 +469,5 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
 - **D-4:** Confirmation by a designated member C ≠ committer R with matching `epoch_authenticator_hash`. Proposed fallback when R is the only continuing member: R alone confirms, recorded as weaker evidence.
 - **D-5:** Accept the HPKE randomness limitation (§8) for Task 4. The alternative is a fork change that routes hpke-rs randomness through `OpenMlsRand`. That change belongs to the separate OpenMLS fork project.
 - **D-6:** Proposed extension codepoints `0xf043` and `0xf044` (private-use range, next to the existing `0xf042`).
-- **D-8 (open, proposed R-9):** `invoke` still limits a root invocation's resources to `[group]` (`src/authority.rs`, `invoke`). With R-8c, a subject can hold a non-group resource such as `backend:kv` but cannot delegate work on it through an invocation. The proposal is to bound a root invocation's resources by the origin's delegated resources instead of `[group]`. This was found by the R-8 test author. It is not approved and not implemented.
+- **D-8 (approved 2026-10-23):** R-9, with amendment A-2. The approval was relayed by the parent session, quoting Daniel: "I approve R-9 (D-8). Forward it to the adapter session to implement test-first."
 - **D-7 (approved 2026-10-23):** R-8a–c, with amendment A-1. The approval was relayed by the parent session, quoting Daniel: "I approve R-8 (D-7). Forward it to the adapter session to implement test-first."

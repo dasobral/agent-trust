@@ -57,6 +57,7 @@ Daniel approved these corrections on 23 October 2026 (`docs/adapter-contract.md`
   - A subject without a delegation record (a direct root-anchored `grant`) holds only `[group]`.
   - `allocate` is unchanged and makes no authorization decision.
   - `init` accepts an optional `resources` array of identifier strings, without duplicates, for the root delegation. It must contain `group`, otherwise the request is `malformed`. The default is `[group]`.
+- **R-9 invocation resources (approved 2026-10-23, amendment A-2):** a root invocation, one without `parent_invocation`, requires every requested resource to be held by the origin (the R-8 chain check). This replaces the earlier subset-of-`[group]` rule. A violation is `invalid_invocation`. Nested invocations are unchanged: they stay a subset of their parent invocation's resources.
 - **R-7 fresh keys:** there is no kernel change. In integration, the adapter derives `grant.fresh_keys` from a new KeyPackage or a new-signer update commit.
 
 Clarifications made during the phase 4.0 implementation. They only affect a store with a pending staged repair, or one fenced before the upgrade.

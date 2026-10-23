@@ -1,0 +1,135 @@
+# Phase 4.2 admission + subject_status — RED (skeletons src/wire.rs, src/client.rs, adapter genesis; kernel without subject_status)
+# date: 2026-10-23T18:40:11Z
+# source revision: 96e4a10de853570feaed37c2b9ff4828a605d6f4 + uncommitted phase 4.2 skeletons and tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --no-fail-fast --test adapter_admission --test authority_subject_status
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/adapter_admission.rs (target/debug/deps/adapter_admission-6be2f442906179f9)
+
+running 12 tests
+test sibling_commits_on_one_parent_have_exactly_one_canonical_winner ... FAILED
+test joiner_rejects_welcome_whose_frontier_differs_from_ack ... FAILED
+test incarnation_relabeling_to_fresh_generation_is_rejected ... FAILED
+test commit_with_unexpected_extra_proposal_is_noncanonical ... FAILED
+test admission_certificate_requires_active_read_and_admit_at_current_generations ... FAILED
+test add_commit_without_valid_v2_certificate_is_noncanonical ... FAILED
+test client_refuses_commit_without_matching_canonical_ack ... FAILED
+test admitted_frontier_matches_kernel_branch_at_every_member ... FAILED
+test genesis_kernel_branch_is_hash_of_real_group_context ... FAILED
+test add_commit_from_non_admin_sender_is_noncanonical ... FAILED
+test genesis_group_carries_acc_context_and_required_capabilities ... FAILED
+test add_commit_with_stale_generation_certificate_is_noncanonical ... FAILED
+
+failures:
+
+---- sibling_commits_on_one_parent_have_exactly_one_canonical_winner stdout ----
+
+thread 'sibling_commits_on_one_parent_have_exactly_one_canonical_winner' (202470) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- joiner_rejects_welcome_whose_frontier_differs_from_ack stdout ----
+
+thread 'joiner_rejects_welcome_whose_frontier_differs_from_ack' (202469) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- incarnation_relabeling_to_fresh_generation_is_rejected stdout ----
+
+thread 'incarnation_relabeling_to_fresh_generation_is_rejected' (202468) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- commit_with_unexpected_extra_proposal_is_noncanonical stdout ----
+
+thread 'commit_with_unexpected_extra_proposal_is_noncanonical' (202465) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- admission_certificate_requires_active_read_and_admit_at_current_generations stdout ----
+
+thread 'admission_certificate_requires_active_read_and_admit_at_current_generations' (202462) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- add_commit_without_valid_v2_certificate_is_noncanonical stdout ----
+
+thread 'add_commit_without_valid_v2_certificate_is_noncanonical' (202461) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- client_refuses_commit_without_matching_canonical_ack stdout ----
+
+thread 'client_refuses_commit_without_matching_canonical_ack' (202464) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- admitted_frontier_matches_kernel_branch_at_every_member stdout ----
+
+thread 'admitted_frontier_matches_kernel_branch_at_every_member' (202463) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- genesis_kernel_branch_is_hash_of_real_group_context stdout ----
+
+thread 'genesis_kernel_branch_is_hash_of_real_group_context' (202467) panicked at tests/adapter_admission.rs:933:6:
+begin_genesis: "not_implemented"
+
+---- add_commit_from_non_admin_sender_is_noncanonical stdout ----
+
+thread 'add_commit_from_non_admin_sender_is_noncanonical' (202459) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- genesis_group_carries_acc_context_and_required_capabilities stdout ----
+
+thread 'genesis_group_carries_acc_context_and_required_capabilities' (202466) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+---- add_commit_with_stale_generation_certificate_is_noncanonical stdout ----
+
+thread 'add_commit_with_stale_generation_certificate_is_noncanonical' (202460) panicked at tests/adapter_admission.rs:416:6:
+begin_genesis: "not_implemented"
+
+
+failures:
+    add_commit_from_non_admin_sender_is_noncanonical
+    add_commit_with_stale_generation_certificate_is_noncanonical
+    add_commit_without_valid_v2_certificate_is_noncanonical
+    admission_certificate_requires_active_read_and_admit_at_current_generations
+    admitted_frontier_matches_kernel_branch_at_every_member
+    client_refuses_commit_without_matching_canonical_ack
+    commit_with_unexpected_extra_proposal_is_noncanonical
+    genesis_group_carries_acc_context_and_required_capabilities
+    genesis_kernel_branch_is_hash_of_real_group_context
+    incarnation_relabeling_to_fresh_generation_is_rejected
+    joiner_rejects_welcome_whose_frontier_differs_from_ack
+    sibling_commits_on_one_parent_have_exactly_one_canonical_winner
+
+test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test adapter_admission`
+     Running tests/authority_subject_status.rs (target/debug/deps/authority_subject_status-970a6491fdc103e1)
+
+running 2 tests
+test subject_status_reports_rights_generations_and_expiry ... FAILED
+test subject_status_is_read_only ... FAILED
+
+failures:
+
+---- subject_status_reports_rights_generations_and_expiry stdout ----
+
+thread 'subject_status_reports_rights_generations_and_expiry' (202473) panicked at tests/authority_subject_status.rs:32:31:
+{"command":"subject_status","now":10,"subject":"root"} should succeed, got malformed: unknown command
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- subject_status_is_read_only stdout ----
+
+thread 'subject_status_is_read_only' (202472) panicked at tests/authority_subject_status.rs:32:31:
+{"command":"subject_status","now":10,"subject":"alice"} should succeed, got malformed: unknown command
+
+
+failures:
+    subject_status_is_read_only
+    subject_status_reports_rights_generations_and_expiry
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--test authority_subject_status`
+error: 2 targets failed:
+    `--test adapter_admission`
+    `--test authority_subject_status`
+# exit: 101

@@ -217,6 +217,7 @@ impl Authority {
             "repair" => self.repair(&mut state, obj),
             "repair_stage" => self.repair_stage(&mut state, obj),
             "repair_open" => self.repair_open(&mut state, obj),
+            "subject_status" => subject_status(&state, obj),
             _ => Err("malformed: unknown command".into()),
         }
     }
@@ -511,7 +512,7 @@ impl Authority {
                 parent.resources.clone(),
             )
         } else {
-            (actor.clone(), Vec::new(), vec![s.group.clone()])
+            (actor.clone(), Vec::new(), Vec::new())
         };
         let rights = if parent_id.is_some() {
             if !subset(&requested_rights, &parent_rights) {
@@ -527,7 +528,12 @@ impl Authority {
             }
             requested_resources
         } else {
-            if !subset(&requested_resources, std::slice::from_ref(&s.group)) {
+            // R-9: a root invocation's resources must each be held by the origin
+            // under the R-8 chain check. The executor is checked at release (R-8b).
+            if !requested_resources
+                .iter()
+                .all(|resource| resource_held(s, &origin, resource))
+            {
                 return Err("invalid_invocation".into());
             }
             requested_resources
@@ -1192,6 +1198,39 @@ fn invocation_valid(
     } else {
         true
     }
+}
+/// C-7 `subject_status`: read-only view of one subject's grant records and delegation expiry.
+/// It saves nothing, so `revision`, `policy_revision` and the history stay unchanged.
+fn subject_status(s: &State, o: &serde_json::Map<String, Value>) -> Result<Value, String> {
+    let subject = req_id(o, "subject")?;
+    let now = req_u64(o, "now")?;
+    let rights: Vec<Value> = ["read", "write", "admin", "admit"]
+        .iter()
+        .filter_map(|right| {
+            s.grants
+                .iter()
+                .find(|g| g.subject == subject && g.right == *right)
+                .map(|g| {
+                    json!({
+                        "right": right,
+                        "generation": g.generation,
+                        "active": g.active,
+                        "effective": effective(s, &subject, right, now),
+                    })
+                })
+        })
+        .collect();
+    let expires_at = s
+        .delegations
+        .iter()
+        .find(|d| d.subject == subject)
+        .map(|d| d.expires_at);
+    Ok(json!({
+        "subject": subject,
+        "known": known_subject(s, &subject),
+        "rights": rights,
+        "expires_at": expires_at,
+    }))
 }
 fn subset(a: &[String], b: &[String]) -> bool {
     a.iter().all(|x| b.contains(x))

@@ -6,7 +6,7 @@
 
 Phase 4.1 and the approved R-8 kernel correction are complete. R-8 was tested in `tests/authority_resource_contract.rs`. Evidence: `evidence/adapter-identity-red.txt`, `evidence/resource-attenuation-red.txt` and `evidence/phase-4.1-r8-green.txt`.
 
-Proposed R-9 (D-8) is open.
+Phase 4.2 and the approved R-9 correction are complete. Phase 4.2 tests are in `tests/adapter_admission.rs` and `tests/authority_subject_status.rs`; R-9 tests are in `tests/authority_invocation_resources.rs`, plus the A-2 scenario. Evidence: `evidence/adapter-admission-red.txt`, `evidence/invocation-resources-red.txt`, `evidence/invocation-resources-green.txt` and `evidence/phase-4.2-r9-green.txt`.
 
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
@@ -129,7 +129,7 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 - Consumes: kernel R-1 and R-2; contract §4.1–§4.4, §4.6, §5.1, §5.2.
 - Produces: genesis transaction, admission certificate v2, sequencer validation of Add commits, signed canonical ack, and client merge rule.
 
-- [ ] Write the tests:
+- [x] Write the tests:
   - `genesis_kernel_branch_is_hash_of_real_group_context`
   - `genesis_group_carries_acc_context_and_required_capabilities`
   - `admission_certificate_requires_active_read_and_admit_at_current_generations`
@@ -142,8 +142,8 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
   - `client_refuses_commit_without_matching_canonical_ack`
   - `joiner_rejects_welcome_whose_frontier_differs_from_ack`
   - `incarnation_relabeling_to_fresh_generation_is_rejected`
-- [ ] Run red and retain the evidence.
-- [ ] Implement, then run green, the unchanged `tests/mls_contract.rs`, and the standard gate.
+- [x] Run red and retain the evidence.
+- [x] Implement, then run green, the unchanged `tests/mls_contract.rs`, and the standard gate.
 
 **Claim after 4.2:** kernel epoch and branch equal the real MLS frontier for genesis and admission. Admission requires an APF-certified KeyPackage, a sequencer-validated commit and a CAS win.
 
@@ -219,6 +219,9 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 - [ ] Also cover the gaps found in phase 4.1. The adapter store and the kernel are two SQLite files, so they never commit together:
   - A crash after the kernel commits but before the adapter store commits leaves a kernel change with no registered key and no trace event. This currently fails closed, because the subject cannot authenticate. Fix it with an intent log reconciled against kernel history on `open`.
   - A crash in the middle of `Adapter::create` leaves files that block both `create` and `open`.
+  - Phase 4.2: if kernel `admit` commits but the sequencer merge fails, `open` refuses with `binding_mismatch: sequencer frontier`. That fails closed but has no recovery; it needs an intent log of the commit bytes.
+  - Phase 4.2: if the sequencer merges but the adapter store transaction is lost, the certificate record and trace event are lost while the sequence stays consumed.
+  - A crash in the middle of `GenesisPending::complete` leaves partial files, which are cleaned up only on an error return.
   - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
 - [ ] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`
