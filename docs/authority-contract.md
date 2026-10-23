@@ -58,6 +58,17 @@ Daniel approved these corrections on 23 October 2026 (`docs/adapter-contract.md`
   - `allocate` is unchanged and makes no authorization decision.
   - `init` accepts an optional `resources` array of identifier strings, without duplicates, for the root delegation. It must contain `group`, otherwise the request is `malformed`. The default is `[group]`.
 - **R-9 invocation resources (approved 2026-10-23, amendment A-2):** a root invocation, one without `parent_invocation`, requires every requested resource to be held by the origin (the R-8 chain check). This replaces the earlier subset-of-`[group]` rule. A violation is `invalid_invocation`. Nested invocations are unchanged: they stay a subset of their parent invocation's resources.
+- **R-10 rekey (approved 2026-10-23, D-9):** an adapter-only command, never exposed to workers.
+  - Fields: `actor`, `subject`, `right`, `generation`, `parent_branch`, `new_branch`, `epoch`, `now`.
+  - It applies the checks of `grant` with `fresh_keys` true (actor has effective `admin`; generation 0 for a new grant record, otherwise exactly the old generation + 1 on an inactive grant).
+  - It also requires:
+    - `right` is write, admin or admit (otherwise `malformed`);
+    - `subject` is in the roster (otherwise `invalid_transition`);
+    - the group is not read-fenced and no repair is pending (otherwise `read_fenced`);
+    - `parent_branch == branch` and `epoch == current + 1` (otherwise `stale_frontier`);
+    - `new_branch != parent_branch` (otherwise `invalid_transition`).
+  - In one transaction, it applies the grant, advances `policy_revision` by one, and sets epoch and branch. The response is `{epoch, branch, policy_revision}`.
+  - A failure leaves the state unchanged.
 - **R-7 fresh keys:** there is no kernel change. In integration, the adapter derives `grant.fresh_keys` from a new KeyPackage or a new-signer update commit.
 
 Clarifications made during the phase 4.0 implementation. They only affect a store with a pending staged repair, or one fenced before the upgrade.

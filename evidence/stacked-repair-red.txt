@@ -1,0 +1,44 @@
+# D-10 stacked repair — RED (adapter still refuses plans while a repair is pending)
+# date: 2026-10-23T20:19:18Z
+# source revision: 34b856c5a7cfb20990414403c7650b72b8620f87 + uncommitted D-10 tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# note: test 4 (revocation_is_never_refused_while_a_repair_is_pending) is a guard that already holds.
+# command: cargo test --locked --test adapter_repair_stacked
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/adapter_repair_stacked.rs (target/debug/deps/adapter_repair_stacked-60b82cf9619061a8)
+
+running 4 tests
+test members_removed_by_both_repairs_cannot_decrypt_successor_traffic ... FAILED
+test stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_confirmation ... FAILED
+test confirmation_of_superseded_repair_does_not_open_the_fence ... FAILED
+test revocation_is_never_refused_while_a_repair_is_pending ... ok
+
+failures:
+
+---- members_removed_by_both_repairs_cannot_decrypt_successor_traffic stdout ----
+
+thread 'members_removed_by_both_repairs_cannot_decrypt_successor_traffic' (365451) panicked at tests/adapter_repair_stacked.rs:480:35:
+dave request {"command":"repair_plan"} should succeed, got invalid_repair: repair pending
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_confirmation stdout ----
+
+thread 'stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_confirmation' (365453) panicked at tests/adapter_repair_stacked.rs:480:35:
+dave request {"command":"repair_plan"} should succeed, got invalid_repair: repair pending
+
+---- confirmation_of_superseded_repair_does_not_open_the_fence stdout ----
+
+thread 'confirmation_of_superseded_repair_does_not_open_the_fence' (365450) panicked at tests/adapter_repair_stacked.rs:480:35:
+root request {"command":"repair_plan"} should succeed, got invalid_repair: repair pending
+
+
+failures:
+    confirmation_of_superseded_repair_does_not_open_the_fence
+    members_removed_by_both_repairs_cannot_decrypt_successor_traffic
+    stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_confirmation
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.21s
+
+error: test failed, to rerun pass `--test adapter_repair_stacked`
+# exit: 101

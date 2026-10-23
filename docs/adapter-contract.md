@@ -388,6 +388,24 @@ These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-r
   - **C-22 step 1:** a pending repair no longer refuses a `kind: "repair"` commit. The commit must build on the current kernel frontier, which is the pending repair's successor, and its plan is computed at that frontier. Steps 2–7 are unchanged; step 6's kernel `repair_stage` stacks on the pending branch.
   - **C-23:** confirmations count only for the latest pending repair. A confirmation of a superseded repair names a frontier that is no longer current, so it is `invalid_repair`. Confirmations stored for a superseded repair never count toward opening.
   - **Revocation:** a read revocation is never refused because a repair is pending.
+- **C-28, rekey for current members (R-10, D-9, approved 2026-10-23).** This amends C-25 through amendment A-3.
+  - **Offer.** On a full adapter, a `grant` whose subject is a current roster member no longer reaches the kernel and is no longer refused. The right must be write, admin or admit; read is `malformed`. The adapter records a pending offer `{subject, right, generation, admin: actor}` and returns `{pending: true}`. At most one pending offer exists per subject, and a newer offer replaces the older one. The kernel is unchanged at this point.
+  - **Update commit.** The subject stages it with `ClientEndpoint::stage_rekey(new_identity, rights)`, using `self_update_with_new_signer`. The new leaf keeps the subject's credential identity and carries the new signature key. Its leaf `authz_incarnation` carries `rights` and keeps the existing `admission_cert_hash`.
+  - **Sequencer checks for `submit_commit {kind: "update", parent_epoch, parent_branch, commit}`**, in this order. Failures 1–5 leave the sequencer, the kernel and the key registry unchanged.
+    1. Without a group, the result is `uninitialized`. If the parent differs from the kernel frontier, it is `stale_frontier`. If the kernel is read-fenced or a repair is pending, it is `read_fenced`. If no offer is pending for the actor, it is `unauthorized`.
+    2. The commit must be a `PublicMessage` that `PublicGroup::process_message` accepts.
+    3. The sender must be the actor's leaf with its registered key.
+    4. The commit must have no proposals and must have an UpdatePath.
+    5. The path leaf must meet all of the following:
+       - its credential identity is the actor;
+       - its signature key is new, and not registered to anyone;
+       - it declares `0xf042`–`0xf044`;
+       - it has exactly one `authz_incarnation` with subject = actor, rights = the actor's active kernel rights with the offered `(right, generation)` set, and `admission_cert_hash` = the previous leaf's value.
+
+       The successor `acc_context` must also be unchanged. Failures 2–5 are `noncanonical_commit`.
+    6. The adapter calls kernel `rekey` (R-10) with the offer's admin as `actor`. Kernel errors pass through, and the offer stays pending.
+    7. The sequencer merges. The subject's registered key is replaced by the new key, so the old key no longer authenticates. The offer is cleared, and the adapter signs an ack with `kind` = update and returns `{epoch, branch, ack}`.
+  - **Client.** After applying its own ack, the subject's `identity()` is the new identity.
 - **C-26, resolved during the phase 4.4a implementation.**
   - **`repair_plan`:** from an actor that is not a roster member it is `unauthorized`. On a policy-only adapter, `repair_plan` and `confirm_repair` are `uninitialized`. A plan that would remove nobody is `invalid_repair`.
   - **Removed member applying the repair ack:** OpenMLS stops the removed member's processing before the confirmed transcript hash. The client therefore accepts its own removal only under an ack of `kind` = repair, and recomputes the successor frontier through its public group, as the sequencer does, before it merges into the inactive state.
@@ -558,6 +576,8 @@ Amendment A-1 (coordinator, 2026-10-23): the R-8a check applies at `release` onl
 
 Amendment A-2 (coordinator, 2026-10-23): `tests/authority_resource_contract.rs`, test `invocation_release_requires_resource_in_origin_and_executor_chains`, scenario C issues a root invocation on `g` from an origin that holds only `backend:kv`, and expects the later release to be refused. Under R-9 the invocation itself is refused with `invalid_invocation`, which is strictly tighter. A test author, not the implementer, updates that one scenario to assert the refusal at `invoke`. The release-time origin check stays in place as defense in depth.
 
+Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` test `grant_to_a_current_member_requires_rekey` asserts that a grant to a current member is `unauthorized` (C-25). Under C-28 that grant becomes a pending offer, `{pending: true}`, with the kernel unchanged. A test author, not the implementer, updates that assertion and keeps the kernel-unchanged check.
+
 ## 11. Claim gate for `full_lap_mls`
 
 `full_lap_mls` MAY be reported `true` only when all of the following hold in one recorded run:
@@ -582,10 +602,10 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
 - **D-4:** Confirmation by a designated member C ≠ committer R with matching `epoch_authenticator_hash`. Proposed fallback when R is the only continuing member: R alone confirms, recorded as weaker evidence.
 - **D-5:** Accept the HPKE randomness limitation (§8) for Task 4. The alternative is a fork change that routes hpke-rs randomness through `OpenMlsRand`. That change belongs to the separate OpenMLS fork project.
 - **D-6:** Proposed extension codepoints `0xf043` and `0xf044` (private-use range, next to the existing `0xf042`).
-- **D-9 (open, proposed R-10): rekey for non-read re-authorization.**
+- **D-9 (approved 2026-10-23 by Daniel: "I approve D-9: R-10 rekey as proposed in docs/adapter-contract.md. Implement phase 4.4b test-first after D-10."): rekey for non-read re-authorization.**
   - A current member whose write, admin or admit right is re-granted (or newly granted) must install fresh keys and a new `authz_incarnation` with an update commit (`self_update_with_new_signer`, §5.5). That commit advances the MLS epoch, but the kernel has no command that advances its frontier except `admit` and `repair`.
   - The proposal is an adapter-only kernel command `rekey {subject, right, generation, parent_branch, new_branch, epoch}`. It applies the grant with `fresh_keys` true and advances the frontier by CAS, in one transaction, after the sequencer has validated the update commit (`kind` = update). Validation covers: sender = subject, no proposals, a path, a new signature key, and an incarnation equal to the new active rights.
-  - Until it is approved, a grant to a current member is refused (C-25).
+  - It is implemented in phase 4.4b, under C-28 and amendment A-3.
 - **D-10 (approved 2026-10-23, option 1): stacked repair.**
   - The approval was relayed by the parent session, quoting Daniel: "I approve D-10 option 1: allow a stacked repair, confirm only the latest. Forward it to the adapter session to implement test-first."
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.

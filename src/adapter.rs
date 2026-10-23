@@ -2333,13 +2333,12 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(checkpoint_roster(&checkpoint)?.iter().any(|m| m == subject))
     }
 
-    /// C-20: the plan exists only while the kernel is read-fenced with no repair pending.
+    /// C-20 as amended by C-27: the plan exists whenever the kernel is read-fenced and
+    /// the removal set is not empty, whether or not a repair is pending. A stacked plan is
+    /// computed at the current kernel frontier, which is the pending repair's successor.
     fn plan_from(&self, checkpoint: &Value) -> Result<RepairPlan, String> {
         if checkpoint["read_fenced"] != json!(true) {
             return Err("invalid_repair: not read-fenced".into());
-        }
-        if !checkpoint["repair_pending"].is_null() {
-            return Err("invalid_repair: repair pending".into());
         }
         let roster = checkpoint_roster(checkpoint)?;
         let grants = checkpoint["grants"]
@@ -2539,6 +2538,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     }
 
     /// C-23 `confirm_repair {confirmation}`. A rejected confirmation is not stored.
+    ///
+    /// C-27: only the latest pending repair can be confirmed. A confirmation of a
+    /// superseded repair names a frontier that is no longer current (`invalid_repair`),
+    /// and hashes are read for the pending branch only, so confirmations stored for a
+    /// superseded repair never count.
     ///
     /// The committer's hash is the reference (§5.4 step 5). A non-committer's hash that
     /// differs from it, or any actor's hash that differs from its own earlier one, is
