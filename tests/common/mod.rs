@@ -45,6 +45,27 @@ impl<R: OpenMlsRand> TestProvider<R> {
     }
 }
 
+impl<R: OpenMlsRand> TestProvider<R> {
+    /// A provider over a byte-for-byte copy of this provider's complete storage, with its
+    /// own `rand`. Models an endpoint's retained state copied outside the adapter
+    /// (`docs/adapter-contract.md` §5.4); the copy shares nothing with the original.
+    pub fn storage_copy<S: OpenMlsRand>(&self, rand: S) -> TestProvider<S> {
+        let values = self
+            .storage
+            .values
+            .read()
+            .expect("memory storage lock")
+            .clone();
+        TestProvider {
+            crypto: RustCrypto::default(),
+            storage: MemoryStorage {
+                values: std::sync::RwLock::new(values),
+            },
+            rand,
+        }
+    }
+}
+
 impl<R: OpenMlsRand> OpenMlsProvider for TestProvider<R> {
     type CryptoProvider = RustCrypto;
     type RandProvider = R;

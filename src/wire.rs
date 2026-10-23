@@ -762,3 +762,56 @@ fn decode_readers(bytes: &[u8]) -> Result<Vec<(String, u64)>, String> {
     }
     Ok(readers)
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4.4a: repair confirmation (§4.7, C-23)
+// ---------------------------------------------------------------------------
+
+pub const CONFIRM_LABEL: &[u8] = b"agent-trust/confirm/v1";
+
+/// `SHA-256(label ‖ branch ‖ epoch_authenticator)` with the branch as ASCII hex (C-23):
+/// a plain concatenation, not a TLS structure. Only this hash leaves the client.
+pub fn epoch_authenticator_hash(branch: &str, epoch_authenticator: &[u8]) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(CONFIRM_LABEL);
+    hasher.update(branch.as_bytes());
+    hasher.update(epoch_authenticator);
+    hasher.finalize().to_vec()
+}
+
+/// Repair confirmation TBS (§4.7, C-23), signed with the member's registered key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RepairConfirmation {
+    pub group: String,
+    pub frontier: Frontier,
+    pub epoch_authenticator_hash: Vec<u8>,
+}
+
+impl SignedStructure for RepairConfirmation {
+    /// `ConfirmationTBS { opaque label<V>; opaque group<V>; uint64 epoch;
+    /// opaque branch<V>; opaque epoch_authenticator_hash<V>; }`, branch as ASCII hex.
+    fn tbs(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(CONFIRM_LABEL)?;
+        w.opaque(self.group.as_bytes())?;
+        w.u64(self.frontier.epoch)?;
+        w.opaque(self.frontier.branch.as_bytes())?;
+        w.opaque(&self.epoch_authenticator_hash)?;
+        Ok(w.finish())
+    }
+
+    fn decode_tbs(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        r.label(CONFIRM_LABEL)?;
+        let confirmation = Self {
+            group: r.string()?,
+            frontier: Frontier {
+                epoch: r.u64()?,
+                branch: r.string()?,
+            },
+            epoch_authenticator_hash: r.opaque()?,
+        };
+        r.finish()?;
+        Ok(confirmation)
+    }
+}

@@ -1,0 +1,121 @@
+# Phase 4.4a repair, confirmation, retained-key adversary — RED (phase 4.4a skeletons; repair routes absent)
+# date: 2026-10-23T19:59:51Z
+# source revision: c064d47bdb82054e261830e7c3de5adf51c8e3b3 + uncommitted phase 4.4a skeletons and tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# note: test 1 (api_only_revocation_lets_a_retained_endpoint_decrypt_new_traffic) is a named BROKEN CONTROL; it passes because the unsafe raw decryption it demonstrates already succeeds.
+# command: cargo test --locked --test adapter_repair
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/adapter_repair.rs (target/debug/deps/adapter_repair-afbdc3ab24de615b)
+
+running 15 tests
+test repair_with_policy_revision_older_than_fence_is_noncanonical ... FAILED
+test offline_client_stays_locally_fenced_without_blocking_others ... FAILED
+test grant_to_a_current_member_requires_rekey ... FAILED
+test repair_removing_a_continuing_reader_is_noncanonical ... FAILED
+test api_only_revocation_lets_a_retained_endpoint_decrypt_new_traffic ... ok
+test write_revocation_does_not_remove_an_authorized_reader ... FAILED
+test reallowed_reader_rejoins_only_with_new_generation_key_package ... FAILED
+test repair_without_acc_context_update_is_noncanonical ... FAILED
+test inconsistent_confirmation_hash_keeps_fence_closed ... FAILED
+test repair_without_update_path_is_noncanonical ... FAILED
+test continuing_members_send_and_deliver_after_repair ... FAILED
+test repair_missing_one_revoked_reader_is_noncanonical ... FAILED
+test removed_endpoint_storage_copy_cannot_decrypt_successor_traffic ... FAILED
+test canonical_repair_stays_fenced_until_confirmation ... FAILED
+test read_revocation_fences_release_until_confirmed_repair ... FAILED
+
+failures:
+
+---- repair_with_policy_revision_older_than_fence_is_noncanonical stdout ----
+
+thread 'repair_with_policy_revision_older_than_fence_is_noncanonical' (317854) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- offline_client_stays_locally_fenced_without_blocking_others stdout ----
+
+thread 'offline_client_stays_locally_fenced_without_blocking_others' (317848) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- grant_to_a_current_member_requires_rekey stdout ----
+
+thread 'grant_to_a_current_member_requires_rekey' (317846) panicked at tests/common/mod.rs:243:18:
+request should be rejected with unauthorized
+
+---- repair_removing_a_continuing_reader_is_noncanonical stdout ----
+
+thread 'repair_removing_a_continuing_reader_is_noncanonical' (317853) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- write_revocation_does_not_remove_an_authorized_reader stdout ----
+
+thread 'write_revocation_does_not_remove_an_authorized_reader' (317857) panicked at tests/common/mod.rs:245:5:
+expected invalid_repair, got malformed: unknown command
+
+---- reallowed_reader_rejoins_only_with_new_generation_key_package stdout ----
+
+thread 'reallowed_reader_rejoins_only_with_new_generation_key_package' (317850) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- repair_without_acc_context_update_is_noncanonical stdout ----
+
+thread 'repair_without_acc_context_update_is_noncanonical' (317855) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- inconsistent_confirmation_hash_keeps_fence_closed stdout ----
+
+thread 'inconsistent_confirmation_hash_keeps_fence_closed' (317847) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- repair_without_update_path_is_noncanonical stdout ----
+
+thread 'repair_without_update_path_is_noncanonical' (317856) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- continuing_members_send_and_deliver_after_repair stdout ----
+
+thread 'continuing_members_send_and_deliver_after_repair' (317845) panicked at tests/adapter_repair.rs:642:35:
+dave request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- repair_missing_one_revoked_reader_is_noncanonical stdout ----
+
+thread 'repair_missing_one_revoked_reader_is_noncanonical' (317852) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- removed_endpoint_storage_copy_cannot_decrypt_successor_traffic stdout ----
+
+thread 'removed_endpoint_storage_copy_cannot_decrypt_successor_traffic' (317851) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- canonical_repair_stays_fenced_until_confirmation stdout ----
+
+thread 'canonical_repair_stays_fenced_until_confirmation' (317844) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+---- read_revocation_fences_release_until_confirmed_repair stdout ----
+
+thread 'read_revocation_fences_release_until_confirmed_repair' (317849) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"repair_plan"} should succeed, got malformed: unknown command
+
+
+failures:
+    canonical_repair_stays_fenced_until_confirmation
+    continuing_members_send_and_deliver_after_repair
+    grant_to_a_current_member_requires_rekey
+    inconsistent_confirmation_hash_keeps_fence_closed
+    offline_client_stays_locally_fenced_without_blocking_others
+    read_revocation_fences_release_until_confirmed_repair
+    reallowed_reader_rejoins_only_with_new_generation_key_package
+    removed_endpoint_storage_copy_cannot_decrypt_successor_traffic
+    repair_missing_one_revoked_reader_is_noncanonical
+    repair_removing_a_continuing_reader_is_noncanonical
+    repair_with_policy_revision_older_than_fence_is_noncanonical
+    repair_without_acc_context_update_is_noncanonical
+    repair_without_update_path_is_noncanonical
+    write_revocation_does_not_remove_an_authorized_reader
+
+test result: FAILED. 1 passed; 14 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+error: test failed, to rerun pass `--test adapter_repair`
+# exit: 101

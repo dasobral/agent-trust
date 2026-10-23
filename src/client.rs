@@ -1,5 +1,5 @@
 //! Client endpoint: one OpenMLS group member with its own keys and storage
-//! (`docs/adapter-contract.md` §5.1, §5.2, §5.3, C-12, C-18). Generic over the OpenMLS provider.
+//! (`docs/adapter-contract.md` §5.1, §5.2, §5.3, §5.4, C-12, C-18, C-20 to C-24). Generic over the OpenMLS provider.
 
 use openmls::extensions::ExtensionValidator;
 use openmls::prelude::*;
@@ -10,10 +10,10 @@ use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 
 use crate::adapter::ClientIdentity;
 use crate::wire::{
-    operation_digest, verify_ed25519, AccContext, AckKind, AuthzIncarnation, CanonicalAck,
-    ConsumeReceipt, Envelope, FounderCertificate, Frontier, FrozenContent, ReleaseCertificate,
-    Right, SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
-    AUTHZ_INCARNATION_EXTENSION_TYPE,
+    epoch_authenticator_hash, operation_digest, verify_ed25519, AccContext, AckKind,
+    AuthzIncarnation, CanonicalAck, ConsumeReceipt, Envelope, FounderCertificate, Frontier,
+    FrozenContent, ReleaseCertificate, RepairConfirmation, Right, SignedStructure,
+    ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
 /// The laboratory ciphersuite; its signature scheme is the Ed25519 of every identity.
@@ -265,7 +265,32 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             else {
                 return Err("binding_mismatch: not a commit".into());
             };
-            if context_frontier(staged.group_context())? != ack.successor {
+            let successor = if staged.self_removed() {
+                // C-24: a removed member's OpenMLS processing stops before the confirmed
+                // transcript hash, because it cannot check the confirmation tag. Its
+                // public group recomputes the public successor context, as the sequencer
+                // does, so the merge into the inactive state is still bound to the ack.
+                if ack.kind != AckKind::Repair {
+                    return Err("binding_mismatch: removal outside a repair".into());
+                }
+                let message = MlsMessageIn::tls_deserialize_exact(commit)
+                    .map_err(|_| "binding_mismatch: commit encoding")?
+                    .try_into_protocol_message()
+                    .map_err(|_| "binding_mismatch: commit encoding")?;
+                let public = self
+                    .group
+                    .public_group()
+                    .process_message(self.provider.crypto(), message)
+                    .map_err(|err| format!("binding_mismatch: commit does not process: {err:?}"))?;
+                let ProcessedMessageContent::StagedCommitMessage(public) = public.into_content()
+                else {
+                    return Err("binding_mismatch: not a commit".into());
+                };
+                context_frontier(public.group_context())?
+            } else {
+                context_frontier(staged.group_context())?
+            };
+            if successor != ack.successor {
                 return Err("binding_mismatch: successor frontier".into());
             }
             self.group
@@ -719,4 +744,136 @@ fn leaf_generation(leaf: &LeafNode, subject: &str, right: Right) -> Option<u64> 
         .iter()
         .find(|(r, _)| *r == right)
         .map(|(_, generation)| *generation)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.4a: repair commit and confirmation (C-20 to C-24)
+// ---------------------------------------------------------------------------
+
+/// A repair commit staged by this member and not yet merged.
+#[derive(Clone, Debug)]
+pub struct StagedRepair {
+    /// Exact commit `MlsMessage` bytes to submit.
+    pub commit: Vec<u8>,
+    pub parent: Frontier,
+}
+
+impl<P: OpenMlsProvider> ClientEndpoint<P> {
+    /// Stages, without merging, one commit that removes exactly the leaves of `removed`,
+    /// replaces `acc_context` with the planned payload and forces an UpdatePath (C-22).
+    ///
+    /// The plan comes from the APF (C-20), so the committer has no discretion (C-21). The
+    /// client checks only that the planned `acc_context` names its pinned APF key and
+    /// group; the sequencer is the gate for everything else.
+    pub fn stage_repair(
+        &mut self,
+        removed: &[String],
+        acc_context: &[u8],
+    ) -> Result<StagedRepair, String> {
+        let acc = AccContext::decode(acc_context).map_err(|_| "binding_mismatch: acc_context")?;
+        if acc.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
+            || acc.group.as_bytes() != self.group.group_id().as_slice()
+        {
+            return Err("binding_mismatch: acc_context".into());
+        }
+        if removed.contains(&self.subject) {
+            return Err("invalid_repair: the committer is removed".into());
+        }
+
+        // Every leaf whose credential names a removed subject.
+        let mut indices = Vec::new();
+        for subject in removed {
+            let before = indices.len();
+            indices.extend(
+                self.group
+                    .members()
+                    .filter(|member| {
+                        credential_identity(&member.credential).as_deref()
+                            == Some(subject.as_bytes())
+                    })
+                    .map(|member| member.index),
+            );
+            if indices.len() == before {
+                return Err(format!("invalid_repair: {subject} has no leaf"));
+            }
+        }
+
+        // The current GroupContext extensions with exactly the acc_context replaced.
+        let mut replaced = 0;
+        let mut extensions = Vec::new();
+        for extension in self
+            .group
+            .public_group()
+            .group_context()
+            .extensions()
+            .iter()
+        {
+            match extension {
+                Extension::Unknown(t, _) if *t == ACC_CONTEXT_EXTENSION_TYPE => {
+                    replaced += 1;
+                    extensions.push(Extension::Unknown(
+                        ACC_CONTEXT_EXTENSION_TYPE,
+                        UnknownExtension(acc_context.to_vec()),
+                    ));
+                }
+                other => extensions.push(other.clone()),
+            }
+        }
+        if replaced != 1 {
+            return Err("binding_mismatch: acc_context count".into());
+        }
+        let extensions = Extensions::from_vec(extensions).map_err(mls)?;
+
+        let parent = self.frontier()?;
+        let bundle = self
+            .group
+            .commit_builder()
+            .propose_removals(indices)
+            .propose_group_context_extensions(extensions)
+            .map_err(mls)?
+            .force_self_update(true)
+            .load_psks(self.provider.storage())
+            .map_err(mls)?
+            .build(
+                self.provider.rand(),
+                self.provider.crypto(),
+                self.identity.signer(),
+                |_| true,
+            )
+            .map_err(mls)?
+            .stage_commit(&self.provider)
+            .map_err(mls)?;
+        let commit = bundle.commit().tls_serialize_detached().map_err(mls)?;
+        self.pending = Some(commit.clone());
+        Ok(StagedRepair { commit, parent })
+    }
+
+    /// Signed repair confirmation for the member's current frontier (C-23). The member
+    /// reaches a frontier only by merging an acked commit, which verified the confirmation
+    /// tag; only a hash of the epoch authenticator leaves the client.
+    pub fn confirmation(&self) -> Result<Vec<u8>, String> {
+        if !self.group.is_active() {
+            return Err("binding_mismatch: group inactive".into());
+        }
+        let frontier = self.frontier()?;
+        let group = String::from_utf8(self.group.group_id().as_slice().to_vec())
+            .map_err(|_| "malformed: group id")?;
+        let hash = epoch_authenticator_hash(
+            &frontier.branch,
+            self.group.epoch_authenticator().as_slice(),
+        );
+        RepairConfirmation {
+            group,
+            frontier,
+            epoch_authenticator_hash: hash,
+        }
+        .sign(self.identity.signer())
+    }
+}
+
+/// A basic credential's identity bytes.
+fn credential_identity(credential: &Credential) -> Option<Vec<u8>> {
+    BasicCredential::try_from(credential.clone())
+        .ok()
+        .map(|basic| basic.identity().to_vec())
 }

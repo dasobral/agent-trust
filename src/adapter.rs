@@ -5,6 +5,8 @@
 //! Phase 4.2 surface: genesis, the public sequencer and admission (§4.10, §5.1, §5.2).
 //! Phase 4.3 surface: release certificates, persist, emit, consume receipts and
 //! operation ownership (§4.11, §5.3).
+//! Phase 4.4a surface: read revocation, the repair plan, repair commits, confirmation
+//! and the full-adapter grant rules (§4.12, §5.4, the read part of §5.5).
 //! The kernel stays key-free; only this adapter calls `Authority::execute`.
 
 use std::fs::{File, OpenOptions};
@@ -31,8 +33,9 @@ use crate::client::{
 };
 use crate::wire::{
     AccContext, AckKind, AdmissionCertificate, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
-    Envelope, FounderCertificate, Frontier, ReleaseCertificate, Right, SignedStructure,
-    ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
+    Envelope, FounderCertificate, Frontier, ReleaseCertificate, RepairConfirmation, Right,
+    SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
+    AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
 /// Domain-separation label of `RequestTBS` (§4.8).
@@ -67,6 +70,9 @@ const CONTENT_COMMANDS: [&str; 5] = ["release", "persist", "emit", "consume", "a
 /// Adapter flows `handle` routes in phase 4.2 (C-10); they are not kernel commands.
 const CERTIFICATE_FLOW: &str = "admission_certificate";
 const SUBMIT_FLOW: &str = "submit_commit";
+/// Adapter flows `handle` routes in phase 4.4a (C-20, C-23).
+const REPAIR_PLAN_FLOW: &str = "repair_plan";
+const CONFIRM_FLOW: &str = "confirm_repair";
 /// The sequencer's OpenMLS storage inside a full adapter directory (C-8).
 const SEQUENCER_FILE: &str = "sequencer.sqlite";
 /// Longest accepted hex string for a KeyPackage preimage or a commit (1 MiB of bytes).
@@ -295,6 +301,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let store = open_store(&paths.adapter, false)?;
         // Stores written before phase 4.3 gain the operations table (C-17).
         store.execute_batch(OPERATIONS_TABLE).map_err(db)?;
+        // Stores written before phase 4.4a gain the repair tables (C-22, C-23).
+        store.execute_batch(REPAIR_TABLES).map_err(db)?;
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -490,11 +498,29 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 let outcome = self.issue_certificate(actor, &preimage);
                 (Some(command), outcome.map(|value| (value, Effect::None)))
             }
-            Ok((command, Routed::Submit(parent, commit))) => {
+            Ok((command, Routed::Submit(AckKind::Repair, parent, commit))) => {
+                let outcome = self.sequence_repair(actor, &parent, &commit);
+                (
+                    Some(command),
+                    outcome.map(|(value, record)| (value, Effect::RepairStaged(record))),
+                )
+            }
+            Ok((command, Routed::Submit(_, parent, commit))) => {
                 let outcome = self.sequence_commit(actor, &parent, &commit);
                 (
                     Some(command),
                     outcome.map(|(value, record)| (value, Effect::Admitted(record))),
+                )
+            }
+            Ok((command, Routed::RepairPlan)) => {
+                let outcome = self.repair_plan(actor);
+                (Some(command), outcome.map(|value| (value, Effect::None)))
+            }
+            Ok((command, Routed::Confirm(confirmation))) => {
+                let outcome = self.confirm_repair(actor, &confirmation);
+                (
+                    Some(command),
+                    outcome.map(|(value, record)| (value, Effect::Confirmed(record))),
                 )
             }
         };
@@ -530,6 +556,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                                 params![op, envelope],
                             )?;
                         }
+                        Effect::RepairStaged(record) => insert_repair(&self.store, record)?,
+                        Effect::Confirmed(record) => insert_confirmation(&self.store, record)?,
                     }
                     append_trace(
                         &self.store,
@@ -584,15 +612,27 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if RESERVED.iter().any(|field| fields.contains_key(*field)) {
             return Err(malformed(cmd, "reserved field"));
         }
-        // C-10 and C-11 step 1: adapter flows exist only on a full adapter.
-        if command == CERTIFICATE_FLOW || command == SUBMIT_FLOW {
+        // C-10, C-11 step 1, C-20, C-22 step 1 and C-23: adapter flows exist only on a
+        // full adapter.
+        if [
+            CERTIFICATE_FLOW,
+            SUBMIT_FLOW,
+            REPAIR_PLAN_FLOW,
+            CONFIRM_FLOW,
+        ]
+        .contains(&command.as_str())
+        {
             if self.sequencer.is_none() {
                 return Err((Some(command), "uninitialized: no group".into()));
             }
-            let routed = if command == CERTIFICATE_FLOW {
-                parse_certificate_body(&fields).map(Routed::Certificate)
-            } else {
-                parse_submit_body(&fields).map(|(parent, commit)| Routed::Submit(parent, commit))
+            let routed = match command.as_str() {
+                CERTIFICATE_FLOW => parse_certificate_body(&fields).map(Routed::Certificate),
+                SUBMIT_FLOW => parse_submit_body(&fields)
+                    .map(|(kind, parent, commit)| Routed::Submit(kind, parent, commit)),
+                REPAIR_PLAN_FLOW => only_fields(&fields, &["command"]).map(|()| Routed::RepairPlan),
+                _ => only_fields(&fields, &["command", "confirmation"])
+                    .and_then(|()| lower_hex_field(&fields, "confirmation"))
+                    .map(Routed::Confirm),
             };
             return routed
                 .map(|routed| (command.clone(), routed))
@@ -649,6 +689,21 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                     .map(|subject| (subject.to_owned(), key))
             }
         };
+
+        // C-25: on a full adapter a grant never reaches a current roster member, and the
+        // adapter, not the worker, sets `fresh_keys`. The evidence is the new KeyPackage
+        // certified at the new generation that admission (C-11) later requires.
+        if command == "grant" && self.sequencer.is_some() {
+            if let Some(subject) = fields.get("subject").and_then(Value::as_str) {
+                if self
+                    .roster_contains(subject)
+                    .map_err(|err| (Some(command.clone()), err))?
+                {
+                    return Err((Some(command), "unauthorized: requires rekey".into()));
+                }
+            }
+            fields.insert("fresh_keys".into(), json!(true));
+        }
 
         fields.insert("actor".into(), json!(actor));
         fields.insert("now".into(), json!(self.clock.now()));
@@ -911,7 +966,10 @@ fn init_store(
                  outcome TEXT NOT NULL);",
         )
         .map_err(db)?;
-    if let Err(err) = store.execute_batch(OPERATIONS_TABLE) {
+    if let Err(err) = store
+        .execute_batch(OPERATIONS_TABLE)
+        .and_then(|()| store.execute_batch(REPAIR_TABLES))
+    {
         let _ = store.execute_batch("ROLLBACK");
         return Err(db(err));
     }
@@ -994,8 +1052,13 @@ enum Routed {
     Kernel(Value, Option<(String, [u8; KEY_LEN])>),
     /// `admission_certificate` over these preimage bytes (C-10).
     Certificate(Vec<u8>),
-    /// `submit_commit` of these commit bytes on this parent frontier (C-10).
-    Submit(Frontier, Vec<u8>),
+    /// `submit_commit` of this kind, on this parent frontier, of these commit bytes
+    /// (C-10, C-22).
+    Submit(AckKind, Frontier, Vec<u8>),
+    /// `repair_plan {}` (C-20).
+    RepairPlan,
+    /// `confirm_repair` with these signed confirmation bytes (C-23).
+    Confirm(Vec<u8>),
     /// A content command whose body and ownership are already checked (C-16, C-17).
     Content(Content),
 }
@@ -1011,6 +1074,10 @@ enum Effect {
     Released(String, Vec<u8>),
     /// §6: the exact envelope bytes persisted for `op`.
     Persisted(String, Vec<u8>),
+    /// C-22 step 7: the pending repair and its committer.
+    RepairStaged(RepairRecord),
+    /// C-23: an accepted confirmation hash, and the evidence if it opened the fence.
+    Confirmed(ConfirmationRecord),
 }
 
 /// A founder or admission certificate retained for audit, indexed by the leaf signature
@@ -1029,17 +1096,20 @@ fn parse_certificate_body(fields: &serde_json::Map<String, Value>) -> Result<Vec
     lower_hex_field(fields, "key_package_preimage")
 }
 
-/// `submit_commit {kind: "admit", parent_epoch, parent_branch, commit}` (C-10).
+/// `submit_commit {kind: "admit" | "repair", parent_epoch, parent_branch, commit}`
+/// (C-10, C-22).
 fn parse_submit_body(
     fields: &serde_json::Map<String, Value>,
-) -> Result<(Frontier, Vec<u8>), String> {
+) -> Result<(AckKind, Frontier, Vec<u8>), String> {
     only_fields(
         fields,
         &["command", "kind", "parent_epoch", "parent_branch", "commit"],
     )?;
-    if fields.get("kind").and_then(Value::as_str) != Some("admit") {
-        return Err("malformed: kind".into());
-    }
+    let kind = match fields.get("kind").and_then(Value::as_str) {
+        Some("admit") => AckKind::Admit,
+        Some("repair") => AckKind::Repair,
+        _ => return Err("malformed: kind".into()),
+    };
     let epoch = fields
         .get("parent_epoch")
         .and_then(Value::as_u64)
@@ -1051,7 +1121,7 @@ fn parse_submit_body(
         _ => return Err("malformed: parent_branch".into()),
     };
     let commit = lower_hex_field(fields, "commit")?;
-    Ok((Frontier { epoch, branch }, commit))
+    Ok((kind, Frontier { epoch, branch }, commit))
 }
 
 fn only_fields(fields: &serde_json::Map<String, Value>, allowed: &[&str]) -> Result<(), String> {
@@ -1241,6 +1311,33 @@ impl Sequencer {
         actor: &str,
         actor_key: &[u8],
     ) -> Result<(StagedCommit, KeyPackage), String> {
+        let (staged, sender) = self.process_commit(crypto, commit, actor, actor_key)?;
+
+        // Step 4: exactly one Add and nothing else, with an UpdatePath.
+        let proposals: Vec<&QueuedProposal> = staged.queued_proposals().collect();
+        if proposals.len() != 1 || !matches!(proposals[0].proposal(), Proposal::Add(_)) {
+            return Err(noncanonical("proposals"));
+        }
+        check_path_leaf(&staged, &sender)?;
+        let key_package = staged
+            .add_proposals()
+            .next()
+            .map(|add| add.add_proposal().key_package().clone())
+            .ok_or_else(|| noncanonical("no Add"))?;
+        Ok((staged, key_package))
+    }
+
+    /// C-11 and C-22 steps 2-3: the commit is a `PublicMessage` commit for this group and
+    /// epoch that `PublicGroup::process_message` accepts, and its sender leaf is the
+    /// authenticated actor under its registered key. Nothing is merged or written.
+    /// Returns the staged commit and the sender's parent-epoch leaf.
+    fn process_commit(
+        &self,
+        crypto: &impl OpenMlsCrypto,
+        commit: &[u8],
+        actor: &str,
+        actor_key: &[u8],
+    ) -> Result<(StagedCommit, LeafNode), String> {
         // Step 2: a PublicMessage commit for this group and epoch that OpenMLS accepts.
         let message = MlsMessageIn::tls_deserialize_exact(commit)
             .map_err(|_| noncanonical("commit encoding"))?;
@@ -1273,32 +1370,11 @@ impl Sequencer {
         {
             return Err(noncanonical("sender is not the actor"));
         }
+        let sender = sender.clone();
         let ProcessedMessageContent::StagedCommitMessage(staged) = processed.into_content() else {
             return Err(noncanonical("not a commit"));
         };
-
-        // Step 4: exactly one Add and nothing else, with an UpdatePath. The path leaf
-        // keeps the sender's credential, key and extensions, so a commit cannot relabel
-        // the committer's own authz_incarnation.
-        let proposals: Vec<&QueuedProposal> = staged.queued_proposals().collect();
-        if proposals.len() != 1 || !matches!(proposals[0].proposal(), Proposal::Add(_)) {
-            return Err(noncanonical("proposals"));
-        }
-        let path_leaf = staged
-            .update_path_leaf_node()
-            .ok_or_else(|| noncanonical("no UpdatePath"))?;
-        if path_leaf.credential() != sender.credential()
-            || path_leaf.signature_key() != sender.signature_key()
-            || path_leaf.extensions() != sender.extensions()
-        {
-            return Err(noncanonical("UpdatePath leaf"));
-        }
-        let key_package = staged
-            .add_proposals()
-            .next()
-            .map(|add| add.add_proposal().key_package().clone())
-            .ok_or_else(|| noncanonical("no Add"))?;
-        Ok((*staged, key_package))
+        Ok((*staged, sender))
     }
 
     /// C-11 step 8: merges and persists in one sequencer transaction. On failure the
@@ -1321,6 +1397,22 @@ impl Sequencer {
         }
         Ok(())
     }
+}
+
+/// C-11 and C-22 step 4: the commit carries an UpdatePath, and the path leaf keeps the
+/// sender's credential, key and extensions, so a commit cannot relabel the committer's
+/// own `authz_incarnation`.
+fn check_path_leaf(staged: &StagedCommit, sender: &LeafNode) -> Result<(), String> {
+    let path_leaf = staged
+        .update_path_leaf_node()
+        .ok_or_else(|| noncanonical("no UpdatePath"))?;
+    if path_leaf.credential() != sender.credential()
+        || path_leaf.signature_key() != sender.signature_key()
+        || path_leaf.extensions() != sender.extensions()
+    {
+        return Err(noncanonical("UpdatePath leaf"));
+    }
+    Ok(())
 }
 
 fn parse_group_info(bytes: &[u8]) -> Result<VerifiableGroupInfo, String> {
@@ -2122,5 +2214,446 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             .optional()
             .map_err(db)?;
         Ok(row.flatten())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.4a: read revocation, repair plan, repair commits and confirmation
+// (C-20 to C-25, §5.4)
+// ---------------------------------------------------------------------------
+
+/// Repairs this adapter sequenced (C-22 step 7) and the confirmation hashes it accepted
+/// for each (C-23). `evidence` is null while the repair is pending, then `pair` or
+/// `single`. No key material and no epoch authenticator: only its hash.
+const REPAIR_TABLES: &str = "CREATE TABLE IF NOT EXISTS adapter_repairs (
+     branch TEXT PRIMARY KEY,
+     epoch TEXT NOT NULL,
+     parent_epoch TEXT NOT NULL,
+     parent_branch TEXT NOT NULL,
+     committer TEXT NOT NULL,
+     removed TEXT NOT NULL,
+     commit_hash BLOB NOT NULL,
+     evidence TEXT);
+ CREATE TABLE IF NOT EXISTS adapter_confirmations (
+     branch TEXT NOT NULL,
+     actor TEXT NOT NULL,
+     hash BLOB NOT NULL,
+     PRIMARY KEY (branch, actor));";
+
+/// Evidence reported when the fence opens (C-23).
+const PAIR: &str = "pair";
+const SINGLE: &str = "single";
+
+/// A canonical repair commit and its committer (C-22 step 7).
+struct RepairRecord {
+    successor: Frontier,
+    parent: Frontier,
+    committer: String,
+    /// JSON array of the removed subjects.
+    removed: String,
+    commit_hash: Vec<u8>,
+}
+
+/// One accepted confirmation (C-23), and the evidence if it opened the fence.
+struct ConfirmationRecord {
+    branch: String,
+    actor: String,
+    hash: Vec<u8>,
+    evidence: Option<&'static str>,
+}
+
+fn insert_repair(store: &Connection, record: &RepairRecord) -> rusqlite::Result<()> {
+    store.execute(
+        "INSERT INTO adapter_repairs(branch, epoch, parent_epoch, parent_branch, committer,
+                                     removed, commit_hash)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            record.successor.branch,
+            record.successor.epoch.to_string(),
+            record.parent.epoch.to_string(),
+            record.parent.branch,
+            record.committer,
+            record.removed,
+            record.commit_hash
+        ],
+    )?;
+    Ok(())
+}
+
+/// Stores the actor's hash (an equal repeat is idempotent) and, if the fence opened, the
+/// evidence on the repair record.
+fn insert_confirmation(store: &Connection, record: &ConfirmationRecord) -> rusqlite::Result<()> {
+    store.execute(
+        "INSERT INTO adapter_confirmations(branch, actor, hash) VALUES (?1, ?2, ?3)
+         ON CONFLICT(branch, actor) DO NOTHING",
+        params![record.branch, record.actor, record.hash],
+    )?;
+    if let Some(evidence) = record.evidence {
+        store.execute(
+            "UPDATE adapter_repairs SET evidence = ?2 WHERE branch = ?1 AND evidence IS NULL",
+            params![record.branch, evidence],
+        )?;
+    }
+    Ok(())
+}
+
+/// The C-20 repair plan, derived from one kernel checkpoint.
+struct RepairPlan {
+    /// Sorted roster members whose read grant is inactive.
+    removed: Vec<String>,
+    /// The planned `acc_context` payload at the current policy revision and digest.
+    acc_context: Vec<u8>,
+    policy_revision: u64,
+    parent: Frontier,
+    roster: Vec<String>,
+}
+
+/// The kernel roster of a checkpoint.
+fn checkpoint_roster(checkpoint: &Value) -> Result<Vec<String>, String> {
+    checkpoint["roster"]
+        .as_array()
+        .ok_or("malformed: kernel roster")?
+        .iter()
+        .map(|name| {
+            name.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "malformed: kernel roster".to_string())
+        })
+        .collect()
+}
+
+impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
+    fn kernel_checkpoint(&mut self) -> Result<Value, String> {
+        self.kernel.execute(json!({"command":"checkpoint"}))
+    }
+
+    /// C-25: whether `subject` is a current roster member.
+    fn roster_contains(&mut self, subject: &str) -> Result<bool, String> {
+        let checkpoint = self.kernel_checkpoint()?;
+        Ok(checkpoint_roster(&checkpoint)?.iter().any(|m| m == subject))
+    }
+
+    /// C-20: the plan exists only while the kernel is read-fenced with no repair pending.
+    fn plan_from(&self, checkpoint: &Value) -> Result<RepairPlan, String> {
+        if checkpoint["read_fenced"] != json!(true) {
+            return Err("invalid_repair: not read-fenced".into());
+        }
+        if !checkpoint["repair_pending"].is_null() {
+            return Err("invalid_repair: repair pending".into());
+        }
+        let roster = checkpoint_roster(checkpoint)?;
+        let grants = checkpoint["grants"]
+            .as_array()
+            .ok_or("malformed: kernel grants")?;
+        let read_active = |subject: &str| {
+            grants.iter().any(|g| {
+                g["subject"] == json!(subject)
+                    && g["right"] == json!("read")
+                    && g["active"] == json!(true)
+            })
+        };
+        let mut removed: Vec<String> = roster
+            .iter()
+            .filter(|member| !read_active(member))
+            .cloned()
+            .collect();
+        removed.sort();
+        if removed.is_empty() {
+            return Err("invalid_repair: no reader to remove".into());
+        }
+        let policy_revision = checkpoint["policy_revision"]
+            .as_u64()
+            .ok_or("malformed: kernel policy_revision")?;
+        let policy_digest = checkpoint["policy_digest"]
+            .as_str()
+            .and_then(|digest| hex::decode(digest).ok())
+            .ok_or("malformed: kernel policy_digest")?;
+        let acc_context = AccContext {
+            version: 1,
+            apf_key_id: self.apf_key_id(),
+            group: self.group.clone(),
+            policy_revision,
+            policy_digest,
+        }
+        .encode()?;
+        Ok(RepairPlan {
+            removed,
+            acc_context,
+            policy_revision,
+            parent: checkpoint_frontier(checkpoint)?,
+            roster,
+        })
+    }
+
+    /// C-20 `repair_plan {}`, for a current roster member. It changes nothing.
+    fn repair_plan(&mut self, actor: &str) -> Result<Value, String> {
+        let checkpoint = self.kernel_checkpoint()?;
+        if !checkpoint_roster(&checkpoint)?.iter().any(|m| m == actor) {
+            return Err("unauthorized: not a roster member".into());
+        }
+        let plan = self.plan_from(&checkpoint)?;
+        Ok(json!({
+            "removed": plan.removed,
+            "acc_context": hex::encode(&plan.acc_context),
+            "policy_revision": plan.policy_revision,
+            "parent_epoch": plan.parent.epoch,
+            "parent_branch": plan.parent.branch,
+        }))
+    }
+
+    /// C-22 `submit_commit {kind: "repair"}` with its checks in order. Steps 1-5 change
+    /// neither the sequencer nor the kernel on failure: the commit is staged on the
+    /// in-memory `PublicGroup` and merged only after kernel `repair_stage` has committed.
+    fn sequence_repair(
+        &mut self,
+        actor: &str,
+        parent: &Frontier,
+        commit: &[u8],
+    ) -> Result<(Value, RepairRecord), String> {
+        // Step 1 (the group itself was checked in `prepare`).
+        let checkpoint = self.kernel_checkpoint()?;
+        let current = checkpoint_frontier(&checkpoint)?;
+        if *parent != current {
+            return Err("stale_frontier".into());
+        }
+        let plan = self.plan_from(&checkpoint)?;
+        let actor_key = self
+            .registered_key(actor)?
+            .ok_or_else(|| noncanonical("actor key"))?;
+        let sequencer = self.sequencer.as_ref().ok_or("uninitialized: no group")?;
+
+        // Steps 2 and 3: OpenMLS accepts the commit and its sender is the actor's leaf
+        // under its registered key; the actor is a continuing member (C-21).
+        let (staged, sender) =
+            sequencer.process_commit(self.provider.crypto(), commit, actor, &actor_key)?;
+        if !plan.roster.iter().any(|m| m == actor) || plan.removed.iter().any(|m| m == actor) {
+            return Err(noncanonical("committer is not a continuing member"));
+        }
+
+        // Step 4: exactly one Remove per leaf of a removed subject, no other Remove,
+        // exactly one GroupContextExtensions proposal, nothing else, and an UpdatePath.
+        let mut expected = Vec::new();
+        for subject in &plan.removed {
+            let before = expected.len();
+            expected.extend(
+                sequencer
+                    .group
+                    .members()
+                    .filter(|member| {
+                        credential_identity(&member.credential).as_deref()
+                            == Some(subject.as_bytes())
+                    })
+                    .map(|member| member.index.u32()),
+            );
+            if expected.len() == before {
+                return Err(noncanonical("removed subject has no leaf"));
+            }
+        }
+        expected.sort_unstable();
+        let mut removes = Vec::new();
+        let (mut extension_proposals, mut others) = (0usize, 0usize);
+        for queued in staged.queued_proposals() {
+            match queued.proposal() {
+                Proposal::Remove(remove) => removes.push(remove.removed().u32()),
+                Proposal::GroupContextExtensions(_) => extension_proposals += 1,
+                _ => others += 1,
+            }
+        }
+        removes.sort_unstable();
+        if removes != expected {
+            return Err(noncanonical("Remove set"));
+        }
+        if extension_proposals != 1 || others != 0 {
+            return Err(noncanonical("proposals"));
+        }
+        // Defense in depth: RFC 9420 §12.4.2 already requires the path for these proposals.
+        check_path_leaf(&staged, &sender)?;
+
+        // Step 5: the successor extensions are the parent's with exactly the acc_context
+        // replaced by the planned bytes.
+        let mut accs = 0;
+        let mut planned = Vec::new();
+        for extension in sequencer.group.group_context().extensions().iter() {
+            match extension {
+                Extension::Unknown(t, _) if *t == ACC_CONTEXT_EXTENSION_TYPE => {
+                    accs += 1;
+                    planned.push(Extension::Unknown(
+                        ACC_CONTEXT_EXTENSION_TYPE,
+                        UnknownExtension(plan.acc_context.clone()),
+                    ));
+                }
+                other => planned.push(other.clone()),
+            }
+        }
+        if accs != 1 {
+            return Err(noncanonical("parent acc_context count"));
+        }
+        let successor_extensions: Vec<Extension> = staged
+            .group_context()
+            .extensions()
+            .iter()
+            .cloned()
+            .collect();
+        if successor_extensions != planned {
+            return Err(noncanonical("successor GroupContext extensions"));
+        }
+
+        // Step 6: the kernel CAS; the Remove set and the path are proven above. Kernel
+        // errors pass through.
+        let successor = context_frontier(staged.group_context())?;
+        self.kernel.execute(json!({
+            "command":"repair_stage", "parent_branch":current.branch,
+            "new_branch":successor.branch, "epoch":successor.epoch,
+            "policy_revision":plan.policy_revision, "removed":plan.removed,
+            "update_path":true, "durable":true,
+        }))?;
+
+        // Step 7. A failure from here on leaves the kernel ahead of the sequencer or the
+        // adapter store; see the crash gaps in the phase report.
+        self.sequencer
+            .as_mut()
+            .ok_or("uninitialized: no group")?
+            .merge(staged)?;
+        let commit_hash = Sha256::digest(commit).to_vec();
+        let ack = CanonicalAck {
+            apf_key_id: self.apf_key_id(),
+            group: self.group.clone(),
+            parent: current.clone(),
+            successor: successor.clone(),
+            commit_hash: commit_hash.clone(),
+            kind: AckKind::Repair,
+        }
+        .sign(&self.apf)?;
+        let record = RepairRecord {
+            successor: successor.clone(),
+            parent: current,
+            committer: actor.to_owned(),
+            removed: serde_json::to_string(&plan.removed)
+                .map_err(|_| "malformed: removed".to_string())?,
+            commit_hash,
+        };
+        Ok((
+            json!({"epoch":successor.epoch, "branch":successor.branch, "ack":hex::encode(ack)}),
+            record,
+        ))
+    }
+
+    /// C-23 `confirm_repair {confirmation}`. A rejected confirmation is not stored.
+    ///
+    /// The committer's hash is the reference (§5.4 step 5). A non-committer's hash that
+    /// differs from it, or any actor's hash that differs from its own earlier one, is
+    /// `binding_mismatch`. The fence opens through kernel `repair_open` once the
+    /// committer's hash and an equal one from another continuing member are held, or on
+    /// the committer's alone when it is the only continuing member.
+    fn confirm_repair(
+        &mut self,
+        actor: &str,
+        bytes: &[u8],
+    ) -> Result<(Value, ConfirmationRecord), String> {
+        let checkpoint = self.kernel_checkpoint()?;
+        let pending = checkpoint["repair_pending"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or("invalid_repair: no pending repair")?;
+        let roster = checkpoint_roster(&checkpoint)?;
+        if !roster.iter().any(|m| m == actor) {
+            return Err("invalid_repair: not a roster member".into());
+        }
+        let key = self
+            .registered_key(actor)?
+            .ok_or_else(|| "unauthenticated".to_string())?;
+        let confirmation = RepairConfirmation::verify(bytes, &key, self.provider.crypto())
+            .map_err(|err| {
+                if err.starts_with("unauthenticated") {
+                    "unauthenticated".to_string()
+                } else {
+                    "malformed: confirmation".to_string()
+                }
+            })?;
+        if confirmation.group != self.group {
+            return Err("binding_mismatch: confirmation group".into());
+        }
+        let current = checkpoint_frontier(&checkpoint)?;
+        if confirmation.frontier != current || current.branch != pending {
+            return Err("invalid_repair: confirmation frontier".into());
+        }
+        let committer = self
+            .repair_committer(&pending)?
+            .ok_or("invalid_repair: no repair record")?;
+        let stored = self.confirmations(&pending)?;
+        let hash = confirmation.epoch_authenticator_hash;
+        let stored_hash = |member: &str| {
+            stored
+                .iter()
+                .find(|(who, _)| who == member)
+                .map(|(_, h)| h.clone())
+        };
+
+        if stored_hash(actor).is_some_and(|own| own != hash) {
+            return Err("binding_mismatch: changed confirmation".into());
+        }
+        let reference = if actor == committer {
+            Some(hash.clone())
+        } else {
+            let reference = stored_hash(&committer);
+            if reference.as_ref().is_some_and(|r| *r != hash) {
+                return Err("binding_mismatch: epoch_authenticator_hash".into());
+            }
+            reference
+        };
+        let evidence = reference.and_then(|reference| {
+            let others: Vec<&String> = roster.iter().filter(|m| **m != committer).collect();
+            if others.is_empty() && roster.contains(&committer) {
+                return Some(SINGLE);
+            }
+            others
+                .iter()
+                .any(|member| {
+                    if member.as_str() == actor {
+                        hash == reference
+                    } else {
+                        stored_hash(member).is_some_and(|h| h == reference)
+                    }
+                })
+                .then_some(PAIR)
+        });
+        if evidence.is_some() {
+            self.kernel.execute(json!({
+                "command":"repair_open", "branch":pending, "confirmed":true,
+            }))?;
+        }
+        Ok((
+            json!({"opened": evidence.is_some(), "evidence": evidence}),
+            ConfirmationRecord {
+                branch: pending,
+                actor: actor.to_owned(),
+                hash,
+                evidence,
+            },
+        ))
+    }
+
+    /// The committer recorded for the repair that produced `branch`.
+    fn repair_committer(&self, branch: &str) -> Result<Option<String>, String> {
+        self.store
+            .query_row(
+                "SELECT committer FROM adapter_repairs WHERE branch = ?1",
+                [branch],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)
+    }
+
+    /// The `(actor, hash)` confirmations accepted for `branch`.
+    fn confirmations(&self, branch: &str) -> Result<Vec<(String, Vec<u8>)>, String> {
+        let read = || -> rusqlite::Result<Vec<(String, Vec<u8>)>> {
+            let mut stmt = self.store.prepare(
+                "SELECT actor, hash FROM adapter_confirmations WHERE branch = ?1 ORDER BY actor",
+            )?;
+            let rows = stmt.query_map([branch], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            rows.collect()
+        };
+        read().map_err(db)
     }
 }

@@ -10,6 +10,8 @@ Phase 4.2 and the approved R-9 correction are complete. Phase 4.2 tests are in `
 
 Phase 4.3 is complete. Tests: `tests/adapter_release.rs`. Evidence: `evidence/adapter-release-red.txt` and `evidence/phase-4.3-green.txt`.
 
+Phase 4.4a is complete. Phase 4.4b is blocked on D-9 (R-10), and D-10 (read revocation during a pending repair) is open.
+
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
 **Architecture:** A new adapter (`src/adapter.rs`) owns the APF key, authenticates client requests, runs a public sequencer (`PublicGroup`), issues admission, release and canonical-ack certificates, and is the only caller of the key-free kernel. Clients are generic OpenMLS endpoints with their own keys and SQLite storage. A seeded in-process delivery simulator carries opaque bytes. Exported traces are checked by the independent Python oracle.
@@ -179,6 +181,11 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 
 ### Phase 4.4: Revocation, repair and the retained-key adversary
 
+This phase is split in two:
+- **4.4a (complete):** read revocation, repair, confirmation, the retained-key adversary and read rejoin. Tests: `tests/adapter_repair.rs`. Evidence: `evidence/adapter-repair-red.txt` and `evidence/phase-4.4a-green.txt`.
+- **4.4b (blocked on D-9, R-10 `rekey`):** non-read re-authorization of a current member through an update commit with a new signer. Until then such grants are refused (C-25).
+
+
 **Files:**
 - Modify: `src/adapter.rs`, `src/mls.rs` (implementer)
 - Create: `tests/adapter_repair.rs` (test author)
@@ -187,7 +194,7 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 - Consumes: kernel R-3, R-7 and D-3; contract §4.7, §5.4, §5.5.
 - Produces: designated-member repair commit, sequencer exact-removal and `acc_context` checks, canonical-but-fenced state, confirmation-gated reopening, local per-client fencing, and fresh-key reauthorization evidence.
 
-- [ ] Write the tests:
+- [x] Write the tests (4.4a; `reauthorized_writer_requires_update_with_new_signer` moves to 4.4b):
   - `api_only_revocation_lets_a_retained_endpoint_decrypt_new_traffic`. This is a named broken control: kernel revoke only, no MLS removal. The test asserts the unsafe decryption succeeds.
   - `read_revocation_fences_release_until_confirmed_repair`
   - `repair_missing_one_revoked_reader_is_noncanonical`
@@ -203,8 +210,9 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
   - `write_revocation_does_not_remove_an_authorized_reader`
   - `reauthorized_writer_requires_update_with_new_signer`
   - `reallowed_reader_rejoins_only_with_new_generation_key_package`
-- [ ] Run red and retain the evidence. The broken-control test is expected to pass from the start; that pass is its evidence.
-- [ ] Implement, then run green and the standard gate.
+- [x] Run red and retain the evidence. The broken-control test is expected to pass from the start; that pass is its evidence.
+- [x] Implement, then run green and the standard gate (4.4a).
+- [ ] 4.4b: once D-9 is decided, write `reauthorized_writer_requires_update_with_new_signer` and the R-10 kernel tests, run red, implement, run green.
 
 **Claim after 4.4:** Stage C is shown in executed schedules: real removal excludes retained state from successor traffic, and the fence opens only on confirmed, canonical, policy-bound repair. `Bridge_remove^ETK` stays open.
 
@@ -229,6 +237,10 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
     - a `release` leaves no stored certificate (B2), so even the owner cannot `abandon` it until adapter recovery exists;
     - a `consume` leaves no receipt (B5), so the delivery is lost.
   - Full envelopes still go to kernel `persist`, so history snapshots keep growing roughly quadratically. The adapter store already keeps the exact bytes, so the kernel could keep a digest instead; that would be a requirement correction.
+  - Phase 4.4a: if kernel `repair_stage` commits and the sequencer merge fails, `open` refuses with no recovery path.
+  - Phase 4.4a: if the store commit is lost after the kernel and the sequencer, the repair record is missing. Every confirmation is then `invalid_repair` and the fence stays closed for good. Fix: write a repair intent before the kernel call.
+  - Phase 4.4a: if the store commit is lost after `repair_open`, the fence is open but the confirmation evidence is missing.
+  - Phase 4.4a: `durable: true` is sent to `repair_stage` before the sequencer and store writes are durable.
   - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
 - [ ] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`
