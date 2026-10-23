@@ -217,6 +217,7 @@ impl Authority {
             "repair" => self.repair(&mut state, obj),
             "repair_stage" => self.repair_stage(&mut state, obj),
             "repair_open" => self.repair_open(&mut state, obj),
+            "rekey" => self.rekey(&mut state, obj),
             "subject_status" => subject_status(&state, obj),
             _ => Err("malformed: unknown command".into()),
         }
@@ -905,6 +906,81 @@ impl Authority {
         bump(s);
         self.save(s, "repair_open")?;
         Ok(json!({"epoch":s.epoch,"branch":s.branch}))
+    }
+
+    /// R-10 (D-9): adapter-only re-authorization of a current member's non-read right.
+    /// It applies the `grant` rules with `fresh_keys` true and advances the frontier by
+    /// CAS in the same transaction. The fresh keys are the adapter's checked new-signer
+    /// update commit; this kernel sees only its successor frontier.
+    fn rekey(
+        &mut self,
+        s: &mut State,
+        o: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        // Field validation precedes every semantic check (C-29).
+        let actor = req_id(o, "actor")?;
+        let subject = req_id(o, "subject")?;
+        let right = req_right(o, "right")?;
+        if right == "read" {
+            return Err("malformed: right".into());
+        }
+        let generation = req_u64(o, "generation")?;
+        let parent = req_id(o, "parent_branch")?;
+        let new = req_id(o, "new_branch")?;
+        let epoch = req_u64(o, "epoch")?;
+        let now = req_u64(o, "now")?;
+
+        // The `grant` checks with fresh_keys true.
+        if !effective(s, &actor, "admin", now) {
+            return Err("unauthorized".into());
+        }
+        match s
+            .grants
+            .iter()
+            .find(|g| g.subject == subject && g.right == right)
+        {
+            None if generation != 0 => return Err("invalid_generation".into()),
+            Some(g) if g.active || generation != g.generation.saturating_add(1) => {
+                return Err("invalid_generation".into());
+            }
+            _ => {}
+        }
+        // R-10 additions.
+        if !s.roster.contains(&subject) {
+            return Err("invalid_transition".into());
+        }
+        if s.read_fenced || s.repair_pending.is_some() {
+            return Err("read_fenced".into());
+        }
+        let next_epoch = s
+            .epoch
+            .checked_add(1)
+            .ok_or_else(|| "invalid_transition".to_string())?;
+        if parent != s.branch || epoch != next_epoch {
+            return Err("stale_frontier".into());
+        }
+        if new == parent {
+            return Err("invalid_transition".into());
+        }
+
+        match grant_mut(s, &subject, &right) {
+            Some(g) => {
+                g.generation = generation;
+                g.active = true;
+            }
+            None => s.grants.push(Grant {
+                subject,
+                right,
+                generation,
+                active: true,
+            }),
+        }
+        s.epoch = next_epoch;
+        s.branch = new;
+        bump(s);
+        bump_policy(s);
+        self.save(s, "rekey")?;
+        Ok(json!({"epoch":s.epoch,"branch":s.branch,"policy_revision":s.policy_revision}))
     }
 
     fn checkpoint(&self, s: &State) -> Result<Value, String> {

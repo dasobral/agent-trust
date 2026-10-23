@@ -1,5 +1,5 @@
 //! Client endpoint: one OpenMLS group member with its own keys and storage
-//! (`docs/adapter-contract.md` §5.1, §5.2, §5.3, §5.4, C-12, C-18, C-20 to C-24). Generic over the OpenMLS provider.
+//! (`docs/adapter-contract.md` §5.1, §5.2, §5.3, §5.4, C-12, C-18, C-20 to C-24, C-28). Generic over the OpenMLS provider.
 
 use openmls::extensions::ExtensionValidator;
 use openmls::prelude::*;
@@ -37,6 +37,9 @@ pub struct ClientEndpoint<P: OpenMlsProvider> {
     apf_public_key: Vec<u8>,
     /// Exact bytes of this member's own staged, unmerged commit.
     pending: Option<Vec<u8>>,
+    /// The new identity of a staged, unmerged rekey (C-28); it replaces `identity` only
+    /// when the matching update ack is applied.
+    pending_identity: Option<ClientIdentity>,
 }
 
 /// A commit staged by this member and not yet merged.
@@ -144,6 +147,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             subject: subject.to_owned(),
             apf_public_key: apf_public_key.to_vec(),
             pending: None,
+            pending_identity: None,
         })
     }
 
@@ -221,6 +225,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             .clear_pending_commit(self.provider.storage())
             .map_err(mls)?;
         self.pending = None;
+        self.pending_identity = None;
         Ok(())
     }
 
@@ -249,9 +254,18 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             if context_frontier(staged.group_context())? != ack.successor {
                 return Err("binding_mismatch: successor frontier".into());
             }
+            // C-28: an own rekey merges only under an update ack.
+            if self.pending_identity.is_some() && ack.kind != AckKind::Update {
+                return Err("binding_mismatch: rekey outside an update".into());
+            }
             self.group
                 .merge_pending_commit(&self.provider)
                 .map_err(mls)?;
+            // The merged leaf carries the new signature key: from now on this member
+            // signs with the new identity, and the old one is dropped.
+            if let Some(new_identity) = self.pending_identity.take() {
+                self.identity = new_identity;
+            }
         } else {
             let message = MlsMessageIn::tls_deserialize_exact(commit)
                 .map_err(|_| "binding_mismatch: commit encoding")?
@@ -297,7 +311,9 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
                 .merge_staged_commit(&self.provider, *staged)
                 .map_err(mls)?;
         }
+        // Merging any other canonical commit discards an own staged rekey.
         self.pending = None;
+        self.pending_identity = None;
         self.frontier()
     }
 
@@ -428,6 +444,7 @@ impl<P: OpenMlsProvider> JoinCandidate<P> {
             subject: self.subject,
             apf_public_key: self.apf_public_key,
             pending: None,
+            pending_identity: None,
         })
     }
 }
@@ -876,4 +893,89 @@ fn credential_identity(credential: &Credential) -> Option<Vec<u8>> {
     BasicCredential::try_from(credential.clone())
         .ok()
         .map(|basic| basic.identity().to_vec())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.4b: rekey of a current member (C-28, R-10)
+// ---------------------------------------------------------------------------
+
+/// An update commit with a new signer, staged by this member and not yet merged.
+#[derive(Clone, Debug)]
+pub struct StagedRekey {
+    /// Exact commit `MlsMessage` bytes to submit.
+    pub commit: Vec<u8>,
+    pub parent: Frontier,
+}
+
+impl<P: OpenMlsProvider> ClientEndpoint<P> {
+    /// Stages, without merging, a `self_update_with_new_signer` commit whose new leaf keeps
+    /// this member's credential identity, carries `new_identity`'s signature key and an
+    /// `authz_incarnation` with `rights` and the existing `admission_cert_hash` (C-28).
+    /// After the matching ack is applied, `identity()` is `new_identity`.
+    ///
+    /// The commit has no proposals and carries an UpdatePath; it is signed by the current
+    /// key, and its new leaf by the new key. The client does not check the rights against
+    /// any policy: the sequencer is the gate (C-28 step 5).
+    pub fn stage_rekey(
+        &mut self,
+        new_identity: ClientIdentity,
+        rights: &[(Right, u64)],
+    ) -> Result<StagedRekey, String> {
+        let rights = sorted_rights(rights)?;
+        let own = self
+            .group
+            .own_leaf_node()
+            .ok_or("binding_mismatch: own leaf")?
+            .clone();
+        let incarnations = unknown_payloads(own.extensions(), AUTHZ_INCARNATION_EXTENSION_TYPE);
+        let [previous] = incarnations.as_slice() else {
+            return Err("binding_mismatch: authz_incarnation count".into());
+        };
+        let previous = AuthzIncarnation::decode(previous)
+            .map_err(|_| "binding_mismatch: authz_incarnation encoding")?;
+        let incarnation = AuthzIncarnation {
+            version: 1,
+            subject: self.subject.clone(),
+            rights,
+            admission_cert_hash: previous.admission_cert_hash,
+        }
+        .encode()?;
+
+        // Every other leaf extension and the capabilities stay as they are.
+        let extensions: Vec<Extension> = own
+            .extensions()
+            .iter()
+            .map(|extension| match extension {
+                Extension::Unknown(t, _) if *t == AUTHZ_INCARNATION_EXTENSION_TYPE => {
+                    Extension::Unknown(
+                        AUTHZ_INCARNATION_EXTENSION_TYPE,
+                        UnknownExtension(incarnation.clone()),
+                    )
+                }
+                other => other.clone(),
+            })
+            .collect();
+        let parameters = LeafNodeParameters::builder()
+            .with_capabilities(own.capabilities().clone())
+            .with_extensions(Extensions::from_vec(extensions).map_err(mls)?)
+            .build();
+
+        let parent = self.frontier()?;
+        let bundle = self
+            .group
+            .self_update_with_new_signer(
+                &self.provider,
+                self.identity.signer(),
+                NewSignerBundle {
+                    signer: new_identity.signer(),
+                    credential_with_key: credential(&self.subject, &new_identity),
+                },
+                parameters,
+            )
+            .map_err(mls)?;
+        let commit = bundle.commit().tls_serialize_detached().map_err(mls)?;
+        self.pending = Some(commit.clone());
+        self.pending_identity = Some(new_identity);
+        Ok(StagedRekey { commit, parent })
+    }
 }

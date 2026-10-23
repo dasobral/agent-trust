@@ -406,6 +406,16 @@ These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-r
     6. The adapter calls kernel `rekey` (R-10) with the offer's admin as `actor`. Kernel errors pass through, and the offer stays pending.
     7. The sequencer merges. The subject's registered key is replaced by the new key, so the old key no longer authenticates. The offer is cleared, and the adapter signs an ack with `kind` = update and returns `{epoch, branch, ack}`.
   - **Client.** After applying its own ack, the subject's `identity()` is the new identity.
+- **C-29, resolved while authoring the phase 4.4b tests.**
+  - `rekey` joins the adapter-only commands (C-3), so a worker request for it is `unauthorized`.
+  - The kernel `rekey` validates `right` as a field before any semantic check, so `read` is `malformed`.
+  - A rekey offer can only re-authorize a right that the kernel's chain check allows. A delegated member is limited to the rights its delegation names, and those already exist at generation 0. A new right at generation 0 is therefore meaningful only for a subject with direct root-anchored grants.
+  - The offer response is exactly `{pending: true}`, with one trace event whose outcome is `ok`.
+- **C-30, resolved during the phase 4.4b implementation.** Both rules are stricter than C-28 and close a real gap.
+  - **Offer prechecks.** At offer time, the adapter requires the offering actor to hold an effective `admin` right (`unauthorized`) and the generation to follow the grant rule (`invalid_generation`). It checks this through a read-only `subject_status`. Without it, any authenticated worker could overwrite an admin's pending offer. The kernel repeats both checks at `rekey`.
+  - **Offer body.** The body may contain only `command`, `subject`, `right`, `generation` and an optional boolean `fresh_keys`, which is ignored.
+  - **A "new" key.** A key is new only if it is not currently registered and has never been a leaf key of this group, so a retired key cannot come back. The path leaf's other extensions must be unchanged.
+  - **Rotation.** The subject's registered key changes in the same store transaction as the trace event. The retained admission certificate is re-indexed under the new leaf key.
 - **C-26, resolved during the phase 4.4a implementation.**
   - **`repair_plan`:** from an actor that is not a roster member it is `unauthorized`. On a policy-only adapter, `repair_plan` and `confirm_repair` are `uninitialized`. A plan that would remove nobody is `invalid_repair`.
   - **Removed member applying the repair ack:** OpenMLS stops the removed member's processing before the confirmed transcript hash. The client therefore accepts its own removal only under an ack of `kind` = repair, and recomputes the successor frontier through its public group, as the sequencer does, before it merges into the inactive state.

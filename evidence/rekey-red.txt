@@ -1,0 +1,142 @@
+# Phase 4.4b rekey (R-10) — RED (kernel without rekey; adapter refuses member grants per C-25; stage_rekey skeleton)
+# date: 2026-10-23T20:31:17Z
+# source revision: 0d52bba6ef5ac6b2133d3d12f4c12e9b0cae1a1b + uncommitted 4.4b skeleton, tests and A-3 edit
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --no-fail-fast --test adapter_rekey --test authority_rekey_contract --test adapter_repair
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/adapter_rekey.rs (target/debug/deps/adapter_rekey-ba3b7580b0946cdb)
+
+running 8 tests
+test old_key_no_longer_authenticates_after_rekey ... FAILED
+test update_commit_with_proposals_is_noncanonical ... FAILED
+test update_commit_without_offer_is_unauthorized ... FAILED
+test rekey_while_fenced_is_read_fenced ... FAILED
+test update_commit_with_wrong_incarnation_is_noncanonical ... FAILED
+test update_commit_reusing_old_signature_key_is_noncanonical ... FAILED
+test reauthorized_writer_requires_update_with_new_signer ... FAILED
+test new_right_for_current_member_via_rekey ... FAILED
+
+failures:
+
+---- old_key_no_longer_authenticates_after_rekey stdout ----
+
+thread 'old_key_no_longer_authenticates_after_rekey' (386122) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- update_commit_with_proposals_is_noncanonical stdout ----
+
+thread 'update_commit_with_proposals_is_noncanonical' (386126) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+
+---- update_commit_without_offer_is_unauthorized stdout ----
+
+thread 'update_commit_without_offer_is_unauthorized' (386128) panicked at tests/common/mod.rs:245:5:
+expected unauthorized, got malformed: unknown command
+
+---- rekey_while_fenced_is_read_fenced stdout ----
+
+thread 'rekey_while_fenced_is_read_fenced' (386124) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+
+---- update_commit_with_wrong_incarnation_is_noncanonical stdout ----
+
+thread 'update_commit_with_wrong_incarnation_is_noncanonical' (386127) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+
+---- update_commit_reusing_old_signature_key_is_noncanonical stdout ----
+
+thread 'update_commit_reusing_old_signature_key_is_noncanonical' (386125) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+
+---- reauthorized_writer_requires_update_with_new_signer stdout ----
+
+thread 'reauthorized_writer_requires_update_with_new_signer' (386123) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":1,"right":"write","subject":"bob"} should succeed, got unauthorized: requires rekey
+
+---- new_right_for_current_member_via_rekey stdout ----
+
+thread 'new_right_for_current_member_via_rekey' (386121) panicked at tests/adapter_rekey.rs:557:35:
+root request {"command":"grant","fresh_keys":true,"generation":0,"right":"admin","subject":"frank"} should succeed, got unauthorized: requires rekey
+
+
+failures:
+    new_right_for_current_member_via_rekey
+    old_key_no_longer_authenticates_after_rekey
+    reauthorized_writer_requires_update_with_new_signer
+    rekey_while_fenced_is_read_fenced
+    update_commit_reusing_old_signature_key_is_noncanonical
+    update_commit_with_proposals_is_noncanonical
+    update_commit_with_wrong_incarnation_is_noncanonical
+    update_commit_without_offer_is_unauthorized
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+error: test failed, to rerun pass `--test adapter_rekey`
+     Running tests/adapter_repair.rs (target/debug/deps/adapter_repair-afbdc3ab24de615b)
+
+running 15 tests
+test grant_to_a_current_member_requires_rekey ... FAILED
+test repair_without_acc_context_update_is_noncanonical ... ok
+test repair_removing_a_continuing_reader_is_noncanonical ... ok
+test repair_with_policy_revision_older_than_fence_is_noncanonical ... ok
+test write_revocation_does_not_remove_an_authorized_reader ... ok
+test repair_missing_one_revoked_reader_is_noncanonical ... ok
+test repair_without_update_path_is_noncanonical ... ok
+test api_only_revocation_lets_a_retained_endpoint_decrypt_new_traffic ... ok
+test offline_client_stays_locally_fenced_without_blocking_others ... ok
+test inconsistent_confirmation_hash_keeps_fence_closed ... ok
+test reallowed_reader_rejoins_only_with_new_generation_key_package ... ok
+test canonical_repair_stays_fenced_until_confirmation ... ok
+test removed_endpoint_storage_copy_cannot_decrypt_successor_traffic ... ok
+test read_revocation_fences_release_until_confirmed_repair ... ok
+test continuing_members_send_and_deliver_after_repair ... ok
+
+failures:
+
+---- grant_to_a_current_member_requires_rekey stdout ----
+
+thread 'grant_to_a_current_member_requires_rekey' (386157) panicked at tests/adapter_repair.rs:642:35:
+root request {"command":"grant","fresh_keys":true,"generation":0,"right":"admin","subject":"bob"} should succeed, got unauthorized: requires rekey
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    grant_to_a_current_member_requires_rekey
+
+test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.71s
+
+error: test failed, to rerun pass `--test adapter_repair`
+     Running tests/authority_rekey_contract.rs (target/debug/deps/authority_rekey_contract-0fba1d6c5e5c1c2b)
+
+running 2 tests
+test rekey_applies_grant_and_advances_frontier_atomically ... FAILED
+test rekey_rejects_invalid_requests_without_mutation ... FAILED
+
+failures:
+
+---- rekey_applies_grant_and_advances_frontier_atomically stdout ----
+
+thread 'rekey_applies_grant_and_advances_frontier_atomically' (386204) panicked at tests/authority_rekey_contract.rs:54:35:
+{"actor":"root","command":"rekey","epoch":2,"generation":1,"new_branch":"b2","now":100,"parent_branch":"b1","right":"write","subject":"bob"} should succeed, got malformed: unknown command
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- rekey_rejects_invalid_requests_without_mutation stdout ----
+
+thread 'rekey_rejects_invalid_requests_without_mutation' (386205) panicked at tests/authority_rekey_contract.rs:54:35:
+{"actor":"root","command":"rekey","epoch":3,"generation":1,"new_branch":"b3","now":100,"parent_branch":"b2","right":"write","subject":"bob"} should succeed, got malformed: unknown command
+
+
+failures:
+    rekey_applies_grant_and_advances_frontier_atomically
+    rekey_rejects_invalid_requests_without_mutation
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--test authority_rekey_contract`
+error: 3 targets failed:
+    `--test adapter_rekey`
+    `--test adapter_repair`
+    `--test authority_rekey_contract`
+# exit: 101

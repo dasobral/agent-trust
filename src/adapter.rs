@@ -7,6 +7,8 @@
 //! operation ownership (§4.11, §5.3).
 //! Phase 4.4a surface: read revocation, the repair plan, repair commits, confirmation
 //! and the full-adapter grant rules (§4.12, §5.4, the read part of §5.5).
+//! Phase 4.4b surface: rekey offers, update commits and key rotation for current members
+//! (C-28, C-29, the non-read part of §5.5).
 //! The kernel stays key-free; only this adapter calls `Authority::execute`.
 
 use std::fs::{File, OpenOptions};
@@ -55,13 +57,14 @@ const SIDECARS: [&str; 3] = ["-wal", "-shm", "-journal"];
 const RESERVED: [&str; 2] = ["actor", "now"];
 /// Commands `handle` routes to the kernel in phase 4.1 (C-3).
 const ROUTED: [&str; 5] = ["grant", "delegate", "revoke", "invoke", "allocate"];
-/// Kernel commands only the adapter itself may issue (C-3, C-7).
-const ADAPTER_ONLY: [&str; 6] = [
+/// Kernel commands only the adapter itself may issue (C-3, C-7, C-29).
+const ADAPTER_ONLY: [&str; 7] = [
     "init",
     "admit",
     "repair",
     "repair_stage",
     "repair_open",
+    "rekey",
     "subject_status",
 ];
 /// Content commands routed from phase 4.3 on (C-16); a policy-only adapter (C-8) has no
@@ -303,6 +306,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         store.execute_batch(OPERATIONS_TABLE).map_err(db)?;
         // Stores written before phase 4.4a gain the repair tables (C-22, C-23).
         store.execute_batch(REPAIR_TABLES).map_err(db)?;
+        // Stores written before phase 4.4b gain the offers table (C-28).
+        store.execute_batch(OFFERS_TABLE).map_err(db)?;
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -498,6 +503,20 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 let outcome = self.issue_certificate(actor, &preimage);
                 (Some(command), outcome.map(|value| (value, Effect::None)))
             }
+            Ok((command, Routed::Offer(offer))) => {
+                let outcome = self.check_offer(actor, &offer);
+                (
+                    Some(command),
+                    outcome.map(|()| (json!({"pending": true}), Effect::Offered(offer))),
+                )
+            }
+            Ok((command, Routed::Submit(AckKind::Update, parent, commit))) => {
+                let outcome = self.sequence_update(actor, &parent, &commit);
+                (
+                    Some(command),
+                    outcome.map(|(value, record)| (value, Effect::Rekeyed(record))),
+                )
+            }
             Ok((command, Routed::Submit(AckKind::Repair, parent, commit))) => {
                 let outcome = self.sequence_repair(actor, &parent, &commit);
                 (
@@ -558,6 +577,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                         }
                         Effect::RepairStaged(record) => insert_repair(&self.store, record)?,
                         Effect::Confirmed(record) => insert_confirmation(&self.store, record)?,
+                        Effect::Offered(offer) => insert_offer(&self.store, offer)?,
+                        Effect::Rekeyed(record) => rotate_key(&self.store, record)?,
                     }
                     append_trace(
                         &self.store,
@@ -690,16 +711,19 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             }
         };
 
-        // C-25: on a full adapter a grant never reaches a current roster member, and the
-        // adapter, not the worker, sets `fresh_keys`. The evidence is the new KeyPackage
-        // certified at the new generation that admission (C-11) later requires.
+        // C-25 as amended by C-28: on a full adapter a grant never reaches the kernel for
+        // a current roster member; it becomes a pending rekey offer. For any other subject
+        // the adapter, not the worker, sets `fresh_keys`. The evidence is the new
+        // KeyPackage certified at the new generation that admission (C-11) later requires.
         if command == "grant" && self.sequencer.is_some() {
             if let Some(subject) = fields.get("subject").and_then(Value::as_str) {
                 if self
                     .roster_contains(subject)
                     .map_err(|err| (Some(command.clone()), err))?
                 {
-                    return Err((Some(command), "unauthorized: requires rekey".into()));
+                    return parse_offer(actor, subject, &fields)
+                        .map(|offer| (command.clone(), Routed::Offer(offer)))
+                        .map_err(|err| (Some(command), err));
                 }
             }
             fields.insert("fresh_keys".into(), json!(true));
@@ -969,6 +993,7 @@ fn init_store(
     if let Err(err) = store
         .execute_batch(OPERATIONS_TABLE)
         .and_then(|()| store.execute_batch(REPAIR_TABLES))
+        .and_then(|()| store.execute_batch(OFFERS_TABLE))
     {
         let _ = store.execute_batch("ROLLBACK");
         return Err(db(err));
@@ -1057,6 +1082,8 @@ enum Routed {
     Submit(AckKind, Frontier, Vec<u8>),
     /// `repair_plan {}` (C-20).
     RepairPlan,
+    /// A grant to a current roster member, recorded as a pending rekey offer (C-28).
+    Offer(Offer),
     /// `confirm_repair` with these signed confirmation bytes (C-23).
     Confirm(Vec<u8>),
     /// A content command whose body and ownership are already checked (C-16, C-17).
@@ -1078,6 +1105,10 @@ enum Effect {
     RepairStaged(RepairRecord),
     /// C-23: an accepted confirmation hash, and the evidence if it opened the fence.
     Confirmed(ConfirmationRecord),
+    /// C-28: a pending offer that replaces any older one for its subject.
+    Offered(Offer),
+    /// C-28 step 7: the subject's rotated key and its cleared offer.
+    Rekeyed(RekeyRecord),
 }
 
 /// A founder or admission certificate retained for audit, indexed by the leaf signature
@@ -1096,8 +1127,8 @@ fn parse_certificate_body(fields: &serde_json::Map<String, Value>) -> Result<Vec
     lower_hex_field(fields, "key_package_preimage")
 }
 
-/// `submit_commit {kind: "admit" | "repair", parent_epoch, parent_branch, commit}`
-/// (C-10, C-22).
+/// `submit_commit {kind: "admit" | "repair" | "update", parent_epoch, parent_branch,
+/// commit}` (C-10, C-22, C-28).
 fn parse_submit_body(
     fields: &serde_json::Map<String, Value>,
 ) -> Result<(AckKind, Frontier, Vec<u8>), String> {
@@ -1108,6 +1139,7 @@ fn parse_submit_body(
     let kind = match fields.get("kind").and_then(Value::as_str) {
         Some("admit") => AckKind::Admit,
         Some("repair") => AckKind::Repair,
+        Some("update") => AckKind::Update,
         _ => return Err("malformed: kind".into()),
     };
     let epoch = fields
@@ -2659,5 +2691,331 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             rows.collect()
         };
         read().map_err(db)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.4b: rekey of a current member (C-28, C-29, R-10, the non-read part of §5.5)
+// ---------------------------------------------------------------------------
+
+/// Pending rekey offers (C-28): at most one per subject, a newer one replaces the older.
+const OFFERS_TABLE: &str = "CREATE TABLE IF NOT EXISTS adapter_offers (
+     subject TEXT PRIMARY KEY,
+     right TEXT NOT NULL,
+     generation TEXT NOT NULL,
+     admin TEXT NOT NULL);";
+
+/// A pending offer to re-authorize `subject` for `right` at `generation`, made by `admin`.
+struct Offer {
+    subject: String,
+    right: Right,
+    generation: u64,
+    admin: String,
+}
+
+/// An accepted update commit (C-28 step 7): the subject's key moves from `old_key` to
+/// `new_key` at the `successor` frontier.
+struct RekeyRecord {
+    subject: String,
+    old_key: Vec<u8>,
+    new_key: [u8; KEY_LEN],
+    successor: Frontier,
+}
+
+/// C-28 offer body: `grant {subject, right, generation, fresh_keys?}` to a current member.
+/// Read is never offered: it needs re-admission with a new KeyPackage (§5.5). The
+/// worker's `fresh_keys` is ignored; the adapter derives it from the update commit.
+fn parse_offer(
+    actor: &str,
+    subject: &str,
+    fields: &serde_json::Map<String, Value>,
+) -> Result<Offer, String> {
+    only_fields(
+        fields,
+        &["command", "subject", "right", "generation", "fresh_keys"],
+    )?;
+    let right = match fields.get("right").and_then(Value::as_str) {
+        Some(name @ ("write" | "admin" | "admit")) => {
+            Right::from_name(name).ok_or("malformed: right")?
+        }
+        _ => return Err("malformed: right".into()),
+    };
+    let generation = fields
+        .get("generation")
+        .and_then(Value::as_u64)
+        .ok_or("malformed: generation")?;
+    if fields.get("fresh_keys").is_some_and(|v| !v.is_boolean()) {
+        return Err("malformed: fresh_keys".into());
+    }
+    Ok(Offer {
+        subject: subject.to_owned(),
+        right,
+        generation,
+        admin: actor.to_owned(),
+    })
+}
+
+fn insert_offer(store: &Connection, offer: &Offer) -> rusqlite::Result<()> {
+    store.execute(
+        "INSERT INTO adapter_offers(subject, right, generation, admin) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(subject) DO UPDATE SET
+             right = excluded.right, generation = excluded.generation, admin = excluded.admin",
+        params![
+            offer.subject,
+            offer.right.name(),
+            offer.generation.to_string(),
+            offer.admin
+        ],
+    )?;
+    Ok(())
+}
+
+/// C-28 step 7 in the store transaction of the trace event: replaces the subject's
+/// registered key, so the old key no longer authenticates; clears the offer; and indexes
+/// the subject's retained admission or founder certificate under the new leaf key (§4.3).
+fn rotate_key(store: &Connection, record: &RekeyRecord) -> rusqlite::Result<()> {
+    let rotated = store.execute(
+        "UPDATE adapter_keys SET public_key = ?2 WHERE actor = ?1 AND public_key = ?3",
+        params![
+            record.subject,
+            record.new_key.as_slice(),
+            record.old_key.as_slice()
+        ],
+    )?;
+    if rotated != 1 {
+        return Err(rusqlite::Error::StatementChangedRows(rotated));
+    }
+    store.execute(
+        "DELETE FROM adapter_offers WHERE subject = ?1",
+        [&record.subject],
+    )?;
+    store.execute(
+        "INSERT INTO adapter_certificates(signature_key, subject, epoch, branch, certificate)
+         SELECT ?1, subject, ?2, ?3, certificate FROM adapter_certificates
+         WHERE signature_key = ?4 AND subject = ?5 ORDER BY id DESC LIMIT 1",
+        params![
+            record.new_key.as_slice(),
+            record.successor.epoch.to_string(),
+            record.successor.branch,
+            record.old_key.as_slice(),
+            record.subject
+        ],
+    )?;
+    Ok(())
+}
+
+/// The leaf extensions other than `authz_incarnation`, in order.
+fn other_leaf_extensions(leaf: &LeafNode) -> Vec<Extension> {
+    leaf.extensions()
+        .iter()
+        .filter(|extension| {
+            !matches!(extension, Extension::Unknown(t, _) if *t == AUTHZ_INCARNATION_EXTENSION_TYPE)
+        })
+        .cloned()
+        .collect()
+}
+
+/// The single well-formed `authz_incarnation` of a leaf.
+fn single_incarnation(leaf: &LeafNode) -> Result<AuthzIncarnation, String> {
+    let incarnations = unknown_payloads(leaf.extensions(), AUTHZ_INCARNATION_EXTENSION_TYPE);
+    let [incarnation] = incarnations.as_slice() else {
+        return Err(noncanonical("authz_incarnation count"));
+    };
+    AuthzIncarnation::decode(incarnation).map_err(|_| noncanonical("authz_incarnation encoding"))
+}
+
+impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
+    /// C-28 offer checks against the kernel at `now`, read-only: the offering actor holds
+    /// an effective `admin`, and the generation follows the `grant` rule with fresh keys
+    /// (0 for a new record, otherwise exactly the old generation + 1 on an inactive one).
+    /// The kernel repeats both checks at `rekey`, where the authority is final.
+    fn check_offer(&mut self, actor: &str, offer: &Offer) -> Result<(), String> {
+        let now = self.clock.now();
+        if self
+            .kernel_status(actor, now)?
+            .effective_generation(Right::Admin)
+            .is_none()
+        {
+            return Err("unauthorized".into());
+        }
+        let status = self.kernel_status(&offer.subject, now)?;
+        let valid = match status.rights.iter().find(|r| r.right == offer.right) {
+            None => offer.generation == 0,
+            Some(record) => {
+                !record.active && record.generation.checked_add(1) == Some(offer.generation)
+            }
+        };
+        if !valid {
+            return Err("invalid_generation".into());
+        }
+        Ok(())
+    }
+
+    /// The pending offer for `subject`, if any.
+    fn pending_offer(&self, subject: &str) -> Result<Option<Offer>, String> {
+        let row: Option<(String, String, String)> = self
+            .store
+            .query_row(
+                "SELECT right, generation, admin FROM adapter_offers WHERE subject = ?1",
+                [subject],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        row.map(|(right, generation, admin)| {
+            Ok(Offer {
+                subject: subject.to_owned(),
+                right: Right::from_name(&right).ok_or("malformed: stored offer right")?,
+                generation: generation
+                    .parse()
+                    .map_err(|_| "malformed: stored offer generation".to_string())?,
+                admin,
+            })
+        })
+        .transpose()
+    }
+
+    /// Whether `key` was ever a leaf signature key of this group: every founder,
+    /// admission and rekey leaf key is indexed in `adapter_certificates`.
+    fn key_retired(&self, key: &[u8; KEY_LEN]) -> Result<bool, String> {
+        let found: Option<i64> = self
+            .store
+            .query_row(
+                "SELECT 1 FROM adapter_certificates WHERE signature_key = ?1",
+                [key.as_slice()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        Ok(found.is_some())
+    }
+
+    /// C-28 `submit_commit {kind: "update"}` with its checks in order. Steps 1-5 change
+    /// neither the sequencer, the kernel nor the key registry on failure: the commit is
+    /// staged on the in-memory `PublicGroup`, merged only after kernel `rekey` has
+    /// committed, and the key is rotated with the trace event (`rotate_key`).
+    fn sequence_update(
+        &mut self,
+        actor: &str,
+        parent: &Frontier,
+        commit: &[u8],
+    ) -> Result<(Value, RekeyRecord), String> {
+        let now = self.clock.now();
+        // Step 1 (the group itself was checked in `prepare`).
+        let checkpoint = self.kernel_checkpoint()?;
+        let current = checkpoint_frontier(&checkpoint)?;
+        if *parent != current {
+            return Err("stale_frontier".into());
+        }
+        if checkpoint["read_fenced"] != json!(false) || !checkpoint["repair_pending"].is_null() {
+            return Err("read_fenced".into());
+        }
+        let offer = self
+            .pending_offer(actor)?
+            .ok_or("unauthorized: no pending offer")?;
+        let actor_key = self
+            .registered_key(actor)?
+            .ok_or_else(|| noncanonical("actor key"))?;
+        let mut expected_rights: Vec<(Right, u64)> = self
+            .kernel_status(actor, now)?
+            .active_rights()
+            .into_iter()
+            .filter(|(right, _)| *right != offer.right)
+            .collect();
+        expected_rights.push((offer.right, offer.generation));
+        expected_rights.sort();
+        let sequencer = self.sequencer.as_ref().ok_or("uninitialized: no group")?;
+
+        // Steps 2 and 3: OpenMLS accepts the commit, and its sender is the actor's leaf
+        // under its registered key.
+        let (staged, sender) =
+            sequencer.process_commit(self.provider.crypto(), commit, actor, &actor_key)?;
+
+        // Step 4: no proposals, and an UpdatePath.
+        if staged.queued_proposals().next().is_some() {
+            return Err(noncanonical("proposals"));
+        }
+        let path_leaf = staged
+            .update_path_leaf_node()
+            .ok_or_else(|| noncanonical("no UpdatePath"))?;
+
+        // Step 5: the path leaf keeps the credential, carries a key never registered or
+        // used as a leaf key, declares the adapter extensions, and carries exactly the
+        // re-authorized incarnation. Other leaf extensions are unchanged.
+        if credential_identity(path_leaf.credential()).as_deref() != Some(actor.as_bytes()) {
+            return Err(noncanonical("UpdatePath leaf credential"));
+        }
+        let new_key = parse_public_key(path_leaf.signature_key().as_slice())
+            .ok_or_else(|| noncanonical("UpdatePath leaf signature key"))?;
+        if new_key.as_slice() == sender.signature_key().as_slice()
+            || self.key_registered(&new_key)?
+            || self.key_retired(&new_key)?
+        {
+            return Err(noncanonical("signature key is not new"));
+        }
+        if !ADAPTER_EXTENSIONS.iter().all(|t| {
+            path_leaf
+                .capabilities()
+                .extensions()
+                .contains(&ExtensionType::Unknown(*t))
+        }) {
+            return Err(noncanonical("UpdatePath leaf capabilities"));
+        }
+        let previous = single_incarnation(&sender)?;
+        let incarnation = single_incarnation(path_leaf)?;
+        if incarnation.version != 1
+            || incarnation.subject != actor
+            || incarnation.rights != expected_rights
+            || incarnation.admission_cert_hash != previous.admission_cert_hash
+        {
+            return Err(noncanonical("authz_incarnation"));
+        }
+        if other_leaf_extensions(path_leaf) != other_leaf_extensions(&sender) {
+            return Err(noncanonical("UpdatePath leaf extensions"));
+        }
+        let parent_accs = sequencer.acc_payloads();
+        let successor_accs = unknown_payloads(
+            staged.group_context().extensions(),
+            ACC_CONTEXT_EXTENSION_TYPE,
+        );
+        if parent_accs.len() != 1 || successor_accs != parent_accs {
+            return Err(noncanonical("acc_context changed"));
+        }
+
+        // Step 6: the kernel applies the offered grant with fresh keys, proven above, and
+        // advances the frontier by CAS. Its errors pass through; the offer stays pending.
+        let successor = context_frontier(staged.group_context())?;
+        self.kernel.execute(json!({
+            "command":"rekey", "actor":offer.admin, "subject":actor,
+            "right":offer.right.name(), "generation":offer.generation,
+            "parent_branch":current.branch, "new_branch":successor.branch,
+            "epoch":successor.epoch, "now":now,
+        }))?;
+
+        // Step 7. A failure from here on leaves the kernel ahead of the sequencer or the
+        // key registry; see the crash gaps in the phase report.
+        self.sequencer
+            .as_mut()
+            .ok_or("uninitialized: no group")?
+            .merge(staged)?;
+        let ack = CanonicalAck {
+            apf_key_id: self.apf_key_id(),
+            group: self.group.clone(),
+            parent: current,
+            successor: successor.clone(),
+            commit_hash: Sha256::digest(commit).to_vec(),
+            kind: AckKind::Update,
+        }
+        .sign(&self.apf)?;
+        let record = RekeyRecord {
+            subject: actor.to_owned(),
+            old_key: actor_key,
+            new_key,
+            successor: successor.clone(),
+        };
+        Ok((
+            json!({"epoch":successor.epoch, "branch":successor.branch, "ack":hex::encode(ack)}),
+            record,
+        ))
     }
 }

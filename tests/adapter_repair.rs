@@ -1992,25 +1992,39 @@ fn grant_to_a_current_member_requires_rekey() {
     w.ok(ROOT, &body);
     assert!(w.active("frank", "read"));
 
-    // A new right for a current member.
+    // A new right for a current member. Amendment A-3 (C-28): the grant is a pending
+    // offer, `{pending: true}`, and the kernel is unchanged.
     assert!(w.grant_record("bob", "admin").is_none());
-    rejected(
-        &mut w,
-        ROOT,
-        &grant_body("bob", "admin", 0, true),
-        "unauthorized",
+    let before = w.checkpoint();
+    let response = w.ok(ROOT, &grant_body("bob", "admin", 0, true));
+    assert_eq!(response, json!({"pending": true}));
+    assert_eq!(
+        w.checkpoint(),
+        before,
+        "an offer leaves the kernel unchanged"
     );
+    assert!(w.grant_record("bob", "admin").is_none());
 
     // A revoked non-read right re-granted to a current member.
     let response = w.revoke("bob", "write");
     assert_eq!(response["read_fenced"], json!(false));
+    // Amendment A-3 (C-28): a pending offer; the kernel is unchanged.
+    let before = w.checkpoint();
+    let response = w.ok(ROOT, &grant_body("bob", "write", 1, true));
+    assert_eq!(response, json!({"pending": true}));
+    assert_eq!(
+        w.checkpoint(),
+        before,
+        "an offer leaves the kernel unchanged"
+    );
+    assert!(!w.active("bob", "write"));
+    // Amendment A-3 (C-28): read is never offered to a current member.
     rejected(
         &mut w,
         ROOT,
-        &grant_body("bob", "write", 1, true),
-        "unauthorized",
+        &grant_body("bob", "read", 1, true),
+        "malformed",
     );
-    assert!(!w.active("bob", "write"));
 
     // Non-members keep the grant path, and the adapter sets fresh_keys itself.
     w.ok(ROOT, &grant_body("erin", "write", 0, false));

@@ -10,7 +10,7 @@ Phase 4.2 and the approved R-9 correction are complete. Phase 4.2 tests are in `
 
 Phase 4.3 is complete. Tests: `tests/adapter_release.rs`. Evidence: `evidence/adapter-release-red.txt` and `evidence/phase-4.3-green.txt`.
 
-Phase 4.4a is complete. Phase 4.4b is blocked on D-9 (R-10), and D-10 (read revocation during a pending repair) is open.
+Phase 4.4 is complete: 4.4a, 4.4b with the approved R-10, and the approved D-10 stacked repair. Next is phase 4.5.
 
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
@@ -183,7 +183,8 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 
 This phase is split in two:
 - **4.4a (complete):** read revocation, repair, confirmation, the retained-key adversary and read rejoin. Tests: `tests/adapter_repair.rs`. Evidence: `evidence/adapter-repair-red.txt` and `evidence/phase-4.4a-green.txt`.
-- **4.4b (blocked on D-9, R-10 `rekey`):** non-read re-authorization of a current member through an update commit with a new signer. Until then such grants are refused (C-25).
+- **4.4b (complete, D-9 approved):** non-read re-authorization of a current member through an update commit with a new signer (R-10 kernel `rekey`, C-28 to C-30). Tests: `tests/adapter_rekey.rs`, `tests/authority_rekey_contract.rs` and the A-3 edit. Evidence: `evidence/rekey-red.txt` and `evidence/rekey-green.txt`.
+- **D-10 stacked repair (complete):** tests in `tests/adapter_repair_stacked.rs`. Evidence: `evidence/stacked-repair-red.txt` and `evidence/stacked-repair-green.txt`.
 
 
 **Files:**
@@ -212,7 +213,7 @@ This phase is split in two:
   - `reallowed_reader_rejoins_only_with_new_generation_key_package`
 - [x] Run red and retain the evidence. The broken-control test is expected to pass from the start; that pass is its evidence.
 - [x] Implement, then run green and the standard gate (4.4a).
-- [ ] 4.4b: once D-9 is decided, write `reauthorized_writer_requires_update_with_new_signer` and the R-10 kernel tests, run red, implement, run green.
+- [x] 4.4b: write `reauthorized_writer_requires_update_with_new_signer` and the R-10 kernel tests, run red, implement, run green.
 
 **Claim after 4.4:** Stage C is shown in executed schedules: real removal excludes retained state from successor traffic, and the fence opens only on confirmed, canonical, policy-bound repair. `Bridge_remove^ETK` stays open.
 
@@ -241,6 +242,9 @@ This phase is split in two:
   - Phase 4.4a: if the store commit is lost after the kernel and the sequencer, the repair record is missing. Every confirmation is then `invalid_repair` and the fence stays closed for good. Fix: write a repair intent before the kernel call.
   - Phase 4.4a: if the store commit is lost after `repair_open`, the fence is open but the confirmation evidence is missing.
   - Phase 4.4a: `durable: true` is sent to `repair_stage` before the sequencer and store writes are durable.
+  - Phase 4.4b: if kernel `rekey` commits and the sequencer merge fails, `open` refuses with no recovery path.
+  - Phase 4.4b: if the store commit is lost after the merge, the old key keeps authenticating and the offer row remains. This needs a write-ahead rekey intent plus reconciliation of leaf keys on `open`.
+  - Phase 4.4b: the client's new identity exists only in memory between `stage_rekey` and `apply_ack`, so a client restart loses it.
   - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
 - [ ] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`
