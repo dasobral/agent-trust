@@ -3,6 +3,8 @@
 //! Phase 4.1 surface: the APF signing key, client identities, signed requests
 //! and the trusted clock (`docs/adapter-contract.md` §4.8, §4.9, §7, §8).
 //! Phase 4.2 surface: genesis, the public sequencer and admission (§4.10, §5.1, §5.2).
+//! Phase 4.3 surface: release certificates, persist, emit, consume receipts and
+//! operation ownership (§4.11, §5.3).
 //! The kernel stays key-free; only this adapter calls `Authority::execute`.
 
 use std::fs::{File, OpenOptions};
@@ -28,9 +30,9 @@ use crate::client::{
     context_frontier, unknown_payloads, ADAPTER_EXTENSIONS, CIPHERSUITE, ZERO_HASH,
 };
 use crate::wire::{
-    AccContext, AckKind, AdmissionCertificate, AuthzIncarnation, CanonicalAck, FounderCertificate,
-    Frontier, Right, SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
-    AUTHZ_INCARNATION_EXTENSION_TYPE,
+    AccContext, AckKind, AdmissionCertificate, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
+    Envelope, FounderCertificate, Frontier, ReleaseCertificate, Right, SignedStructure,
+    ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
 /// Domain-separation label of `RequestTBS` (§4.8).
@@ -59,8 +61,9 @@ const ADAPTER_ONLY: [&str; 6] = [
     "repair_open",
     "subject_status",
 ];
-/// Kernel commands routed from phase 4.3 on (C-3).
-const NOT_YET_ROUTED: [&str; 5] = ["release", "persist", "emit", "consume", "abandon"];
+/// Content commands routed from phase 4.3 on (C-16); a policy-only adapter (C-8) has no
+/// group to bind content to and keeps them unsupported (C-3).
+const CONTENT_COMMANDS: [&str; 5] = ["release", "persist", "emit", "consume", "abandon"];
 /// Adapter flows `handle` routes in phase 4.2 (C-10); they are not kernel commands.
 const CERTIFICATE_FLOW: &str = "admission_certificate";
 const SUBMIT_FLOW: &str = "submit_commit";
@@ -290,6 +293,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         seed.fill(0);
 
         let store = open_store(&paths.adapter, false)?;
+        // Stores written before phase 4.3 gain the operations table (C-17).
+        store.execute_batch(OPERATIONS_TABLE).map_err(db)?;
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -463,10 +468,23 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             Err((command, err)) => (command, Err(err)),
             Ok((command, Routed::Kernel(kernel_request, registration))) => {
                 let outcome = self.kernel.execute(kernel_request);
-                let effect = registration.map_or(Effect::None, |(subject, key)| {
-                    Effect::Register(subject, key)
+                let outcome = outcome.map(|value| {
+                    let effect = match registration {
+                        Some((subject, key)) => Effect::Register(subject, key),
+                        // C-17: the allocating actor is recorded with the trace event.
+                        None if command == "allocate" => match value["op"].as_str() {
+                            Some(op) => Effect::Allocated(op.to_owned(), actor.to_owned()),
+                            None => Effect::None,
+                        },
+                        None => Effect::None,
+                    };
+                    (value, effect)
                 });
-                (Some(command), outcome.map(|value| (value, effect)))
+                (Some(command), outcome)
+            }
+            Ok((command, Routed::Content(content))) => {
+                let outcome = self.content(actor, content);
+                (Some(command), outcome)
             }
             Ok((command, Routed::Certificate(preimage))) => {
                 let outcome = self.issue_certificate(actor, &preimage);
@@ -492,6 +510,26 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                             )?;
                         }
                         Effect::Admitted(record) => insert_certificate(&self.store, record)?,
+                        Effect::Allocated(op, owner) => {
+                            self.store.execute(
+                                "INSERT INTO adapter_operations(op, actor) VALUES (?1, ?2)",
+                                params![op, owner],
+                            )?;
+                        }
+                        Effect::Released(op, certificate) => {
+                            self.store.execute(
+                                "UPDATE adapter_operations SET certificate = ?2
+                                 WHERE op = ?1 AND certificate IS NULL",
+                                params![op, certificate],
+                            )?;
+                        }
+                        Effect::Persisted(op, envelope) => {
+                            self.store.execute(
+                                "UPDATE adapter_operations SET envelope = ?2
+                                 WHERE op = ?1 AND envelope IS NULL",
+                                params![op, envelope],
+                            )?;
+                        }
                     }
                     append_trace(
                         &self.store,
@@ -560,12 +598,20 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 .map(|routed| (command.clone(), routed))
                 .map_err(|err| (Some(command), err));
         }
+        // C-16 and C-17.
+        if CONTENT_COMMANDS.contains(&command.as_str()) {
+            if self.sequencer.is_none() {
+                return Err((Some(command), "malformed: unsupported command".into()));
+            }
+            return self
+                .parse_content(actor, &command, fields)
+                .map(|content| (command.clone(), Routed::Content(content)))
+                .map_err(|err| (Some(command), err));
+        }
         // C-3.
         if !ROUTED.contains(&command.as_str()) {
             let err = if ADAPTER_ONLY.contains(&command.as_str()) {
                 "unauthorized".to_string()
-            } else if NOT_YET_ROUTED.contains(&command.as_str()) {
-                "malformed: unsupported command".to_string()
             } else {
                 "malformed: unknown command".to_string()
             };
@@ -865,6 +911,10 @@ fn init_store(
                  outcome TEXT NOT NULL);",
         )
         .map_err(db)?;
+    if let Err(err) = store.execute_batch(OPERATIONS_TABLE) {
+        let _ = store.execute_batch("ROLLBACK");
+        return Err(db(err));
+    }
     let populate = (|| {
         store.execute(
             "INSERT INTO adapter_meta(k, v) VALUES ('group', ?1), ('apf_public_key', ?2)",
@@ -946,6 +996,8 @@ enum Routed {
     Certificate(Vec<u8>),
     /// `submit_commit` of these commit bytes on this parent frontier (C-10).
     Submit(Frontier, Vec<u8>),
+    /// A content command whose body and ownership are already checked (C-16, C-17).
+    Content(Content),
 }
 
 /// The adapter store change that commits together with a successful request's trace event.
@@ -953,6 +1005,12 @@ enum Effect {
     None,
     Register(String, [u8; KEY_LEN]),
     Admitted(CertificateRecord),
+    /// C-17: `op` was allocated by this actor.
+    Allocated(String, String),
+    /// C-16: the signed release certificate issued for `op`.
+    Released(String, Vec<u8>),
+    /// §6: the exact envelope bytes persisted for `op`.
+    Persisted(String, Vec<u8>),
 }
 
 /// A founder or admission certificate retained for audit, indexed by the leaf signature
@@ -1756,5 +1814,313 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             return Err(mismatch("root authz_incarnation"));
         }
         context_frontier(context)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.3: release certificates, persistence, emission and consumption
+// (C-14 to C-17, §5.3)
+// ---------------------------------------------------------------------------
+
+/// The operations this adapter routed (C-17): the allocating actor, the signed release
+/// certificate (C-16) and the exact persisted envelope (§6). No key material.
+const OPERATIONS_TABLE: &str = "CREATE TABLE IF NOT EXISTS adapter_operations (
+     op TEXT PRIMARY KEY,
+     actor TEXT NOT NULL,
+     certificate BLOB,
+     envelope BLOB);";
+
+/// Fields of a C-16 `release` body. `revision` is absent on purpose: only the R-3
+/// `policy_revision` form is accepted.
+const RELEASE_FIELDS: [&str; 9] = [
+    "command",
+    "op",
+    "right",
+    "resource",
+    "digest",
+    "cover",
+    "policy_revision",
+    "epoch",
+    "branch",
+];
+
+/// A content command after its body and operation ownership have been checked.
+enum Content {
+    /// The kernel `release` request (with `actor` and `now`) and the released right.
+    Release(Value, String, Right),
+    /// `persist`: the operation, the decoded envelope and its exact bytes.
+    Persist(String, Envelope, Vec<u8>),
+    /// `emit`: the operation and the exact envelope bytes.
+    Emit(String, Vec<u8>),
+    Consume(String),
+    Abandon(String),
+}
+
+/// A nonempty operation identifier within the kernel identifier bound.
+fn op_field(fields: &serde_json::Map<String, Value>) -> Result<String, String> {
+    match fields.get("op") {
+        Some(Value::String(op)) if !op.is_empty() && op.len() <= MAX_COMMAND => Ok(op.clone()),
+        _ => Err("malformed: op".into()),
+    }
+}
+
+/// The `envelope` hex field, decoded into its two parts (C-14).
+fn envelope_field(fields: &serde_json::Map<String, Value>) -> Result<(Envelope, Vec<u8>), String> {
+    let bytes = lower_hex_field(fields, "envelope")?;
+    let envelope = Envelope::decode(&bytes).map_err(|_| "malformed: envelope".to_string())?;
+    Ok((envelope, bytes))
+}
+
+/// `writer_generation` and the sorted `readers` of a cover the kernel accepted (C-14).
+/// The kernel has verified that the cover is exactly the writer's `write` singleton plus
+/// one `read` singleton per roster reader, so each value is read off once.
+fn cover_generations(cover: &Value, actor: &str) -> Result<(u64, Vec<(String, u64)>), String> {
+    let malformed = || "malformed: accepted cover".to_string();
+    let mut writer = None;
+    let mut readers = Vec::new();
+    for support in cover.as_array().ok_or_else(malformed)? {
+        let [element] = support.as_array().ok_or_else(malformed)?.as_slice() else {
+            return Err(malformed());
+        };
+        let subject = element["subject"].as_str().ok_or_else(malformed)?;
+        let generation = element["generation"].as_u64().ok_or_else(malformed)?;
+        match element["right"].as_str() {
+            Some("write") if subject == actor && writer.is_none() => writer = Some(generation),
+            Some("read") => readers.push((subject.to_owned(), generation)),
+            _ => return Err(malformed()),
+        }
+    }
+    readers.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    Ok((writer.ok_or_else(malformed)?, readers))
+}
+
+impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
+    /// C-16 body checks (`malformed`), then C-17 ownership (`unauthorized`), before any
+    /// kernel call. The caller has already refused `actor` and `now` (C-2).
+    fn parse_content(
+        &mut self,
+        actor: &str,
+        command: &str,
+        mut fields: serde_json::Map<String, Value>,
+    ) -> Result<Content, String> {
+        let content = match command {
+            "release" => {
+                only_fields(&fields, &RELEASE_FIELDS)?;
+                let op = op_field(&fields)?;
+                let right = match fields.get("right").and_then(Value::as_str) {
+                    Some(name @ ("read" | "write")) => {
+                        Right::from_name(name).ok_or("malformed: right")?
+                    }
+                    _ => return Err("malformed: right".into()),
+                };
+                if !fields.get("policy_revision").is_some_and(Value::is_u64) {
+                    return Err("malformed: policy_revision".into());
+                }
+                fields.insert("actor".into(), json!(actor));
+                fields.insert("now".into(), json!(self.clock.now()));
+                Content::Release(Value::Object(fields), op, right)
+            }
+            "persist" | "emit" => {
+                only_fields(&fields, &["command", "op", "envelope"])?;
+                let op = op_field(&fields)?;
+                let (envelope, bytes) = envelope_field(&fields)?;
+                if command == "persist" {
+                    Content::Persist(op, envelope, bytes)
+                } else {
+                    Content::Emit(op, bytes)
+                }
+            }
+            "consume" => {
+                // The recipient is always the authenticated actor (C-16).
+                if fields.contains_key("recipient") {
+                    return Err("malformed: recipient".into());
+                }
+                only_fields(&fields, &["command", "op"])?;
+                Content::Consume(op_field(&fields)?)
+            }
+            "abandon" => {
+                only_fields(&fields, &["command", "op"])?;
+                Content::Abandon(op_field(&fields)?)
+            }
+            _ => return Err("malformed: unknown command".into()),
+        };
+        // C-17: only the allocating actor may act on its operation; any reader consumes.
+        let op = match &content {
+            Content::Release(_, op, _)
+            | Content::Persist(op, _, _)
+            | Content::Emit(op, _)
+            | Content::Abandon(op) => Some(op),
+            Content::Consume(_) => None,
+        };
+        if let Some(op) = op {
+            if self.operation_owner(op)?.as_deref() != Some(actor) {
+                return Err("unauthorized".into());
+            }
+        }
+        Ok(content)
+    }
+
+    /// C-16: runs one checked content command and returns the response with the store
+    /// effect that commits together with its trace event.
+    fn content(&mut self, actor: &str, content: Content) -> Result<(Value, Effect), String> {
+        let now = self.clock.now();
+        match content {
+            Content::Release(request, op, right) => {
+                let mut response = self.kernel.execute(request.clone())?;
+                // §4.5: signed in the same adapter step that observes the committed kernel
+                // release. A failure from here on leaves a released operation without a
+                // certificate; it can only be abandoned (B2).
+                let certificate =
+                    self.release_certificate(actor, &op, right, &request, &response)?;
+                let signed = certificate.sign(&self.apf)?;
+                response["certificate"] = json!(hex::encode(&signed));
+                Ok((response, Effect::Released(op, signed)))
+            }
+            Content::Persist(op, envelope, bytes) => {
+                let released = self.check_envelope(&op, &envelope)?;
+                let response = self.kernel.execute(json!({
+                    "command":"persist", "op":op, "digest":released.digest,
+                    "envelope":hex::encode(&bytes), "actor":actor, "now":now,
+                }))?;
+                Ok((response, Effect::Persisted(op, bytes)))
+            }
+            Content::Emit(op, bytes) => {
+                let response = self.kernel.execute(json!({
+                    "command":"emit", "op":op, "envelope":hex::encode(&bytes),
+                    "actor":actor, "now":now,
+                }))?;
+                Ok((response, Effect::None))
+            }
+            Content::Consume(op) => {
+                // Only an operation released through this adapter can have been persisted.
+                let certificate = self
+                    .stored_certificate(&op)?
+                    .ok_or_else(|| "not_persisted".to_string())?;
+                let mut response = self.kernel.execute(json!({
+                    "command":"consume", "op":op, "recipient":actor, "actor":actor, "now":now,
+                }))?;
+                // C-15. A failure from here on is a consumed, undelivered message (B5).
+                let receipt = ConsumeReceipt {
+                    apf_key_id: self.apf_key_id(),
+                    group: self.group.clone(),
+                    op,
+                    recipient: actor.to_owned(),
+                    release_certificate_hash: Sha256::digest(&certificate).to_vec(),
+                }
+                .sign(&self.apf)?;
+                response["receipt"] = json!(hex::encode(receipt));
+                Ok((response, Effect::None))
+            }
+            Content::Abandon(op) => {
+                let response = self.kernel.execute(json!({
+                    "command":"abandon", "op":op, "actor":actor, "now":now,
+                }))?;
+                Ok((response, Effect::None))
+            }
+        }
+    }
+
+    /// The release certificate TBS for a committed kernel release (§4.5, C-14).
+    fn release_certificate(
+        &self,
+        actor: &str,
+        op: &str,
+        right: Right,
+        request: &Value,
+        response: &Value,
+    ) -> Result<ReleaseCertificate, String> {
+        let malformed = |field: &str| format!("malformed: kernel release {field}");
+        let text = |field: &str| {
+            response[field]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| malformed(field))
+        };
+        let number = |field: &str| response[field].as_u64().ok_or_else(|| malformed(field));
+        if response["op"] != json!(op) {
+            return Err(malformed("op"));
+        }
+        let invocation = match &response["invocation"] {
+            Value::Null => String::new(),
+            Value::String(id) => id.clone(),
+            _ => return Err(malformed("invocation")),
+        };
+        let (writer_generation, readers) = cover_generations(&request["cover"], actor)?;
+        Ok(ReleaseCertificate {
+            apf_key_id: self.apf_key_id(),
+            group: self.group.clone(),
+            op: op.to_owned(),
+            actor: actor.to_owned(),
+            right,
+            resource: text("resource")?,
+            invocation,
+            frontier: Frontier {
+                epoch: number("epoch")?,
+                branch: text("branch")?,
+            },
+            policy_revision: number("policy_revision")?,
+            digest: text("digest")?,
+            writer_generation,
+            readers,
+            kernel_event_hash: text("event_hash")?,
+        })
+    }
+
+    /// C-16 `persist` envelope checks: the certificate is byte-identical to the one
+    /// issued for `op`, and the MLS message is a `PrivateMessage` application message
+    /// for this group at the certificate's epoch whose AAD is `SHA-256(certificate)`.
+    /// The adapter cannot decrypt; the receiver checks the content (C-18).
+    fn check_envelope(&self, op: &str, envelope: &Envelope) -> Result<ReleaseCertificate, String> {
+        let mismatch = |detail: &str| format!("binding_mismatch: {detail}");
+        let stored = self
+            .stored_certificate(op)?
+            .ok_or_else(|| "invalid_transition: not released".to_string())?;
+        if envelope.certificate != stored {
+            return Err(mismatch("certificate"));
+        }
+        let released =
+            ReleaseCertificate::verify(&stored, self.apf.public(), self.provider.crypto())
+                .map_err(|_| "corrupt_history: stored release certificate".to_string())?;
+        let message = MlsMessageIn::tls_deserialize_exact(&envelope.mls_message)
+            .map_err(|_| mismatch("MLS message encoding"))?;
+        let MlsMessageBodyIn::PrivateMessage(private) = message.extract() else {
+            return Err(mismatch("not a PrivateMessage"));
+        };
+        if private.group_id().as_slice() != self.group.as_bytes()
+            || private.epoch().as_u64() != released.frontier.epoch
+            || private.content_type() != ContentType::Application
+        {
+            return Err(mismatch("MLS group, epoch or content type"));
+        }
+        if private.aad() != Sha256::digest(&stored).as_slice() {
+            return Err(mismatch("AAD"));
+        }
+        Ok(released)
+    }
+
+    /// The allocating actor recorded for `op` (C-17).
+    fn operation_owner(&self, op: &str) -> Result<Option<String>, String> {
+        self.store
+            .query_row(
+                "SELECT actor FROM adapter_operations WHERE op = ?1",
+                [op],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)
+    }
+
+    /// The signed release certificate issued for `op`, if any.
+    fn stored_certificate(&self, op: &str) -> Result<Option<Vec<u8>>, String> {
+        let row: Option<Option<Vec<u8>>> = self
+            .store
+            .query_row(
+                "SELECT certificate FROM adapter_operations WHERE op = ?1",
+                [op],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        Ok(row.flatten())
     }
 }

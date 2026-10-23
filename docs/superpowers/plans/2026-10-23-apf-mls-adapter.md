@@ -8,6 +8,8 @@ Phase 4.1 and the approved R-8 kernel correction are complete. R-8 was tested in
 
 Phase 4.2 and the approved R-9 correction are complete. Phase 4.2 tests are in `tests/adapter_admission.rs` and `tests/authority_subject_status.rs`; R-9 tests are in `tests/authority_invocation_resources.rs`, plus the A-2 scenario. Evidence: `evidence/adapter-admission-red.txt`, `evidence/invocation-resources-red.txt`, `evidence/invocation-resources-green.txt` and `evidence/phase-4.2-r9-green.txt`.
 
+Phase 4.3 is complete. Tests: `tests/adapter_release.rs`. Evidence: `evidence/adapter-release-red.txt` and `evidence/phase-4.3-green.txt`.
+
 **Goal:** Couple the durable APF kernel to real OpenMLS processing. Every kernel frontier, admission, repair and fresh-key fact then comes from validated MLS evidence, and every protected message is bound to an APF-signed release certificate.
 
 **Architecture:** A new adapter (`src/adapter.rs`) owns the APF key, authenticates client requests, runs a public sequencer (`PublicGroup`), issues admission, release and canonical-ack certificates, and is the only caller of the key-free kernel. Clients are generic OpenMLS endpoints with their own keys and SQLite storage. A seeded in-process delivery simulator carries opaque bytes. Exported traces are checked by the independent Python oracle.
@@ -157,7 +159,7 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
 - Consumes: kernel R-3, R-4 and R-6; contract §4.5, §5.3.
 - Produces: frozen operation digest, signed release certificate, protect-once with `AAD = H(cert)`, exact envelope persistence, and the delivery predicate with consume-before-deliver.
 
-- [ ] Write the tests:
+- [x] Write the tests:
   - `released_ciphertext_aad_equals_hash_of_signed_certificate`
   - `receiver_delivers_plaintext_only_after_consume`
   - `certificate_from_another_operation_is_binding_mismatch`
@@ -170,8 +172,8 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
   - `pre_cut_release_delivers_late_within_same_frontier`
   - `pre_cut_release_is_not_delivered_across_a_frontier_change`
   - `invocation_provenance_appears_in_the_release_certificate`
-- [ ] Run red and retain the evidence.
-- [ ] Implement, then run green and the standard gate.
+- [x] Run red and retain the evidence.
+- [x] Implement, then run green and the standard gate.
 
 **Claim after 4.3:** every delivered application message is bound to one APF-signed release certificate and one consumption.
 
@@ -222,6 +224,11 @@ The compatibility gate tests the dependency, not our code. These tests can pass 
   - Phase 4.2: if kernel `admit` commits but the sequencer merge fails, `open` refuses with `binding_mismatch: sequencer frontier`. That fails closed but has no recovery; it needs an intent log of the commit bytes.
   - Phase 4.2: if the sequencer merges but the adapter store transaction is lost, the certificate record and trace event are lost while the sequence stays consumed.
   - A crash in the middle of `GenesisPending::complete` leaves partial files, which are cleaned up only on an error return.
+  - Phase 4.3: if the kernel commits and the adapter store does not, three cases follow:
+    - an `allocate` leaves no owner row, so C-17 makes the operation permanently unusable;
+    - a `release` leaves no stored certificate (B2), so even the owner cannot `abandon` it until adapter recovery exists;
+    - a `consume` leaves no receipt (B5), so the delivery is lost.
+  - Full envelopes still go to kernel `persist`, so history snapshots keep growing roughly quadratically. The adapter store already keeps the exact bytes, so the kernel could keep a digest instead; that would be a requirement correction.
   - Unauthenticated requests make the trace grow without bound. This needs a bound or rate limit before Task 5 exposes the adapter on a network.
 - [ ] Write the tests:
   - `b1_crash_after_allocate_allows_release_after_restart`

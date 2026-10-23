@@ -1,0 +1,112 @@
+# Phase 4.3 release certificates and receive path — RED (phase 4.3 skeletons; content commands not yet routed)
+# date: 2026-10-23T19:12:25Z
+# source revision: 8635d1196a6772542575b7a42b4ec7abf5191792 + uncommitted phase 4.3 skeletons and tests
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# command: cargo test --locked --test adapter_release
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/adapter_release.rs (target/debug/deps/adapter_release-753e857bb6366a92)
+
+running 13 tests
+test invocation_provenance_appears_in_the_release_certificate ... FAILED
+test one_operation_cannot_persist_two_different_ciphertexts ... FAILED
+test duplicate_delivery_is_replay ... FAILED
+test retransmission_is_byte_identical ... FAILED
+test receiver_delivers_plaintext_only_after_consume ... FAILED
+test certificate_from_another_operation_is_binding_mismatch ... FAILED
+test released_ciphertext_aad_equals_hash_of_signed_certificate ... FAILED
+test pre_cut_release_delivers_late_within_same_frontier ... FAILED
+test write_revocation_blocks_delivery_of_stale_writer_generation ... FAILED
+test sender_leaf_incarnation_not_matching_actor_is_rejected ... FAILED
+test pre_cut_release_is_not_delivered_across_a_frontier_change ... FAILED
+test only_the_allocating_actor_may_release_persist_emit_or_abandon ... FAILED
+test ciphertext_protected_outside_the_adapter_is_not_delivered ... FAILED
+
+failures:
+
+---- invocation_provenance_appears_in_the_release_certificate stdout ----
+
+thread 'invocation_provenance_appears_in_the_release_certificate' (275406) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"89aed209150a42f16b488a7ad142b048f092b0cdf4bec40e90d447c68e64d579","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"7f5754389caaab0a8bf61e606dbac8c28f4b8199fa334f84431b6dfd018b397a","epoch":2,"op":"op-direct","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- one_operation_cannot_persist_two_different_ciphertexts stdout ----
+
+thread 'one_operation_cannot_persist_two_different_ciphertexts' (275407) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"869dae6bead1bbbd08d8879cabf65a91e15315ed83c94309061f6f701d9bf20e","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"902a2216e1327fd84fb08444ac5b280529c4173a7a10532fe73beab63f4562b3","epoch":2,"op":"op-twice","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- duplicate_delivery_is_replay stdout ----
+
+thread 'duplicate_delivery_is_replay' (275405) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"af0f1245eed6f2b55dca2057d89e8f6ff13d9b7149fd53517b9b2d7e4a96a3fa","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"2e9f275d18436467d2f7a8a705a023acb8063be4af199ed7c219e653e6cd5e42","epoch":2,"op":"op-once","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- retransmission_is_byte_identical stdout ----
+
+thread 'retransmission_is_byte_identical' (275413) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"6c262066ec580e152a7f2b76caa935be2b76c882c27ab7ed13d5c80fb06bc9ec","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"a7a7b678d6acf04a1edf192471f4130c5194a6c7093b80c6f5d17183d619b335","epoch":2,"op":"op-retransmit","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- receiver_delivers_plaintext_only_after_consume stdout ----
+
+thread 'receiver_delivers_plaintext_only_after_consume' (275411) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"e4d68ba4cb5589aeda11ce866fc41ae4fd2f10b61693701f44eb0cbe6bcd5051","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"916cc2f81d6762b4fb02b7ce69da583bcd992d5999088c0d6159b36f526d08bd","epoch":2,"op":"op-1","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- certificate_from_another_operation_is_binding_mismatch stdout ----
+
+thread 'certificate_from_another_operation_is_binding_mismatch' (275403) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"a114fbddac953b5c57b9b629ec7fdecca57f958a75920fabf5f710f0da128636","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"7a863a4aa71d1c1a11bb963ae1eb7f0dd5f8314de1e510f8ff070e85bbbf70bd","epoch":2,"op":"op-a","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- released_ciphertext_aad_equals_hash_of_signed_certificate stdout ----
+
+thread 'released_ciphertext_aad_equals_hash_of_signed_certificate' (275412) panicked at tests/adapter_release.rs:917:10:
+operation_digest: "not_implemented"
+
+---- pre_cut_release_delivers_late_within_same_frontier stdout ----
+
+thread 'pre_cut_release_delivers_late_within_same_frontier' (275409) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"e97ccb9990bde6bb2799c95a58a15bd8e442cb13184857d79465fbae05909abf","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"625ee3350fa1a729e32431a9188e84ab59c229ec9206051ea4076e13d5f60654","epoch":2,"op":"op-precut","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- write_revocation_blocks_delivery_of_stale_writer_generation stdout ----
+
+thread 'write_revocation_blocks_delivery_of_stale_writer_generation' (275415) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"77140676798cac667bf75c6a8ef164f64f9c1bbcf04422f999562cf93ed776cc","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"44c4abaac14b0f97973830d6c18f3cddd9bc08e3e499add098d65a9cb02685ad","epoch":2,"op":"op-before","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- sender_leaf_incarnation_not_matching_actor_is_rejected stdout ----
+
+thread 'sender_leaf_incarnation_not_matching_actor_is_rejected' (275414) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"e095e083d8f186c478dd67541e76fadf8580ad5ebc20a71d9806c1fdf96457c5","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"e21bae40002bd15658412c375abfc62ca44faed74f090fcd5a034c4163e7df3c","epoch":2,"op":"op-bob-1","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- pre_cut_release_is_not_delivered_across_a_frontier_change stdout ----
+
+thread 'pre_cut_release_is_not_delivered_across_a_frontier_change' (275410) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"ea78d671e275c0d61fe5d3055b20a8f8c05ed012da4c0119fa43124c12728333","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"50eaa55d3d1c02df222f28195b1a51ad27b3b8c4d8f4f611e177366a1b0e7137","epoch":2,"op":"op-before-cut","policy_revision":3,"right":"write"} should succeed, got malformed: unsupported command
+
+---- only_the_allocating_actor_may_release_persist_emit_or_abandon stdout ----
+
+thread 'only_the_allocating_actor_may_release_persist_emit_or_abandon' (275408) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"8e509071996991f8430c66f2e7d6fcd6e4894f33a6e1242d57ee9758e9b618ff","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"fab574033704a8f8170c42ecb276f38f1b49ceb7844682b1dbbdb4ff841a526e","epoch":2,"op":"op-owned","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+---- ciphertext_protected_outside_the_adapter_is_not_delivered stdout ----
+
+thread 'ciphertext_protected_outside_the_adapter_is_not_delivered' (275404) panicked at tests/adapter_release.rs:520:35:
+bob request {"branch":"481cd1ad34e09c4b0852d125afbb9975f5ad693f1410866e57677b7490dea41d","command":"release","cover":[[{"generation":0,"right":"write","subject":"bob"}],[{"generation":0,"right":"read","subject":"root"}],[{"generation":0,"right":"read","subject":"bob"}],[{"generation":0,"right":"read","subject":"carol"}]],"digest":"0cc910f0dd1df065f1ee0933e09807d3b9f9bbc5909ffd523cb543020b5301a3","epoch":2,"op":"op-honest","policy_revision":2,"right":"write"} should succeed, got malformed: unsupported command
+
+
+failures:
+    certificate_from_another_operation_is_binding_mismatch
+    ciphertext_protected_outside_the_adapter_is_not_delivered
+    duplicate_delivery_is_replay
+    invocation_provenance_appears_in_the_release_certificate
+    one_operation_cannot_persist_two_different_ciphertexts
+    only_the_allocating_actor_may_release_persist_emit_or_abandon
+    pre_cut_release_delivers_late_within_same_frontier
+    pre_cut_release_is_not_delivered_across_a_frontier_change
+    receiver_delivers_plaintext_only_after_consume
+    released_ciphertext_aad_equals_hash_of_signed_certificate
+    retransmission_is_byte_identical
+    sender_leaf_incarnation_not_matching_actor_is_rejected
+    write_revocation_blocks_delivery_of_stale_writer_generation
+
+test result: FAILED. 0 passed; 13 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+error: test failed, to rerun pass `--test adapter_release`
+# exit: 101

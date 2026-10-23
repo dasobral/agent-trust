@@ -1,5 +1,5 @@
 //! Client endpoint: one OpenMLS group member with its own keys and storage
-//! (`docs/adapter-contract.md` §5.1, §5.2, C-12). Generic over the OpenMLS provider.
+//! (`docs/adapter-contract.md` §5.1, §5.2, §5.3, C-12, C-18). Generic over the OpenMLS provider.
 
 use openmls::extensions::ExtensionValidator;
 use openmls::prelude::*;
@@ -10,8 +10,9 @@ use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 
 use crate::adapter::ClientIdentity;
 use crate::wire::{
-    AccContext, AckKind, AuthzIncarnation, CanonicalAck, FounderCertificate, Frontier, Right,
-    SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
+    operation_digest, verify_ed25519, AccContext, AckKind, AuthzIncarnation, CanonicalAck,
+    ConsumeReceipt, Envelope, FounderCertificate, Frontier, FrozenContent, ReleaseCertificate,
+    Right, SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
     AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
@@ -470,4 +471,252 @@ fn sorted_rights(rights: &[(Right, u64)]) -> Result<Vec<(Right, u64)>, String> {
 
 fn mls<E: std::fmt::Debug>(err: E) -> String {
     format!("malformed: OpenMLS {err:?}")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.3: protection, receive and delivery (C-18)
+// ---------------------------------------------------------------------------
+
+/// A decrypted application message held until its consume receipt is verified (C-18).
+/// The plaintext is private: only [`PendingDelivery::deliver`] releases it, and dropping
+/// the value drops it.
+pub struct PendingDelivery {
+    op: String,
+    actor: String,
+    group: String,
+    recipient: String,
+    apf_public_key: Vec<u8>,
+    certificate_hash: Vec<u8>,
+    content: FrozenContent,
+}
+
+impl PendingDelivery {
+    /// Operation identifier from the release certificate.
+    pub fn op(&self) -> &str {
+        &self.op
+    }
+
+    /// Sender named by the release certificate.
+    pub fn actor(&self) -> &str {
+        &self.actor
+    }
+
+    /// Verifies the consume receipt (C-15), then returns `(content_type, payload)`.
+    /// A receipt that does not verify under the pinned APF key is `unauthenticated`; a
+    /// valid receipt for another issuer, group, operation, recipient or certificate is
+    /// `binding_mismatch`. On any error the plaintext is dropped.
+    pub fn deliver(self, receipt: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
+        let receipt = verify_ed25519::<ConsumeReceipt>(receipt, &self.apf_public_key)
+            .map_err(|_| "unauthenticated".to_string())?;
+        if receipt.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
+            || receipt.group != self.group
+        {
+            return Err("binding_mismatch: receipt issuer".into());
+        }
+        if receipt.op != self.op
+            || receipt.recipient != self.recipient
+            || receipt.release_certificate_hash != self.certificate_hash
+        {
+            return Err("binding_mismatch: receipt".into());
+        }
+        Ok((self.content.content_type, self.content.payload))
+    }
+}
+
+impl<P: OpenMlsProvider> ClientEndpoint<P> {
+    /// Protects frozen content once under `certificate` and returns the envelope (C-18).
+    ///
+    /// The certificate must verify under the pinned APF key (`unauthenticated`), and be
+    /// issued for this group to this member at its current frontier for exactly this
+    /// content (`binding_mismatch`). Then `set_aad(SHA-256(certificate))` comes
+    /// immediately before exactly one `create_message(FrozenContent)`.
+    pub fn protect(
+        &mut self,
+        certificate: &[u8],
+        content_type: &[u8],
+        payload: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let released =
+            ReleaseCertificate::verify(certificate, &self.apf_public_key, self.provider.crypto())
+                .map_err(|err| {
+                if err.starts_with("unauthenticated") {
+                    err
+                } else {
+                    "binding_mismatch: certificate encoding".to_string()
+                }
+            })?;
+        self.check_issuer(&released)?;
+        if released.actor != self.subject {
+            return Err("binding_mismatch: certificate actor".into());
+        }
+        if released.frontier != self.frontier()? {
+            return Err("binding_mismatch: certificate frontier".into());
+        }
+        let digest = operation_digest(
+            &released.op,
+            &released.resource,
+            content_type,
+            payload,
+            &released.frontier,
+            released.policy_revision,
+        )?;
+        if digest != released.digest {
+            return Err("binding_mismatch: digest".into());
+        }
+
+        let plaintext = FrozenContent {
+            content_type: content_type.to_vec(),
+            payload: payload.to_vec(),
+        }
+        .encode()?;
+        self.group.set_aad(Sha256::digest(certificate).to_vec());
+        let created = self
+            .group
+            .create_message(&self.provider, self.identity.signer(), &plaintext);
+        // OpenMLS clears the AAD only on success; never leave it set for a later message.
+        self.group.set_aad(Vec::new());
+        let mls_message = created
+            .map_err(mls)?
+            .tls_serialize_detached()
+            .map_err(mls)?;
+        Envelope {
+            certificate: certificate.to_vec(),
+            mls_message,
+        }
+        .encode()
+    }
+
+    /// Decrypts and checks an envelope without delivering it (C-18).
+    ///
+    /// A certificate that does not verify is `unauthenticated`; an MLS message that does
+    /// not process as an application message is `undecryptable`; an AAD, sender leaf,
+    /// reader, frontier or digest mismatch is `binding_mismatch`.
+    pub fn receive(&mut self, envelope: &[u8]) -> Result<PendingDelivery, String> {
+        let envelope = Envelope::decode(envelope).map_err(|_| "malformed: envelope")?;
+        let released = ReleaseCertificate::verify(
+            &envelope.certificate,
+            &self.apf_public_key,
+            self.provider.crypto(),
+        )
+        .map_err(|_| "unauthenticated".to_string())?;
+        self.check_issuer(&released)?;
+
+        // MLS processing; any failure here (old epoch, deleted key, not a private
+        // application message for this group) yields no plaintext.
+        let message = MlsMessageIn::tls_deserialize_exact(&envelope.mls_message)
+            .map_err(|_| "undecryptable: MLS message encoding")?;
+        if message.wire_format() != WireFormat::PrivateMessage {
+            return Err("undecryptable: not a PrivateMessage".into());
+        }
+        let message = message
+            .try_into_protocol_message()
+            .map_err(|_| "undecryptable: not a protocol message")?;
+        let processed = self
+            .group
+            .process_message(&self.provider, message)
+            .map_err(|_| "undecryptable: MLS processing")?;
+        let aad = processed.aad().to_vec();
+        let sender = processed.sender().clone();
+        let ProcessedMessageContent::ApplicationMessage(application) = processed.into_content()
+        else {
+            return Err("undecryptable: not an application message".into());
+        };
+        let plaintext = application.into_bytes();
+
+        // The AAD binds the ciphertext to exactly this certificate.
+        if aad != Sha256::digest(&envelope.certificate).as_slice() {
+            return Err("binding_mismatch: AAD".into());
+        }
+        // The sender leaf is the certified actor at the certified write generation.
+        let Sender::Member(index) = sender else {
+            return Err("binding_mismatch: sender is not a member".into());
+        };
+        let sender_leaf = self
+            .group
+            .public_group()
+            .leaf(index)
+            .ok_or("binding_mismatch: sender leaf")?;
+        if BasicCredential::try_from(sender_leaf.credential().clone())
+            .ok()
+            .map(|basic| basic.identity().to_vec())
+            .as_deref()
+            != Some(released.actor.as_bytes())
+        {
+            return Err("binding_mismatch: sender credential".into());
+        }
+        if leaf_generation(sender_leaf, &released.actor, Right::Write)
+            != Some(released.writer_generation)
+        {
+            return Err("binding_mismatch: sender write generation".into());
+        }
+        // This member is a certified reader at its own incarnation read generation.
+        let own_leaf = self
+            .group
+            .own_leaf_node()
+            .ok_or("binding_mismatch: own leaf")?;
+        let own_read = leaf_generation(own_leaf, &self.subject, Right::Read)
+            .ok_or("binding_mismatch: own read generation")?;
+        if !released
+            .readers
+            .iter()
+            .any(|(subject, generation)| *subject == self.subject && *generation == own_read)
+        {
+            return Err("binding_mismatch: not a certified reader".into());
+        }
+        if released.frontier != self.frontier()? {
+            return Err("binding_mismatch: certificate frontier".into());
+        }
+        // The decrypted content is exactly the frozen content the kernel released.
+        let content =
+            FrozenContent::decode(&plaintext).map_err(|_| "binding_mismatch: not FrozenContent")?;
+        let digest = operation_digest(
+            &released.op,
+            &released.resource,
+            &content.content_type,
+            &content.payload,
+            &released.frontier,
+            released.policy_revision,
+        )?;
+        if digest != released.digest {
+            return Err("binding_mismatch: digest".into());
+        }
+
+        Ok(PendingDelivery {
+            op: released.op,
+            actor: released.actor,
+            group: released.group,
+            recipient: self.subject.clone(),
+            apf_public_key: self.apf_public_key.clone(),
+            certificate_hash: Sha256::digest(&envelope.certificate).to_vec(),
+            content,
+        })
+    }
+
+    /// The certificate names the pinned APF key and this group.
+    fn check_issuer(&self, released: &ReleaseCertificate) -> Result<(), String> {
+        if released.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
+            || released.group.as_bytes() != self.group.group_id().as_slice()
+        {
+            return Err("binding_mismatch: certificate issuer".into());
+        }
+        Ok(())
+    }
+}
+
+/// The generation of `right` in a leaf's single well-formed `authz_incarnation` for
+/// `subject`, if any.
+fn leaf_generation(leaf: &LeafNode, subject: &str, right: Right) -> Option<u64> {
+    let incarnations = unknown_payloads(leaf.extensions(), AUTHZ_INCARNATION_EXTENSION_TYPE);
+    let [incarnation] = incarnations.as_slice() else {
+        return None;
+    };
+    let incarnation = AuthzIncarnation::decode(incarnation).ok()?;
+    if incarnation.subject != subject {
+        return None;
+    }
+    incarnation
+        .rights
+        .iter()
+        .find(|(r, _)| *r == right)
+        .map(|(_, generation)| *generation)
 }

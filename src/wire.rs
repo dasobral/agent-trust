@@ -1,5 +1,5 @@
 //! TLS encodings shared by the adapter and client endpoints (`docs/adapter-contract.md`
-//! §4.1–§4.6, C-9). Every signed structure is `struct { TBS tbs; opaque signature<V>; }`
+//! §4.1–§4.6, C-9, C-14, C-15). Every signed structure is `struct { TBS tbs; opaque signature<V>; }`
 //! signed with Ed25519 over the TLS encoding of `tbs`.
 
 use openmls_traits::{crypto::OpenMlsCrypto, signatures::Signer, types::SignatureScheme};
@@ -261,28 +261,47 @@ pub trait SignedStructure: Sized {
         public_key: &[u8],
         crypto: &impl OpenMlsCrypto,
     ) -> Result<Self, String> {
-        let split = bytes
-            .len()
-            .checked_sub(SIGNATURE_PREFIX.len() + SIGNATURE_LEN)
-            .ok_or_else(|| "malformed: signed structure".to_string())?;
-        let (tbs, signature) = bytes.split_at(split);
-        if signature[..SIGNATURE_PREFIX.len()] != SIGNATURE_PREFIX {
-            return Err("malformed: signature encoding".into());
-        }
-        let decoded = Self::decode_tbs(tbs)?;
-        if decoded.tbs()? != tbs {
-            return Err("malformed: non-canonical encoding".into());
-        }
+        let (decoded, tbs, signature) = split_signed::<Self>(bytes)?;
         crypto
-            .verify_signature(
-                SignatureScheme::ED25519,
-                tbs,
-                public_key,
-                &signature[SIGNATURE_PREFIX.len()..],
-            )
+            .verify_signature(SignatureScheme::ED25519, tbs, public_key, signature)
             .map_err(|_| "unauthenticated".to_string())?;
         Ok(decoded)
     }
+}
+
+/// Splits a signed structure into its canonically decoded TBS, the TBS bytes and the
+/// raw 64-byte signature (see [`SignedStructure::verify`]).
+fn split_signed<T: SignedStructure>(bytes: &[u8]) -> Result<(T, &[u8], &[u8]), String> {
+    let split = bytes
+        .len()
+        .checked_sub(SIGNATURE_PREFIX.len() + SIGNATURE_LEN)
+        .ok_or_else(|| "malformed: signed structure".to_string())?;
+    let (tbs, signature) = bytes.split_at(split);
+    if signature[..SIGNATURE_PREFIX.len()] != SIGNATURE_PREFIX {
+        return Err("malformed: signature encoding".into());
+    }
+    let decoded = T::decode_tbs(tbs)?;
+    if decoded.tbs()? != tbs {
+        return Err("malformed: non-canonical encoding".into());
+    }
+    Ok((decoded, tbs, &signature[SIGNATURE_PREFIX.len()..]))
+}
+
+/// [`SignedStructure::verify`] with ed25519-dalek's strict verification, the same check
+/// the OpenMLS RustCrypto provider applies. For holders of a signed structure that no
+/// longer have an OpenMLS provider, such as a pending delivery (C-18).
+pub(crate) fn verify_ed25519<T: SignedStructure>(
+    bytes: &[u8],
+    public_key: &[u8],
+) -> Result<T, String> {
+    let (decoded, tbs, signature) = split_signed::<T>(bytes)?;
+    let key = ed25519_dalek::VerifyingKey::try_from(public_key)
+        .map_err(|_| "unauthenticated".to_string())?;
+    let signature = ed25519_dalek::Signature::from_slice(signature)
+        .map_err(|_| "unauthenticated".to_string())?;
+    key.verify_strict(tbs, &signature)
+        .map_err(|_| "unauthenticated".to_string())?;
+    Ok(decoded)
 }
 
 impl SignedStructure for FounderCertificate {
@@ -500,4 +519,246 @@ impl<'a> Reader<'a> {
             Err("malformed: trailing bytes".into())
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.3: frozen content, release certificates, consume receipts, envelopes
+// (C-14, C-15)
+// ---------------------------------------------------------------------------
+
+pub const OPERATION_LABEL: &[u8] = b"agent-trust/operation/v1";
+pub const RELEASE_LABEL: &[u8] = b"agent-trust/release/v1";
+pub const CONSUME_LABEL: &[u8] = b"agent-trust/consume/v1";
+
+/// Lowercase hex digest of the frozen operation (C-14): SHA-256 of
+/// `TLS { label, op, resource, content_type, SHA-256(payload), epoch, branch,
+/// policy_revision }`, with the payload hash as raw bytes and the branch as ASCII hex.
+pub fn operation_digest(
+    op: &str,
+    resource: &str,
+    content_type: &[u8],
+    payload: &[u8],
+    frontier: &Frontier,
+    policy_revision: u64,
+) -> Result<String, String> {
+    let mut w = Writer::default();
+    w.opaque(OPERATION_LABEL)?;
+    w.opaque(op.as_bytes())?;
+    w.opaque(resource.as_bytes())?;
+    w.opaque(content_type)?;
+    w.opaque(&Sha256::digest(payload))?;
+    w.u64(frontier.epoch)?;
+    w.opaque(frontier.branch.as_bytes())?;
+    w.u64(policy_revision)?;
+    Ok(hex::encode(Sha256::digest(w.finish())))
+}
+
+/// MLS application plaintext `FrozenContent { content_type, payload }` (C-14).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrozenContent {
+    pub content_type: Vec<u8>,
+    pub payload: Vec<u8>,
+}
+
+impl FrozenContent {
+    pub fn encode(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(&self.content_type)?;
+        w.opaque(&self.payload)?;
+        Ok(w.finish())
+    }
+
+    /// Decodes exactly one `FrozenContent`; trailing bytes are refused.
+    pub fn decode(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        let content = Self {
+            content_type: r.opaque()?,
+            payload: r.opaque()?,
+        };
+        r.finish()?;
+        Ok(content)
+    }
+}
+
+/// Release certificate TBS (§4.5, C-14).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReleaseCertificate {
+    pub apf_key_id: Vec<u8>,
+    pub group: String,
+    pub op: String,
+    pub actor: String,
+    pub right: Right,
+    pub resource: String,
+    /// Empty when the operation has no invocation.
+    pub invocation: String,
+    pub frontier: Frontier,
+    pub policy_revision: u64,
+    /// Kernel digest (lowercase hex).
+    pub digest: String,
+    pub writer_generation: u64,
+    /// `(subject, read generation)`, sorted by subject.
+    pub readers: Vec<(String, u64)>,
+    /// Kernel release `event_hash` (lowercase hex).
+    pub kernel_event_hash: String,
+}
+
+impl SignedStructure for ReleaseCertificate {
+    fn tbs(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(RELEASE_LABEL)?;
+        w.opaque(&self.apf_key_id)?;
+        w.opaque(self.group.as_bytes())?;
+        w.opaque(self.op.as_bytes())?;
+        w.opaque(self.actor.as_bytes())?;
+        w.u8(self.right.code());
+        w.opaque(self.resource.as_bytes())?;
+        w.opaque(self.invocation.as_bytes())?;
+        w.u64(self.frontier.epoch)?;
+        // C-13 / C-14: hashes the kernel stores as hex travel as ASCII hex.
+        w.opaque(self.frontier.branch.as_bytes())?;
+        w.u64(self.policy_revision)?;
+        w.opaque(self.digest.as_bytes())?;
+        w.u64(self.writer_generation)?;
+        w.opaque(&encode_readers(&self.readers)?)?;
+        w.opaque(self.kernel_event_hash.as_bytes())?;
+        Ok(w.finish())
+    }
+
+    fn decode_tbs(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        r.label(RELEASE_LABEL)?;
+        let apf_key_id = r.opaque()?;
+        let group = r.string()?;
+        let op = r.string()?;
+        let actor = r.string()?;
+        let right = Right::from_code(r.u8()?).ok_or("malformed: right code")?;
+        let resource = r.string()?;
+        let invocation = r.string()?;
+        let frontier = Frontier {
+            epoch: r.u64()?,
+            branch: r.string()?,
+        };
+        let policy_revision = r.u64()?;
+        let digest = r.string()?;
+        let writer_generation = r.u64()?;
+        let readers = decode_readers(&r.opaque()?)?;
+        let kernel_event_hash = r.string()?;
+        r.finish()?;
+        Ok(Self {
+            apf_key_id,
+            group,
+            op,
+            actor,
+            right,
+            resource,
+            invocation,
+            frontier,
+            policy_revision,
+            digest,
+            writer_generation,
+            readers,
+            kernel_event_hash,
+        })
+    }
+}
+
+/// Consume receipt TBS (C-15).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsumeReceipt {
+    pub apf_key_id: Vec<u8>,
+    pub group: String,
+    pub op: String,
+    pub recipient: String,
+    /// SHA-256 of the signed release certificate bytes.
+    pub release_certificate_hash: Vec<u8>,
+}
+
+impl SignedStructure for ConsumeReceipt {
+    fn tbs(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(CONSUME_LABEL)?;
+        w.opaque(&self.apf_key_id)?;
+        w.opaque(self.group.as_bytes())?;
+        w.opaque(self.op.as_bytes())?;
+        w.opaque(self.recipient.as_bytes())?;
+        w.opaque(&self.release_certificate_hash)?;
+        Ok(w.finish())
+    }
+
+    fn decode_tbs(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        r.label(CONSUME_LABEL)?;
+        let receipt = Self {
+            apf_key_id: r.opaque()?,
+            group: r.string()?,
+            op: r.string()?,
+            recipient: r.string()?,
+            release_certificate_hash: r.opaque()?,
+        };
+        r.finish()?;
+        Ok(receipt)
+    }
+}
+
+/// `Envelope { certificate, mls_message }` (C-14).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Envelope {
+    /// Signed release certificate bytes.
+    pub certificate: Vec<u8>,
+    /// Exact `MlsMessage` bytes.
+    pub mls_message: Vec<u8>,
+}
+
+impl Envelope {
+    pub fn encode(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(&self.certificate)?;
+        w.opaque(&self.mls_message)?;
+        Ok(w.finish())
+    }
+
+    /// Decodes exactly one envelope; trailing bytes are refused.
+    pub fn decode(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        let envelope = Self {
+            certificate: r.opaque()?,
+            mls_message: r.opaque()?,
+        };
+        r.finish()?;
+        Ok(envelope)
+    }
+}
+
+/// `ReaderGeneration readers<V>` body: concatenated `opaque subject<V> ‖ uint64
+/// generation`, strictly increasing by subject bytes (sorted, no duplicates).
+fn encode_readers(readers: &[(String, u64)]) -> Result<Vec<u8>, String> {
+    if readers
+        .windows(2)
+        .any(|pair| pair[0].0.as_bytes() >= pair[1].0.as_bytes())
+    {
+        return Err("malformed: readers must be sorted and distinct".into());
+    }
+    let mut w = Writer::default();
+    for (subject, generation) in readers {
+        w.opaque(subject.as_bytes())?;
+        w.u64(*generation)?;
+    }
+    Ok(w.finish())
+}
+
+fn decode_readers(bytes: &[u8]) -> Result<Vec<(String, u64)>, String> {
+    let mut r = Reader::new(bytes);
+    let mut readers: Vec<(String, u64)> = Vec::new();
+    while !r.is_empty() {
+        let subject = r.string()?;
+        let generation = r.u64()?;
+        if readers
+            .last()
+            .is_some_and(|(last, _)| last.as_bytes() >= subject.as_bytes())
+        {
+            return Err("malformed: readers must be sorted and distinct".into());
+        }
+        readers.push((subject, generation));
+    }
+    Ok(readers)
 }

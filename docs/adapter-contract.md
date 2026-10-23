@@ -286,6 +286,66 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
   - The root's `expires_at` in `subject_status` is `u64::MAX`, the value of its self-anchored record. It is null only for a subject without a delegation record.
   - Each `admission_certificate` and `submit_commit` request adds exactly one trace event (C-5).
 
+### 4.11 Phase 4.3 interface (coordinator clarifications C-14 to C-18)
+
+These fill in §4.5 and §5.3 for plan phase 4.3. C-15 adds a signed consume receipt, and C-17 limits who may act on an operation. Both are flagged to Daniel in the phase report.
+
+- **C-14, frozen content and digest** (`src/wire.rs`).
+  - The MLS application plaintext is `FrozenContent { opaque content_type<V>; opaque payload<V>; }`, so the receiver can recompute the digest.
+  - `digest` is the lowercase hex SHA-256 of `TLS { opaque label<V> = "agent-trust/operation/v1"; opaque op<V>; opaque resource<V>; opaque content_type<V>; opaque payload_hash<V>; uint64 epoch; opaque branch<V>; uint64 policy_revision; }`, where `payload_hash = SHA-256(payload)` as raw bytes.
+  - Hash strings that the kernel stores as hex (`branch`, `digest`, the kernel event hash) are carried in TLS structures as ASCII hex (C-13). Hashes that exist only on the wire (`apf_key_id`, `commit_hash`, certificate hashes) are raw bytes.
+  - `ReleaseCertificate` (§4.5) has these field encodings:
+    - `right` is the right code;
+    - `invocation` is empty when there is none;
+    - `readers` is sorted by subject;
+    - `kernel_event_hash` is the kernel release response's `event_hash`.
+  - `writer_generation` and `readers` come from the release request's `cover`, which the kernel has verified equals exactly the writer singleton plus every roster reader singleton.
+  - `Envelope = TLS { opaque certificate<V>; opaque mls_message<V>; }`, holding the signed certificate and the exact `MlsMessage` bytes.
+- **C-15, consume receipt.**
+  - `ConsumeReceipt` TBS is `{ opaque label<V> = "agent-trust/consume/v1"; opaque apf_key_id<V>; opaque group<V>; opaque op<V>; opaque recipient<V>; opaque release_certificate_hash<V>; }`, signed by the APF.
+  - A client delivers plaintext only after it has verified a receipt for its own name and that exact certificate.
+  - Without the receipt, a client would deliver on an unauthenticated "ok".
+- **C-16, routed content commands.** `handle` now routes `release`, `persist`, `emit`, `consume` and `abandon`. For all five, the adapter fills `actor` and `now` and forbids any reserved field (C-2).
+  - `release {op, right, resource?, digest, cover, policy_revision, epoch, branch}` uses only the R-3 `policy_revision` form; a body with `revision` is `malformed`. After the kernel accepts, the adapter signs the release certificate and stores it under `op`. It returns the kernel response plus `certificate` in hex.
+  - `persist {op, envelope}` (hex) applies these checks:
+    - the envelope must decode, otherwise `malformed`;
+    - its certificate must be byte-identical to the one stored for `op`, otherwise `binding_mismatch`;
+    - its MLS message must be a `PrivateMessage` for this group at the certificate's epoch whose AAD equals `SHA-256(certificate)`, otherwise `binding_mismatch`.
+
+    The adapter then calls kernel `persist` with the certificate's `digest`.
+  - `emit {op, envelope}` runs kernel `emit`.
+  - `consume {op}` runs kernel `consume` with `recipient` set to the authenticated actor; a body containing `recipient` is `malformed`. It returns `{op, recipient, receipt}`.
+  - `abandon {op}` runs kernel `abandon`.
+- **C-17, operation ownership.** The adapter records the allocating actor of every operation it routes. Only that actor may `release`, `persist`, `emit` or `abandon` the operation; any other actor is `unauthorized`. Any roster reader may `consume`.
+- **C-18, client content rules** (`ClientEndpoint`).
+  - **`protect(certificate, content_type, payload)`** returns the envelope. It requires:
+    - the certificate verifies under the pinned APF key;
+    - `actor` is this member;
+    - `(epoch, branch)` equals the member's frontier;
+    - `digest` equals the digest it recomputes.
+
+    A bad signature is `unauthenticated`; any other failure is `binding_mismatch`. It then calls `set_aad(SHA-256(certificate))` immediately before exactly one `create_message(FrozenContent)`.
+  - **`receive(envelope)`** returns a `PendingDelivery` that holds the plaintext privately. It requires:
+    - the certificate verifies (otherwise `unauthenticated`);
+    - the MLS message processes as an application message (otherwise `undecryptable`);
+    - the AAD equals the certificate hash;
+    - the sender leaf's credential is `actor` and its `authz_incarnation` write generation equals `writer_generation`;
+    - this member appears in `readers` with its own incarnation read generation;
+    - the member's frontier equals the certificate's;
+    - the digest recomputed from the decrypted `FrozenContent` equals the certificate's.
+
+    Failures among the last five are `binding_mismatch`.
+  - **`PendingDelivery::deliver(receipt)`** verifies the consume receipt (C-15) and only then returns `(content_type, payload)`. A bad receipt is `unauthenticated` or `binding_mismatch`.
+  - New error code: `undecryptable`.
+- **C-19, resolved during the phase 4.3 implementation.**
+  - On a policy-only adapter (C-8), the five content commands stay `malformed: unsupported command`, because there is no group to bind content to.
+  - An operation with no recorded allocator (C-17) is `unauthorized` for `release`, `persist`, `emit` and `abandon`. This fails closed.
+  - `consume` of an operation with no stored release certificate is `not_persisted`, and the kernel is not called.
+  - `persist` of an operation that was allocated but never released is `invalid_transition`.
+  - `emit` also decodes the envelope, so undecodable bytes are `malformed`.
+  - An undecodable envelope at `receive` is `malformed`.
+  - The client verifies consume receipts with Ed25519 `verify_strict`, so delivery draws no provider randomness.
+
 ## 5. Flows
 
 ### 5.1 Genesis
