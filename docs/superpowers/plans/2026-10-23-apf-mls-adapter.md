@@ -306,15 +306,15 @@ This phase is split in two:
 - Consumes: all previous phases.
 - Produces: a subprocess-driven lab with seeded scheduling, exported traces in trace contract v2, and the `full_lap_mls` claim gate.
 
-- [ ] Write the tests:
+- [x] Write the tests:
   - `test_lab_scenario_trace_is_accepted_by_oracle`
   - `test_broken_controls_are_rejected_by_oracle`. Controls: post-denial release, API-only removal, omitted-reader cover, re-encryption of one operation, spent-cell replay, reopening without confirmation.
   - `test_process_restart_preserves_frontier_and_fence`
   - `test_seeded_schedules_reorder_drop_and_duplicate`. Record every seed in the evidence.
   - `test_full_lap_mls_is_true_only_when_every_gate_passes`
   - `test_verify_runs_adapter_gates_and_fails_closed`
-- [ ] Run red and retain the evidence.
-- [ ] Implement, then run green and the standard gate.
+- [x] Run red and retain the evidence.
+- [x] Implement, then run green and the standard gate.
 - [ ] Independent review of the adapter, distinct from the implementer, against contract §4–§6, then a coordinator rerun of every gate.
 - [ ] Update claims only for gates actually executed. State `Bridge_remove^ETK` as open and list the HPKE limitation.
 

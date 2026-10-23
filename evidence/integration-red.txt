@@ -1,0 +1,11 @@
+# Phase 4.7b lab, trace export and claim gate — RED (src/lab.rs skeleton; verifier without new gates)
+# date: 2026-10-23T21:18:22Z
+# source revision: 4bbc4ee43521f91ad0a5377b221f5b9d31dd026c + uncommitted phase 4.5/4.7b work
+# python: Python 3.14.4; toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# command: cargo build --locked && python3 -m unittest harness.test_integration harness.test_verify
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+FAILED (failures=31)
+
+seeded delivery schedules, seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615]
+seeds exercising each fault: {'reorder': [], 'drop': [], 'duplicate': []}
+# exit: 1

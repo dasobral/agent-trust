@@ -5,7 +5,7 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 fn usage() -> &'static str {
-    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo\n\nThe authority command is a trusted administrative local interface; it is not a network service."
+    "usage: agent-trust authority --state PATH\n       agent-trust mls-demo\n       agent-trust lab --dir PATH --seed N\n       agent-trust export-trace --dir PATH\n\nThe authority command is a trusted administrative local interface; it is not a network service."
 }
 
 fn fail_usage(message: &str) -> ! {
@@ -100,6 +100,26 @@ fn run_mls_demo() -> i32 {
     }
 }
 
+/// Parses `lab --dir PATH --seed N`.
+fn lab_args(mut args: std::env::ArgsOs) -> (PathBuf, u64) {
+    let (Some(dir_flag), Some(dir), Some(seed_flag), Some(seed), None) = (
+        args.next(),
+        args.next(),
+        args.next(),
+        args.next(),
+        args.next(),
+    ) else {
+        fail_usage("lab requires --dir PATH --seed N")
+    };
+    if dir_flag != "--dir" || seed_flag != "--seed" {
+        fail_usage("lab requires --dir PATH --seed N");
+    }
+    let Some(seed) = seed.to_str().and_then(|seed| seed.parse().ok()) else {
+        fail_usage("lab seed must be an unsigned integer")
+    };
+    (dir.into(), seed)
+}
+
 fn main() {
     let mut args = std::env::args_os();
     let _program = args.next();
@@ -127,6 +147,36 @@ fn main() {
                 fail_usage("mls-demo takes no arguments");
             }
             run_mls_demo()
+        }
+        "lab" => {
+            let (dir, seed) = lab_args(args);
+            let stdin = std::io::stdin();
+            let stdout = std::io::stdout();
+            match agent_trust::lab::run_lab(&dir, seed, stdin.lock(), stdout.lock()) {
+                Ok(()) => 0,
+                Err(error) => {
+                    eprintln!("{error}");
+                    1
+                }
+            }
+        }
+        "export-trace" => {
+            let (Some(flag), Some(dir), None) = (args.next(), args.next(), args.next()) else {
+                fail_usage("export-trace requires --dir PATH")
+            };
+            if flag != "--dir" {
+                fail_usage("export-trace requires --dir PATH");
+            }
+            match agent_trust::lab::export_v2_trace(std::path::Path::new(&dir)) {
+                Ok(trace) => {
+                    println!("{}", Value::Array(trace));
+                    0
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    1
+                }
+            }
         }
         _ => fail_usage("unknown command"),
     };
