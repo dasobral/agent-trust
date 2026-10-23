@@ -33,3 +33,11 @@ ed25519-dalek = "2"
 
 [dev-dependencies]
 tempfile = "3"
+# Phase 4.6 entropy seam: QRNG-backed OpenMLS rand provider and a loopback mock server.
+openmls_qrand = { git = "https://github.com/dasobral/openmls-qrand.git", rev = "dc8dced82e1edbe13579cc64ad2e1fcc348d8a72" }
+tiny_http = "0.12"
+
+# openmls_qrand depends on crates.io openmls_traits 0.6.0; resolve it to the pinned fork so
+# its provider implements the same OpenMlsProvider trait as the rest of the graph.
+[patch.crates-io]
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }

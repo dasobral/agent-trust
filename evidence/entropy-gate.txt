@@ -1,0 +1,36 @@
+# Phase 4.6 entropy seam — GATE (tests passed on first run; the adapter was already provider-generic)
+# date: 2026-10-23T20:56:14Z
+# source revision: b1f2e4f1b537d6e75f521e3a67aa186235b0e440 + uncommitted phase 4.6 tests and dev-dependencies
+# openmls_qrand: dasobral/openmls-qrand@dc8dced82e1edbe13579cc64ad2e1fcc348d8a72 (dev-dependency), openmls_traits patched to the pinned fork
+# toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13)
+# host: x86_64
+# MOCK: the QRNG server in tests/adapter_entropy.rs is a loopback mock with a deterministic stream; no quantum-origin claim.
+# UNMET: live_entropy_core_gate is #[ignore]d and has not been executed against a real Entropy Core.
+# LIMIT: HPKE encapsulation randomness inside openmls_rust_crypto does not go through OpenMlsRand (adapter-contract §8, D-5).
+
+## command: cargo test --locked --test adapter_entropy
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/adapter_entropy.rs (target/debug/deps/adapter_entropy-ee6c036a5efbac5a)
+
+running 5 tests
+test live_entropy_core_gate ... ignored, live Entropy Core gate: needs AGENT_TRUST_QRNG_BASE_URL; unmet until executed
+test mock_qrng_provider_runs_genesis_admission_and_release ... ok
+test qrng_outage_mid_session_fails_closed_without_fallback ... ok
+test every_adapter_key_generation_draws_from_configured_rand ... ok
+test failing_rand_fails_closed_without_kernel_mutation ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+## exit: 0
+
+## command: python3 -m unittest harness.test_rand_inventory -v
+test_adapter_never_calls_hidden_randomness_constructors (harness.test_rand_inventory.RandInventoryTests.test_adapter_never_calls_hidden_randomness_constructors) ... ok
+test_each_forbidden_constructor_is_flagged_alone (harness.test_rand_inventory.RandInventoryTests.test_each_forbidden_constructor_is_flagged_alone) ... ok
+test_legacy_lab_is_excluded_explicitly (harness.test_rand_inventory.RandInventoryTests.test_legacy_lab_is_excluded_explicitly) ... ok
+test_scanner_flags_offending_lines_and_ignores_comments (harness.test_rand_inventory.RandInventoryTests.test_scanner_flags_offending_lines_and_ignores_comments) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.038s
+
+OK
+## exit: 0

@@ -1,0 +1,18 @@
+# Trace contract v2 (R-5) checker — GREEN
+# date: 2026-10-23T20:58:10Z
+# source revision: b1f2e4f1b537d6e75f521e3a67aa186235b0e440 + uncommitted v2 contract, tests and harness/oracle.py
+# python: Python 3.14.4
+
+## command: python3 -m unittest harness.test_oracle_v2
+----------------------------------------------------------------------
+Ran 52 tests in 0.012s
+
+OK
+## exit: 0
+
+## command: python3 -m unittest discover -s harness
+----------------------------------------------------------------------
+Ran 88 tests in 0.434s
+
+OK
+## exit: 0

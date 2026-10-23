@@ -1,0 +1,12 @@
+# Trace contract v2 (R-5) checker — RED (v1 oracle rejects version 2 traces)
+# date: 2026-10-23T20:54:56Z
+# source revision: b1f2e4f1b537d6e75f521e3a67aa186235b0e440 + uncommitted v2 contract and tests
+# python: Python 3.14.4
+# command: python3 -m unittest harness.test_oracle_v2
+-  {'code': 'not_initialized', 'index': 3}]
+
+----------------------------------------------------------------------
+Ran 52 tests in 0.020s
+
+FAILED (failures=42)
+# exit: 1
