@@ -12,7 +12,7 @@ RUN cargo build --release --locked -p att-node
 
 FROM ${BASE_IMAGE}
 RUN useradd --system --uid 10001 --home-dir /var/lib/att att \
- && mkdir -p /var/lib/att/apf && chown -R att /var/lib/att
+ && mkdir -p /var/lib/att/apf /var/lib/att/agent && chown -R att /var/lib/att
 COPY --from=build /src/target/release/att-node /usr/local/bin/att-node
 USER att
 ENTRYPOINT ["att-node"]

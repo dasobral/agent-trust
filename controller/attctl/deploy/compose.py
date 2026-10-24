@@ -43,8 +43,13 @@ def render(plan, host_ports, image, project):
         if service.role == "apf":
             lines.append("    volumes:")
             lines.append("      - apf-state:/var/lib/att/apf")
+        if service.role == "agent":
+            lines.append("    volumes:")
+            lines.append(f"      - agent-{service.name}:/var/lib/att/agent")
         lines.append("    networks: [testbed]")
-    lines += ["networks:", "  testbed: {}", "volumes:", "  apf-state: {}", ""]
+    lines += ["networks:", "  testbed: {}", "volumes:", "  apf-state: {}"]
+    lines += [f"  agent-{s.name}: {{}}" for s in plan.services if s.role == "agent"]
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -74,6 +79,16 @@ def _compose(deployment, *args, capture=False):
     command = ["docker", "compose", "-f", deployment["compose_file"], "-p", deployment["project"], *args]
     return subprocess.run(command, check=True, text=True,
                           capture_output=capture).stdout
+
+
+def stop(run_dir, name):
+    """Stops one container (SIGKILL: a crash, not a clean shutdown)."""
+    _compose(load(run_dir), "kill", name, capture=True)
+
+
+def start(run_dir, name):
+    """Starts one stopped container; its volume keeps its state."""
+    _compose(load(run_dir), "start", name, capture=True)
 
 
 def down(run_dir):

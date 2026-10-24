@@ -12,7 +12,7 @@ authors = ["Daniel Sobral Blanco <dasobral93@gmail.com>"]
 # The Agent Trust stack, pinned in one place. Change these three revisions together:
 # agent-trust pins its own OpenMLS fork revision and openmls-qrand revision.
 [workspace.dependencies]
-agent-trust = { git = "https://github.com/dasobral/agent-trust.git", rev = "9af877cd0556ca46448f3daa20eee19cf8b286d9" }
+agent-trust = { git = "https://github.com/dasobral/agent-trust.git", rev = "5cf724e2a8af2d7a3a76e6a24d03de62f29f4a83" }
 openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
 openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
 openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable"] }

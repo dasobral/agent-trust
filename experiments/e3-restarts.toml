@@ -1,0 +1,336 @@
+# E3: the APF and the agents survive restarts and outages without losing safety.
+#   ./attctl run experiments/e3-restarts.toml --backend local
+# Design and expected results: docs/experiments/E3-restarts.md
+
+[experiment]
+id = "E3"
+title = "APF and agent restarts, outages and offline members"
+topology = "../topologies/three-agents.toml"
+hypothesis = """(H1) An APF restart keeps the policy state, the frontier and every \
+registered key; members continue without any change. (H2) While the APF is down no \
+release happens and no message is delivered; a message decrypted during the outage \
+is delivered once the APF returns (delay, not loss). (H3) A restarted agent resumes \
+as the same member with the same key, frontier and request sequence, and receives \
+the traffic sent while it was down. (H4) An offline member does not block a \
+revocation and repair; when it returns it applies its own removal and receives \
+nothing sent after it. (H5) The oracle accepts the trace and rejects the broken \
+controls."""
+
+# ---------------------------------------------------------------- A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 delegate bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 delegate carol"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "A4 admit bob"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "admit"
+name = "A5 admit carol"
+by = "alice"
+subject = "carol"
+
+[[step]]
+do = "send"
+name = "A6 alice sends m1"
+agent = "alice"
+label = "m1"
+text = "m1"
+
+[[step]]
+do = "quiesce"
+name = "A7 drain"
+
+# ---------------------------------------------------------------- B: APF restart (H1)
+[[step]]
+do = "restart"
+name = "B1 the APF crashes (SIGKILL) and restarts from its state directory"
+service = "apf"
+
+[[step]]
+do = "check.apf"
+name = "B2 roster, epoch and fence survive the restart"
+roster = ["alice", "bob", "carol"]
+epoch = 2
+read_fenced = false
+
+[[step]]
+do = "send"
+name = "B3 bob sends m2 through the restarted APF (keys and sequences survived)"
+agent = "bob"
+label = "m2"
+text = "m2"
+
+[[step]]
+do = "quiesce"
+name = "B4 drain"
+
+[[step]]
+do = "check.delivered"
+name = "B5 alice received m2"
+agent = "alice"
+ops = ["m2"]
+exact = false
+
+# ------------------------------------------------- C: APF outage during delivery (H2)
+[[step]]
+do = "hold"
+name = "C1 hold carol's mailbox"
+mailbox = "carol"
+held = true
+
+[[step]]
+do = "send"
+name = "C2 alice sends m3"
+agent = "alice"
+label = "m3"
+text = "m3"
+
+[[step]]
+do = "quiesce"
+name = "C3 bob's copy drains"
+
+[[step]]
+do = "stop"
+name = "C4 the APF goes down"
+service = "apf"
+
+[[step]]
+do = "send"
+name = "C5 no release without the APF"
+agent = "alice"
+text = "must not be released"
+expect = "transport"
+
+[[step]]
+do = "hold"
+name = "C6 carol's copy of m3 is delivered by the relay"
+mailbox = "carol"
+held = false
+
+[[step]]
+do = "quiesce"
+name = "C7 carol decrypts m3; its consumption waits for the APF"
+allow_waiting = true
+
+[[step]]
+do = "check.not_delivered"
+name = "C8 carol's application has not seen m3"
+agent = "carol"
+ops = ["m3"]
+
+[[step]]
+do = "start"
+name = "C9 the APF comes back"
+service = "apf"
+
+[[step]]
+do = "quiesce"
+name = "C10 the waiting consumption completes"
+
+[[step]]
+do = "check.delivered"
+name = "C11 carol received m3 once, after the outage"
+agent = "carol"
+ops = ["m3"]
+exact = false
+
+# ------------------------------------------------------- D: agent restart (H3)
+[[step]]
+do = "restart"
+name = "D1 bob crashes and restarts from its data directory"
+service = "bob"
+
+[[step]]
+do = "check.agent"
+name = "D2 bob is the same member on the APF frontier"
+agent = "bob"
+membership = "member"
+restarts = 1
+on_frontier = true
+
+[[step]]
+do = "send"
+name = "D3 alice sends m4 to the restarted bob"
+agent = "alice"
+label = "m4"
+text = "m4"
+
+[[step]]
+do = "send"
+name = "D4 the restarted bob sends m5 (its request sequence survived)"
+agent = "bob"
+label = "m5"
+text = "m5"
+
+[[step]]
+do = "quiesce"
+name = "D4b drain"
+
+[[step]]
+do = "stop"
+name = "D5 bob goes down"
+service = "bob"
+
+[[step]]
+do = "send"
+name = "D6 alice sends m6 while bob is down"
+agent = "alice"
+label = "m6"
+text = "m6"
+
+[[step]]
+do = "start"
+name = "D7 bob comes back"
+service = "bob"
+
+[[step]]
+do = "quiesce"
+name = "D8 drain"
+
+[[step]]
+do = "check.delivered"
+name = "D9 bob received m4 and m6, including the message sent while it was down"
+agent = "bob"
+ops = ["m4", "m6"]
+exact = false
+
+[[step]]
+do = "check.delivered"
+name = "D10 alice and carol received m5"
+agent = "carol"
+ops = ["m5"]
+exact = false
+
+[[step]]
+do = "burst"
+name = "D11 alice sends a burst of 10 to bob and carol"
+agents = ["alice"]
+count = 10
+label = "crash"
+
+[[step]]
+do = "restart"
+name = "D12 bob is killed in the middle of the burst and restarts"
+service = "bob"
+
+[[step]]
+do = "quiesce"
+name = "D13 drain (the relay retransmits every unacknowledged message)"
+
+[[step]]
+do = "check.at_most_once"
+name = "D14 bob received each burst message at most once; losses are reported"
+agent = "bob"
+prefix = "crash"
+
+[[step]]
+do = "check.delivered"
+name = "D15 carol received the whole burst"
+agent = "carol"
+ops = ["crash-alice-1", "crash-alice-2", "crash-alice-3", "crash-alice-4", "crash-alice-5", "crash-alice-6", "crash-alice-7", "crash-alice-8", "crash-alice-9", "crash-alice-10"]
+exact = false
+
+# --------------------------------------------- E: offline member and repair (H4)
+[[step]]
+do = "stop"
+name = "E1 carol goes offline"
+service = "carol"
+
+[[step]]
+do = "revoke"
+name = "E2 alice revokes carol's read right"
+by = "alice"
+subject = "carol"
+right = "read"
+
+[[step]]
+do = "repair"
+name = "E3 the repair completes without carol (bob confirms)"
+by = "alice"
+expect_removed = ["carol"]
+expect_evidence = "pair"
+
+[[step]]
+do = "send"
+name = "E4 alice sends m7 after the repair"
+agent = "alice"
+label = "m7"
+text = "m7"
+
+[[step]]
+do = "start"
+name = "E5 carol comes back"
+service = "carol"
+
+[[step]]
+do = "quiesce"
+name = "E6 drain"
+
+[[step]]
+do = "check.agent"
+name = "E7 carol applied its own removal from the log"
+agent = "carol"
+membership = "removed"
+restarts = 1
+
+[[step]]
+do = "check.not_delivered"
+name = "E8 carol never received m7"
+agent = "carol"
+ops = ["m7"]
+
+# ------------------------------------------------------------- F: verification (H5)
+[[step]]
+do = "check.frontiers"
+name = "F1 alice and bob are on the APF frontier"
+agents = ["alice", "bob"]
+
+[[step]]
+do = "check.complete"
+name = "F2 every message reached every certified reader exactly once (bob's crash burst aside)"
+exclude_prefix = ["bob:crash"]
+
+[[step]]
+do = "check.exactly_once"
+name = "F3 no duplicate, no delivery without APF consumption"
+allow_lost = true
+
+[[step]]
+do = "check.oracle"
+name = "F4 the oracle accepts the trace exported after two APF restarts"
+
+[[step]]
+do = "check.broken_controls"
+name = "F5 the oracle rejects the broken controls"
+revoked_reader = "carol"
+writer = "alice"
+minimum = 7
+
+[[step]]
+do = "check.entropy"
+name = "F6 every node drew from the QRNG service without failure"
+source = "qrng"
+
+[[step]]
+do = "check.no_errors"
+name = "F7 alice and bob logged no processing error"
+agents = ["alice", "bob"]

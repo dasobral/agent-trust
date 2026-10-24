@@ -132,6 +132,7 @@ def plan(topology: Topology, address, tokens=None, extra_env=None) -> Plan:
             "ATT_RELAY_URL": address("relay", "relay"),
             "ATT_CONTROL_TOKEN": tokens["control"],
             "ATT_APP_TOKEN": tokens["app"],
+            "ATT_DATA_DIR": "/var/lib/att/agent",
             **entropy_env,
         }
         if name == topology.root:

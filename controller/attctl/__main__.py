@@ -152,7 +152,8 @@ def cmd_run(args):
     print(f"experiment {experiment.id}: {experiment.title}")
     print(f"backend {args.backend}; run directory {run_dir}")
     deployment, testbed = _up(experiment.topology_path, args.backend, run_dir, args.image, args.profile)
-    runner = exp_mod.Runner(testbed, run_dir)
+    runner = exp_mod.Runner(testbed, run_dir,
+                            lifecycle=(deploy.get(deployment["backend"]), run_dir))
     try:
         report = runner.run(experiment)
         observations = runner.collect()

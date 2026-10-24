@@ -33,31 +33,65 @@ def up(topology, run_dir, binary, extra_env=None):
         return f"http://127.0.0.1:{ports[name]}"
 
     plan = topo.plan(topology, address, extra_env=extra_env)
-    processes = {}
-    endpoints = {}
+    services, processes, endpoints = {}, {}, {}
     for service in plan.services:
-        url = address(service.name, service.role)
+        endpoints[service.name] = address(service.name, service.role)
         env = dict(service.env)
         env["ATT_LISTEN"] = f"127.0.0.1:{ports[service.name]}"
         if service.role == "apf":
             env["ATT_STATE_DIR"] = str((run_dir / "state" / "apf").resolve())
-        log = open(run_dir / "logs" / f"{service.name}.log", "ab")
-        process = subprocess.Popen(
-            [str(binary), service.role],
-            env={**_base_env(), **env},
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        processes[service.name] = process.pid
-        endpoints[service.name] = url
+        if service.role == "agent":
+            env["ATT_DATA_DIR"] = str((run_dir / "state" / service.name).resolve())
+        services[service.name] = {"role": service.role, "env": env, "port": ports[service.name]}
         # Dependencies first: the APF and agents connect their entropy source at start.
-        if service.role in ("qrng-mock", "apf", "relay"):
-            _wait_port(ports[service.name], service.name, process)
+        wait = service.role in ("qrng-mock", "apf", "relay")
+        processes[service.name] = _spawn(run_dir, binary, service.name, services[service.name], wait)
     deployment = deployment_record("local", plan, run_dir, endpoints,
-                                   {"pids": processes, "binary": str(binary)})
+                                   {"pids": processes, "binary": str(binary), "services": services})
     write(run_dir, deployment)
     return deployment
+
+
+def _spawn(run_dir, binary, name, spec, wait=True):
+    log = open(Path(run_dir) / "logs" / f"{name}.log", "ab")
+    process = subprocess.Popen(
+        [str(binary), spec["role"]],
+        env={**_base_env(), **spec["env"]},
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    if wait:
+        _wait_port(spec["port"], name, process)
+    return process.pid
+
+
+def stop(run_dir, name):
+    """Stops one service (SIGKILL: a crash, not a clean shutdown)."""
+    deployment = load(run_dir)
+    pid = deployment["pids"].get(name)
+    if pid is None:
+        return
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and _alive(pid):
+        time.sleep(0.05)
+    deployment["pids"].pop(name)
+    write(run_dir, deployment)
+
+
+def start(run_dir, name):
+    """Starts one stopped service with its recorded configuration. Raises when the
+    service exits before it listens (for example, its entropy source is down)."""
+    deployment = load(run_dir)
+    if name in deployment["pids"] and _alive(deployment["pids"][name]):
+        return
+    pid = _spawn(run_dir, deployment["binary"], name, deployment["services"][name], wait=True)
+    deployment["pids"][name] = pid
+    write(run_dir, deployment)
 
 
 def _base_env():
@@ -79,7 +113,7 @@ def _wait_port(port, name, process, timeout=30):
 
 def down(run_dir):
     deployment = load(run_dir)
-    for name, pid in deployment.get("pids", {}).items():
+    for _name, pid in deployment.get("pids", {}).items():
         try:
             os.killpg(pid, signal.SIGTERM)
         except ProcessLookupError:

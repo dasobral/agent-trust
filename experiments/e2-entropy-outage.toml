@@ -1,0 +1,222 @@
+# E2: an entropy outage stops every randomness-dependent step, changes nothing, and
+# the system recovers without intervention when the source returns.
+#   ./attctl run experiments/e2-entropy-outage.toml --backend local
+# Design and expected results: docs/experiments/E2-entropy-outage.md
+
+[experiment]
+id = "E2"
+title = "QRNG outage over the network: fail closed, change nothing, recover"
+topology = "../topologies/three-agents.toml"
+hypothesis = """(H1) While the QRNG service refuses requests, every step that needs fresh \
+randomness on an agent (send, add, rekey) is refused with entropy_unavailable and \
+nothing falls back to another source. (H2) A refused step changes neither the \
+frontier, the roster nor the registered keys; a released but unprotected operation \
+is abandoned at the APF (barrier B2). (H3) A node cannot start during the outage. \
+(H4) When the source returns, every refused step succeeds without operator repair, \
+and the oracle accepts the whole trace."""
+
+# ---------------------------------------------------------------- A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 delegate bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 delegate carol"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "A4 admit bob"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "join"
+name = "A5 carol publishes a certified KeyPackage (not yet added)"
+agent = "carol"
+
+[[step]]
+do = "send"
+name = "A6 alice sends m1"
+agent = "alice"
+label = "m1"
+text = "m1 before the outage"
+
+[[step]]
+do = "quiesce"
+name = "A7 drain"
+
+# ---------------------------------------------------------------- B: outage (H1-H3)
+[[step]]
+do = "entropy_outage"
+name = "B1 the QRNG service starts refusing every request"
+available = false
+
+[[step]]
+do = "send"
+name = "B2 alice cannot send: the MLS message needs fresh randomness"
+agent = "alice"
+text = "must not be sent"
+expect = "entropy_unavailable"
+
+[[step]]
+do = "add"
+name = "B3 alice cannot add carol: the commit needs fresh path secrets"
+by = "alice"
+subject = "carol"
+expect = "entropy_unavailable"
+
+[[step]]
+do = "revoke"
+name = "B4 alice revokes bob's write (the APF draws nothing)"
+by = "alice"
+subject = "bob"
+right = "write"
+
+[[step]]
+do = "grant"
+name = "B5 alice offers write at generation 1"
+by = "alice"
+subject = "bob"
+right = "write"
+generation = 1
+expect_result = { pending = true }
+
+[[step]]
+do = "rekey"
+name = "B6 bob cannot rekey: the new key needs fresh randomness"
+agent = "bob"
+right = "write"
+generation = 1
+expect = "entropy_unavailable"
+
+[[step]]
+do = "check.apf"
+name = "B7 nothing changed: roster and epoch"
+roster = ["alice", "bob"]
+epoch = 1
+read_fenced = false
+
+[[step]]
+do = "check.frontiers"
+name = "B8 alice and bob are still on the APF frontier"
+agents = ["alice", "bob"]
+
+[[step]]
+do = "stop"
+name = "B9 bob stops"
+service = "bob"
+
+[[step]]
+do = "start"
+name = "B10 bob cannot start without its entropy source (fail closed)"
+service = "bob"
+expect = "fails"
+
+# ---------------------------------------------------------------- C: recovery (H4)
+[[step]]
+do = "entropy_outage"
+name = "C1 the QRNG service recovers"
+available = true
+
+[[step]]
+do = "start"
+name = "C2 bob starts and resumes from its data directory"
+service = "bob"
+
+[[step]]
+do = "check.agent"
+name = "C3 bob is the same member on the frontier"
+agent = "bob"
+membership = "member"
+on_frontier = true
+
+[[step]]
+do = "send"
+name = "C4 alice sends m2"
+agent = "alice"
+label = "m2"
+text = "m2 after the outage"
+
+[[step]]
+do = "quiesce"
+name = "C4b drain before the epoch changes (finding F-7: consume binds to the APF's current epoch)"
+
+[[step]]
+do = "add"
+name = "C5 alice adds carol with the same KeyPackage"
+by = "alice"
+subject = "carol"
+
+[[step]]
+do = "rekey"
+name = "C6 bob completes the pending rekey"
+agent = "bob"
+right = "write"
+generation = 1
+
+[[step]]
+do = "send"
+name = "C7 bob sends m3 with its new key"
+agent = "bob"
+label = "m3"
+text = "m3 from bob after the rekey"
+
+[[step]]
+do = "send"
+name = "C8 carol sends m4"
+agent = "carol"
+label = "m4"
+text = "m4 from carol"
+
+[[step]]
+do = "quiesce"
+name = "C9 drain"
+
+# ------------------------------------------------------------- D: verification
+[[step]]
+do = "check.apf"
+name = "D1 final roster and epoch: add plus rekey"
+roster = ["alice", "bob", "carol"]
+epoch = 3
+
+[[step]]
+do = "check.frontiers"
+name = "D2 every agent is on the APF frontier"
+agents = ["alice", "bob", "carol"]
+
+[[step]]
+do = "check.complete"
+name = "D3 every message reached every certified reader exactly once"
+
+[[step]]
+do = "check.exactly_once"
+name = "D4 no delivery without APF consumption"
+
+[[step]]
+do = "check.oracle"
+name = "D5 the oracle accepts the trace, the abandoned release included"
+
+[[step]]
+do = "check.broken_controls"
+name = "D6 the oracle rejects the broken controls that apply to this trace"
+revoked_reader = "nobody"
+writer = "alice"
+minimum = 4
+
+[[step]]
+do = "check.entropy"
+name = "D7 alice's counter shows the refused draws (bob's counter restarted with bob; B6 asserts its refusal); nothing else failed"
+source = "qrng"
+expect_failures = ["alice"]

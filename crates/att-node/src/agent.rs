@@ -20,18 +20,29 @@
 //! - `POST /control/rekey {right, generation}`, `POST /control/sync`
 //! - `POST /control/adversary {retain}`
 //!
+//! Persistence: with `ATT_DATA_DIR` the sidecar keeps its identity (`identity.json`,
+//! mode 0600), its MLS state (`mls-N.sqlite`, agent-trust `durable_provider`) and its
+//! bookkeeping (`state.json`: sequence, log cursor, inbox, ...) on disk, and a restart
+//! resumes as the same member through `ClientEndpoint::load` (contract C-33). The
+//! request sequence is written before each request is sent, so a restart never reuses
+//! one. A restart while joining returns to candidate: the published KeyPackage is
+//! abandoned.
+//!
 //! A background thread polls the relay: it applies acked commits in log order,
 //! joins from a Welcome, confirms repairs, and runs receive → consume → deliver for
 //! every envelope in the agent's mailbox (adapter contract §5.3).
 
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_trust::adapter::ClientIdentity;
-use agent_trust::client::{ClientEndpoint, JoinCandidate, PreparedJoin};
-use agent_trust::entropy::{EntropyConfig, LabEntropy, LabProvider};
+use agent_trust::client::{ClientEndpoint, JoinCandidate, PendingDelivery, PreparedJoin};
+use agent_trust::entropy::{DurableLabProvider, EntropyConfig, LabEntropy};
 use agent_trust::adapter::SignedRequest;
-use agent_trust::wire::{operation_digest, Envelope, Frontier, ReleaseCertificate, Right, SignedStructure};
+use agent_trust::wire::{
+    operation_digest, CanonicalAck, Envelope, Frontier, ReleaseCertificate, Right, SignedStructure,
+};
 use openmls::prelude::{MlsMessageIn, ProcessedMessageContent};
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_traits::OpenMlsProvider;
@@ -52,8 +63,11 @@ const ROOT_RIGHTS: [(Right, u64); 4] = [
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 /// Kept events per log (rejections, errors).
 const LOG_LIMIT: usize = 512;
+/// Envelopes from a future epoch kept until this member catches up.
+const FUTURE_LIMIT: usize = 1024;
 
-type Endpoint = ClientEndpoint<LabProvider>;
+type Prov = DurableLabProvider;
+type Endpoint = ClientEndpoint<Prov>;
 
 struct Config {
     name: String,
@@ -71,9 +85,9 @@ struct Config {
 /// The agent's membership state.
 enum Membership {
     /// An identity whose public key the APF may register at `delegate`.
-    Candidate(ClientIdentity, LabProvider),
+    Candidate(ClientIdentity, Prov),
     /// A finalized KeyPackage is published; waiting for a Welcome.
-    Joining(Box<JoinCandidate<LabProvider>>),
+    Joining(Box<JoinCandidate<Prov>>),
     Member(Box<Endpoint>),
     /// Removed by a repair commit that this agent applied.
     Removed(Box<Endpoint>),
@@ -101,6 +115,21 @@ struct Agent {
     adversary: Vec<Value>,
     errors: Vec<Value>,
     confirmations: Vec<Value>,
+    /// Persistence directory and the number of the current MLS storage file.
+    data_dir: PathBuf,
+    storage: u64,
+    /// Last written `state.json` and identity public key, to skip identical writes.
+    saved_state: String,
+    saved_identity: Vec<u8>,
+    restarts: u64,
+    /// Decrypted envelopes whose consumption failed in transport (the APF was
+    /// unreachable): retried every poll, so an APF outage delays delivery, not loses it.
+    waiting: Vec<(String, String, PendingDelivery)>,
+    /// Envelopes released at an epoch this member has not reached yet (their commit is
+    /// late on the relay): kept until the member catches up.
+    future: Vec<Value>,
+    /// Handshake entries skipped as stale or invalid.
+    skipped_entries: u64,
 }
 
 pub fn run() -> Result<(), String> {
@@ -125,26 +154,17 @@ pub fn run() -> Result<(), String> {
     let entropy = EntropyConfig::from_env()
         .and_then(|cfg| cfg.connect())
         .map_err(|err| format!("entropy_unavailable: {err}"))?;
-    let provider = entropy.provider();
-    let identity = ClientIdentity::generate(provider.rand())?;
-    let agent = Agent {
-        signer: identity.signer().clone(),
-        public_key: identity.public_key().to_vec(),
-        membership: Membership::Candidate(identity, provider),
-        cfg,
-        entropy,
-        sequence: 0,
-        apf_public: None,
-        cursor: 0,
-        retain: false,
-        next_op: 0,
-        polls: 0,
-        inbox: Vec::new(),
-        rejections: Vec::new(),
-        adversary: Vec::new(),
-        errors: Vec::new(),
-        confirmations: Vec::new(),
+    let data_dir = match config::optional("ATT_DATA_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => std::env::temp_dir().join(format!("att-agent-{name}-{}", std::process::id())),
     };
+    std::fs::create_dir_all(&data_dir).map_err(|err| format!("data dir: {err}"))?;
+    let mut agent = if data_dir.join(STATE_FILE).is_file() {
+        Agent::restore(cfg, entropy, data_dir)?
+    } else {
+        Agent::fresh(cfg, entropy, data_dir)?
+    };
+    agent.save()?;
     config::log(
         ROLE,
         "listening",
@@ -168,6 +188,42 @@ pub fn run() -> Result<(), String> {
     })
 }
 
+/// The outcome of one handshake entry for this member.
+enum Entry {
+    Applied,
+    /// Stale, already applied, or not addressed to this member.
+    Skipped,
+    /// Its parent is a later frontier: an earlier commit is missing.
+    Future,
+}
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+const STATE_FILE: &str = "state.json";
+const IDENTITY_FILE: &str = "identity.json";
+
+/// Writes `bytes` to `path` atomically (temporary file, then rename), owner-only.
+fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+    let tmp = path.with_extension("tmp");
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options.open(&tmp).map_err(|err| format!("persist: {err}"))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|err| format!("persist: {err}"))?;
+    std::fs::rename(&tmp, path).map_err(|err| format!("persist: {err}"))
+}
+
 fn push_limited(log: &mut Vec<Value>, value: Value) {
     if log.len() >= LOG_LIMIT {
         log.remove(0);
@@ -177,10 +233,174 @@ fn push_limited(log: &mut Vec<Value>, value: Value) {
 
 impl Agent {
     // -----------------------------------------------------------------------
+    // Persistence
+    // -----------------------------------------------------------------------
+
+    fn blank(cfg: Config, entropy: LabEntropy, data_dir: PathBuf, signer: SignatureKeyPair, membership: Membership) -> Self {
+        Agent {
+            public_key: signer.public().to_vec(),
+            signer,
+            membership,
+            cfg,
+            entropy,
+            sequence: 0,
+            apf_public: None,
+            cursor: 0,
+            retain: false,
+            next_op: 0,
+            polls: 0,
+            inbox: Vec::new(),
+            rejections: Vec::new(),
+            adversary: Vec::new(),
+            errors: Vec::new(),
+            confirmations: Vec::new(),
+            data_dir,
+            storage: 1,
+            saved_state: String::new(),
+            saved_identity: Vec::new(),
+            restarts: 0,
+            waiting: Vec::new(),
+            future: Vec::new(),
+            skipped_entries: 0,
+        }
+    }
+
+    fn storage_path(data_dir: &Path, storage: u64) -> PathBuf {
+        data_dir.join(format!("mls-{storage}.sqlite"))
+    }
+
+    /// A new agent: a new identity drawn from the selected source (C-6).
+    fn fresh(cfg: Config, entropy: LabEntropy, data_dir: PathBuf) -> Result<Self, String> {
+        let provider = entropy.durable_provider(&Self::storage_path(&data_dir, 1))?;
+        let identity = ClientIdentity::generate(provider.rand())?;
+        let signer = identity.signer().clone();
+        Ok(Self::blank(cfg, entropy, data_dir, signer, Membership::Candidate(identity, provider)))
+    }
+
+    /// A restarted agent: its stored identity, MLS state and bookkeeping.
+    fn restore(cfg: Config, entropy: LabEntropy, data_dir: PathBuf) -> Result<Self, String> {
+        let state: Value = std::fs::read(data_dir.join(STATE_FILE))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .ok_or("corrupt: state.json")?;
+        let pair: SignatureKeyPair = std::fs::read(data_dir.join(IDENTITY_FILE))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .ok_or("corrupt: identity.json")?;
+        let identity = ClientIdentity::restore(pair)?;
+        let signer = identity.signer().clone();
+        let storage = state["storage"].as_u64().unwrap_or(1);
+        let provider = entropy.durable_provider(&Self::storage_path(&data_dir, storage))?;
+        let apf_public = state["apf_public"].as_str().and_then(|key| hex::decode(key).ok());
+        let membership = match (state["membership"].as_str(), &apf_public) {
+            (Some(label @ ("member" | "removed")), Some(apf)) => {
+                let endpoint = ClientEndpoint::load(&cfg.group, &cfg.name, identity, provider, apf, None, None)?;
+                if label == "member" {
+                    Membership::Member(Box::new(endpoint))
+                } else {
+                    Membership::Removed(Box::new(endpoint))
+                }
+            }
+            _ => Membership::Candidate(identity, provider),
+        };
+        let mut agent = Self::blank(cfg, entropy, data_dir, signer, membership);
+        let list = |key: &str| state[key].as_array().cloned().unwrap_or_default();
+        agent.sequence = state["sequence"].as_u64().unwrap_or(0);
+        agent.cursor = state["cursor"].as_u64().unwrap_or(0);
+        agent.retain = state["retain"].as_bool().unwrap_or(false);
+        agent.next_op = state["next_op"].as_u64().unwrap_or(0);
+        agent.apf_public = apf_public;
+        agent.storage = storage;
+        agent.inbox = list("inbox");
+        agent.rejections = list("rejections");
+        agent.adversary = list("adversary");
+        agent.errors = list("errors");
+        agent.confirmations = list("confirmations");
+        agent.future = list("future");
+        agent.restarts = state["restarts"].as_u64().unwrap_or(0) + 1;
+        agent.saved_identity = agent.public_key.clone();
+        config::log(ROLE, "restored", json!({
+            "name": agent.cfg.name, "membership": agent.membership_label(),
+            "sequence": agent.sequence, "cursor": agent.cursor, "restarts": agent.restarts,
+        }));
+        Ok(agent)
+    }
+
+    fn membership_label(&self) -> &'static str {
+        match &self.membership {
+            Membership::Candidate(..) => "candidate",
+            Membership::Joining(_) => "joining",
+            Membership::Member(_) => "member",
+            Membership::Removed(_) => "removed",
+            Membership::Busy => "busy",
+        }
+    }
+
+    /// Writes the identity (when it changed) and the bookkeeping (when it changed).
+    fn save(&mut self) -> Result<(), String> {
+        if self.saved_identity != self.public_key {
+            let bytes = serde_json::to_vec(&self.signer).map_err(|_| "persist: identity")?;
+            write_private(&self.data_dir.join(IDENTITY_FILE), &bytes)?;
+            self.saved_identity = self.public_key.clone();
+        }
+        let membership = match self.membership_label() {
+            // A flow in progress keeps the last stable label; joining restarts as candidate.
+            "busy" | "joining" => "candidate",
+            label => label,
+        };
+        let state = json!({
+            "membership": membership,
+            "sequence": self.sequence,
+            "cursor": self.cursor,
+            "retain": self.retain,
+            "next_op": self.next_op,
+            "storage": self.storage,
+            "apf_public": self.apf_public.as_ref().map(hex::encode),
+            "inbox": self.inbox,
+            "rejections": self.rejections,
+            "adversary": self.adversary,
+            "errors": self.errors,
+            "confirmations": self.confirmations,
+            "restarts": self.restarts,
+            "future": self.future,
+        })
+        .to_string();
+        if state != self.saved_state {
+            write_private(&self.data_dir.join(STATE_FILE), state.as_bytes())?;
+            self.saved_state = state;
+        }
+        Ok(())
+    }
+
+    /// A provider on a new storage file, for a candidate whose old storage holds the
+    /// keys of a dropped KeyPackage.
+    fn new_provider(&mut self) -> Result<Prov, String> {
+        self.storage += 1;
+        self.entropy
+            .durable_provider(&Self::storage_path(&self.data_dir, self.storage))
+    }
+
+    // -----------------------------------------------------------------------
     // Routing
     // -----------------------------------------------------------------------
 
     fn route(&mut self, request: &Request) -> Response {
+        let failures = self.entropy.failures();
+        let mut response = self.dispatch(request);
+        // A step that fails while the source refuses draws is `entropy_unavailable`, also
+        // where OpenMLS reports the refusal as another error (agent-trust C-40).
+        if let (Some(before), Some(after)) = (failures, self.entropy.failures()) {
+            if after > before && response.body.get("error").is_some() {
+                response = Response::outcome(Err("entropy_unavailable".into()));
+            }
+        }
+        if let Err(error) = self.save() {
+            config::log(ROLE, "persist_error", json!({ "name": self.cfg.name, "error": error }));
+        }
+        response
+    }
+
+    fn dispatch(&mut self, request: &Request) -> Response {
         let segments = request.segments();
         let body = &request.body;
         match segments.as_slice() {
@@ -215,7 +435,7 @@ impl Agent {
                     ("POST", "add") => self.add(body),
                     ("POST", "repair") => self.repair(),
                     ("POST", "rekey") => self.rekey(body),
-                    ("POST", "sync") => self.sync().map(|()| self.status()),
+                    ("POST", "sync") => self.catch_up().map(|()| self.status()),
                     ("POST", "adversary") => self.set_adversary(body),
                     _ => return Response::not_found(),
                 };
@@ -257,6 +477,10 @@ impl Agent {
             "confirmations": self.confirmations,
             "errors": self.errors,
             "entropy": self.entropy.report(),
+            "restarts": self.restarts,
+            "waiting": self.waiting.iter().map(|(op, _, _)| op.clone()).collect::<Vec<_>>(),
+            "future": self.future.len(),
+            "skipped_entries": self.skipped_entries,
         })
     }
 
@@ -267,6 +491,8 @@ impl Agent {
     /// Signs `body` with the registered key at the next sequence and sends it (§4.8).
     fn request(&mut self, body: Value) -> Result<Value, String> {
         self.sequence += 1;
+        // Write-ahead: a restart must never reuse a sequence the APF may have consumed.
+        self.save()?;
         let signed = SignedRequest::sign(
             &self.cfg.group,
             &self.cfg.name,
@@ -481,7 +707,8 @@ impl Agent {
         ) {
             // The provider holds the KeyPackage's private keys; start a fresh one (C-40).
             let (identity, _) = candidate.abandon();
-            self.membership = Membership::Candidate(identity, self.entropy.provider());
+            let provider = self.new_provider()?;
+            self.membership = Membership::Candidate(identity, provider);
             return Err(error);
         }
         self.membership = Membership::Joining(Box::new(candidate));
@@ -491,7 +718,7 @@ impl Agent {
     /// §5.2 steps 4 to 7: stage the Add, submit it, merge it, publish commit and Welcome.
     fn add(&mut self, body: &Value) -> Result<Value, String> {
         let subject = str_field(body, "subject")?.to_owned();
-        self.sync()?;
+        self.catch_up()?;
         let path = format!("/v1/keypackages/{subject}");
         let key_package = hex_field(&self.cfg.relay.call("GET", &path, None)?, "key_package")?;
         let staged = self.endpoint_mut()?.stage_add(&key_package)?;
@@ -508,7 +735,7 @@ impl Agent {
 
     /// §5.4 and C-20 to C-23: plan, stage, submit, merge, publish, confirm.
     fn repair(&mut self) -> Result<Value, String> {
-        self.sync()?;
+        self.catch_up()?;
         let plan = self.request(json!({ "command": "repair_plan" }))?;
         let removed: Vec<String> = plan["removed"]
             .as_array()
@@ -553,7 +780,7 @@ impl Agent {
             .get("generation")
             .and_then(Value::as_u64)
             .ok_or("malformed: generation")?;
-        self.sync()?;
+        self.catch_up()?;
         let mut rights: Vec<(Right, u64)> = active_rights(&self.apf_state()?, &self.cfg.name)?
             .into_iter()
             .filter(|(held, _)| *held != right)
@@ -614,7 +841,7 @@ impl Agent {
                 format!("{}-{:06}", self.cfg.name, self.next_op)
             }
         };
-        self.sync()?;
+        self.catch_up()?;
         let apf_public = self.apf_key()?;
         let from = self.cfg.name.clone();
         self.endpoint_mut()?;
@@ -648,9 +875,15 @@ impl Agent {
         let certificate = hex_field(&released, "certificate")?;
         let verifier = openmls_rust_crypto::RustCrypto::default();
         let released = ReleaseCertificate::verify(&certificate, &apf_public, &verifier)?;
-        let envelope = self
-            .endpoint_mut()?
-            .protect(&certificate, &content_type, &payload)?;
+        let envelope = match self.endpoint_mut()?.protect(&certificate, &content_type, &payload) {
+            Ok(envelope) => envelope,
+            Err(error) => {
+                // Barrier B2: a released operation that was never protected is abandoned
+                // at the APF and its id is never reused.
+                let _ = self.request(json!({ "command": "abandon", "op": op }));
+                return Err(error);
+            }
+        };
         let envelope_hex = hex::encode(&envelope);
         self.request(json!({ "command": "persist", "op": op, "envelope": envelope_hex }))?;
         self.request(json!({ "command": "emit", "op": op, "envelope": envelope_hex }))?;
@@ -667,7 +900,7 @@ impl Agent {
                 Some(&json!({ "from": from, "op": op, "envelope": envelope_hex })),
             )?;
         }
-        Ok(json!({ "op": op, "recipients": recipients, "epoch": frontier.epoch }))
+        Ok(json!({ "op": op, "recipients": recipients, "epoch": frontier.epoch, "sent_ms": unix_ms() }))
     }
 
     // -----------------------------------------------------------------------
@@ -675,13 +908,27 @@ impl Agent {
     // -----------------------------------------------------------------------
 
     fn poll_once(&mut self) {
-        if let Err(error) = self.sync() {
+        if let Err(error) = self.catch_up() {
             self.note_error("sync", &error);
         }
-        if let Err(error) = self.drain_mailbox() {
-            self.note_error("mailbox", &error);
-        }
         self.polls += 1;
+        if let Err(error) = self.save() {
+            self.note_error("persist", &error);
+        }
+    }
+
+    /// Drains the mailbox at the current epoch, applies the handshake log, then drains
+    /// the envelopes that waited for the commits just applied. Messages already queued
+    /// for the current epoch are processed before the next commit: after it they could
+    /// no longer be delivered (the conservative profile binds delivery to the release
+    /// frontier, §5.3).
+    fn catch_up(&mut self) -> Result<(), String> {
+        let drained = self.drain_mailbox();
+        self.sync()?;
+        if !self.future.is_empty() {
+            self.drain_mailbox()?;
+        }
+        drained
     }
 
     fn note_error(&mut self, stage: &str, error: &str) {
@@ -692,7 +939,11 @@ impl Agent {
         push_limited(&mut self.errors, json!({ "stage": stage, "error": error }));
     }
 
-    /// Applies every handshake entry after the cursor, in log order.
+    /// Applies the handshake log. The relay is untrusted, so its order and its index
+    /// numbers only say where to look: an entry applies only if its APF-signed ack names
+    /// this member's current frontier as parent (§4.6). An entry whose ack names an older
+    /// parent, or that does not verify, is skipped; one whose ack names a newer parent
+    /// means a commit is missing, and processing waits for it.
     fn sync(&mut self) -> Result<(), String> {
         if self.retain {
             return Ok(());
@@ -700,32 +951,46 @@ impl Agent {
         if !matches!(self.membership, Membership::Member(_) | Membership::Joining(_)) {
             return Ok(());
         }
-        let path = format!("/v1/groups/{}/handshake?after={}", self.cfg.group, self.cursor);
-        let entries = self.cfg.relay.call("GET", &path, None)?;
-        for entry in entries.as_array().cloned().unwrap_or_default() {
-            let index = entry["index"].as_u64().unwrap_or(self.cursor);
+        let path = format!(
+            "/v1/groups/{}/handshake?after={}&reader={}",
+            self.cfg.group, self.cursor, self.cfg.name
+        );
+        let mut entries = self.cfg.relay.call("GET", &path, None)?.as_array().cloned().unwrap_or_default();
+        entries.sort_by_key(|entry| entry["index"].as_u64().unwrap_or(u64::MAX));
+        for entry in entries {
+            let Some(index) = entry["index"].as_u64() else { continue };
             if index < self.cursor {
                 continue;
             }
-            self.cursor = index + 1;
-            if let Err(error) = self.apply_entry(&entry) {
-                // An entry that does not apply (forged, or not for this member) is
-                // skipped: only an APF-acked commit on this member's parent can apply.
-                push_limited(
-                    &mut self.errors,
-                    json!({ "stage": "handshake", "index": index, "error": error }),
-                );
+            match self.apply_entry(&entry) {
+                Ok(Entry::Applied) => self.cursor = index + 1,
+                Ok(Entry::Skipped) => {
+                    self.skipped_entries += 1;
+                    self.cursor = index + 1;
+                }
+                Ok(Entry::Future) => break,
+                Err(error) => {
+                    self.skipped_entries += 1;
+                    self.cursor = index + 1;
+                    push_limited(
+                        &mut self.errors,
+                        json!({ "stage": "handshake", "index": index, "error": error }),
+                    );
+                }
             }
         }
         Ok(())
     }
 
-    fn apply_entry(&mut self, entry: &Value) -> Result<(), String> {
-        let ack = hex_field(entry, "ack")?;
+    fn apply_entry(&mut self, entry: &Value) -> Result<Entry, String> {
+        let ack_bytes = hex_field(entry, "ack")?;
+        let apf_public = self.apf_key()?;
+        let verifier = openmls_rust_crypto::RustCrypto::default();
+        let ack = CanonicalAck::verify(&ack_bytes, &apf_public, &verifier)?;
         let kind = entry["kind"].as_str().unwrap_or_default();
         if let Membership::Joining(_) = &self.membership {
             if entry["joiner"].as_str() != Some(self.cfg.name.as_str()) {
-                return Ok(());
+                return Ok(Entry::Skipped);
             }
             let welcome = hex_field(entry, "welcome")?;
             let Membership::Joining(candidate) =
@@ -733,26 +998,37 @@ impl Agent {
             else {
                 unreachable!("checked above")
             };
-            match candidate.join(&welcome, &ack) {
+            return match candidate.join(&welcome, &ack_bytes) {
                 Ok(endpoint) => {
                     self.membership = Membership::Member(Box::new(endpoint));
                     config::log(ROLE, "joined", json!({ "name": self.cfg.name }));
-                    return Ok(());
+                    Ok(Entry::Applied)
                 }
                 Err(error) => {
                     // The KeyPackage is spent either way; go back to a fresh candidate.
                     let identity = ClientIdentity::generate(&self.entropy.rand())?;
-                    self.membership = Membership::Candidate(identity, self.entropy.provider());
-                    return Err(error);
+                    let provider = self.new_provider()?;
+                    self.signer = identity.signer().clone();
+                    self.public_key = identity.public_key().to_vec();
+                    self.membership = Membership::Candidate(identity, provider);
+                    Err(error)
                 }
-            }
+            };
         }
-        if entry["committer"].as_str() == Some(self.cfg.name.as_str()) {
-            return Ok(());
+        let own = self.endpoint_mut()?.frontier()?;
+        if ack.parent.epoch < own.epoch {
+            // Already applied (for example this member's own commit), or a replay.
+            return Ok(Entry::Skipped);
+        }
+        if ack.parent.epoch > own.epoch {
+            return Ok(Entry::Future);
+        }
+        if ack.parent.branch != own.branch {
+            return Err("binding_mismatch: the ack forks from this member's frontier".into());
         }
         let commit = hex_field(entry, "commit")?;
         let endpoint = self.endpoint_mut()?;
-        endpoint.apply_ack(&commit, &ack)?;
+        endpoint.apply_ack(&commit, &ack_bytes)?;
         // A removed member that applies the repair ack becomes inactive (C-24, C-26).
         let active = endpoint.confirmation().is_ok();
         if !active {
@@ -760,22 +1036,42 @@ impl Agent {
                 self.membership = Membership::Removed(endpoint);
             }
             config::log(ROLE, "removed", json!({ "name": self.cfg.name }));
-            return Ok(());
+            return Ok(Entry::Applied);
         }
         if kind == "repair" {
             // Every continuing member confirms; the APF opens the fence on a match (C-23).
             let _ = self.confirm();
         }
-        Ok(())
+        Ok(Entry::Applied)
     }
 
     fn drain_mailbox(&mut self) -> Result<(), String> {
         if matches!(self.membership, Membership::Candidate(..) | Membership::Joining(_) | Membership::Busy) {
             return Ok(());
         }
+        // 1. Consumptions that failed in transport.
+        for (op, from, pending) in std::mem::take(&mut self.waiting) {
+            self.finish(op, from, pending);
+        }
+        // 2. Envelopes from an epoch this member has now reached.
+        let mut messages = std::mem::take(&mut self.future);
+        // 3. New envelopes, leased by the relay until acknowledged.
         let path = format!("/v1/mailbox/{}", self.cfg.name);
-        let messages = self.cfg.relay.call("GET", &path, None)?;
-        for message in messages.as_array().cloned().unwrap_or_default() {
+        let fetched = self.cfg.relay.call("GET", &path, None)?.as_array().cloned().unwrap_or_default();
+        let ids: Vec<u64> = fetched.iter().filter_map(|m| m["relay_id"].as_u64()).collect();
+        messages.extend(fetched);
+        self.process_messages(messages);
+        // Acknowledge only after the outcome is on disk: a crash before this point makes
+        // the relay retransmit the batch (at-least-once transport).
+        self.save()?;
+        if !ids.is_empty() {
+            self.cfg.relay.call("POST", &format!("{path}/ack"), Some(&json!({ "ids": ids })))?;
+        }
+        Ok(())
+    }
+
+    fn process_messages(&mut self, messages: Vec<Value>) {
+        for message in messages {
             let op = message["op"].as_str().unwrap_or_default().to_owned();
             let from = message["from"].as_str().unwrap_or_default().to_owned();
             let Ok(envelope) = hex_field(&message, "envelope") else {
@@ -786,15 +1082,66 @@ impl Agent {
                 self.adversary_attempt(&op, &from, &envelope, &message);
                 continue;
             }
-            match self.receive(&op, &envelope) {
-                Ok(item) => {
-                    config::log(ROLE, "delivered", json!({ "name": self.cfg.name, "op": op }));
-                    self.inbox.push(item);
+            if self.is_future(&envelope) {
+                if self.future.len() < FUTURE_LIMIT {
+                    self.future.push(message);
+                } else {
+                    self.reject(&op, &from, "not_ready: future buffer full");
                 }
+                continue;
+            }
+            match self.endpoint_mut().and_then(|endpoint| endpoint.receive(&envelope)) {
+                Ok(pending) if pending.op() == op => self.finish(op, from, pending),
+                Ok(_) => self.reject(&op, &from, "binding_mismatch: operation"),
                 Err(error) => self.reject(&op, &from, &error),
             }
         }
-        Ok(())
+    }
+
+    /// True when the envelope's certificate verifies and names a later epoch than this
+    /// member's: its commit has not reached this member yet.
+    fn is_future(&mut self, envelope: &[u8]) -> bool {
+        let Some(apf_public) = self.apf_public.clone() else { return false };
+        let Ok(own) = self.endpoint_mut().and_then(|endpoint| endpoint.frontier()) else {
+            return false;
+        };
+        let verifier = openmls_rust_crypto::RustCrypto::default();
+        Envelope::decode(envelope)
+            .ok()
+            .and_then(|envelope| ReleaseCertificate::verify(&envelope.certificate, &apf_public, &verifier).ok())
+            .is_some_and(|certificate| certificate.frontier.epoch > own.epoch)
+    }
+
+    /// Consume at the APF, then deliver under the receipt (§5.3 step 7, C-15).
+    fn finish(&mut self, op: String, from: String, pending: PendingDelivery) {
+        let actor = pending.actor().to_owned();
+        let receipt = match self
+            .request(json!({ "command": "consume", "op": op }))
+            .and_then(|response| hex_field(&response, "receipt"))
+        {
+            Ok(receipt) => receipt,
+            Err(error) if error.starts_with("transport") => {
+                self.waiting.push((op, from, pending));
+                return;
+            }
+            Err(error) => return self.reject(&op, &from, &error),
+        };
+        match pending.deliver(&receipt) {
+            Ok((content_type, payload)) => {
+                config::log(ROLE, "delivered", json!({ "name": self.cfg.name, "op": op }));
+                let item = json!({
+                    "seq": self.inbox.len(),
+                    "op": op,
+                    "from": actor,
+                    "content_type": String::from_utf8_lossy(&content_type),
+                    "payload_hex": hex::encode(&payload),
+                    "text": String::from_utf8(payload).ok(),
+                    "delivered_ms": unix_ms(),
+                });
+                self.inbox.push(item);
+            }
+            Err(error) => self.reject(&op, &from, &error),
+        }
     }
 
     fn reject(&mut self, op: &str, from: &str, error: &str) {
@@ -803,25 +1150,6 @@ impl Agent {
             &mut self.rejections,
             json!({ "op": op, "from": from, "code": error_code(error), "error": error }),
         );
-    }
-
-    /// Receive, consume and deliver one envelope (§5.3 step 7, C-15, C-18).
-    fn receive(&mut self, op: &str, envelope: &[u8]) -> Result<Value, String> {
-        let pending = self.endpoint_mut()?.receive(envelope)?;
-        if pending.op() != op {
-            return Err("binding_mismatch: operation".into());
-        }
-        let actor = pending.actor().to_owned();
-        let response = self.request(json!({ "command": "consume", "op": op }))?;
-        let (content_type, payload) = pending.deliver(&hex_field(&response, "receipt")?)?;
-        Ok(json!({
-            "seq": self.inbox.len(),
-            "op": op,
-            "from": actor,
-            "content_type": String::from_utf8_lossy(&content_type),
-            "payload_hex": hex::encode(&payload),
-            "text": String::from_utf8(payload).ok(),
-        }))
     }
 
     /// The retained-key adversary: try to decrypt with raw OpenMLS, bypassing every
