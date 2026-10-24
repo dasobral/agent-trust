@@ -240,8 +240,13 @@ def stack_versions():
             source = fields.get("source", "").strip('"')
             versions[name] = source.split("#")[-1] if "#" in source else fields.get("version", "").strip('"')
     try:
-        versions["testbed"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, check=True,
-                                             capture_output=True, text=True).stdout.strip()
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, check=True,
+                              capture_output=True, text=True).stdout.strip()
+        # Evidence must name the code that produced it: a tree with uncommitted changes
+        # is marked, so such a report is never mistaken for a run of the commit.
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=REPO,
+                               check=True, capture_output=True, text=True).stdout.strip()
+        versions["testbed"] = head + ("-dirty" if dirty else "")
     except (subprocess.CalledProcessError, FileNotFoundError):
         versions["testbed"] = "unknown"
     return versions

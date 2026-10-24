@@ -1,5 +1,5 @@
 # Three agents in one MLS group, one APF authority, one relay, one QRNG service.
-# Deployed identically by every backend (attctl up --backend local|compose).
+# Deployed identically by every backend (attctl up --backend local|compose|k8s).
 name = "three-agents"
 group = "lab"
 root = "alice"           # the founding agent; holds read, write, admin, admit

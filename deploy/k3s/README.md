@@ -27,8 +27,14 @@ volume keeps the state, so a restarted APF or agent resumes where it stopped.
 
 ## Install
 
+What was tested: the default online install with containerd runs in CI (job `k3s`),
+where `k8s-isolation`, E1, E1-mtls and E3 pass. The development sandbox ran the same
+k3s version with the Docker runtime and the sandbox settings below, started by hand
+with the same flags. `--airgap`, `--docker` and `--sandbox` as script options are
+documented here but were not run as a script.
+
 ```bash
-sudo deploy/k3s/install-k3s.sh              # online, containerd runtime (default)
+sudo deploy/k3s/install-k3s.sh              # online, containerd runtime (default; tested in CI)
 sudo deploy/k3s/install-k3s.sh --airgap     # images from the k3s release bundle
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml # attctl also finds this file by itself
 ```
