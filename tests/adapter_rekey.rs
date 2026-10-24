@@ -232,6 +232,16 @@ fn raw_update(
     incarnation: &TestIncarnation,
     extra: Extra,
 ) -> Vec<u8> {
+    try_raw_update(client, new_signer, incarnation, extra).expect("build update commit")
+}
+
+/// Like [`raw_update`], but returns the error when OpenMLS refuses to build the commit.
+fn try_raw_update(
+    client: &mut Client,
+    new_signer: Option<&ClientIdentity>,
+    incarnation: &TestIncarnation,
+    extra: Extra,
+) -> Result<Vec<u8>, CreateCommitError> {
     let subject = client.subject().to_owned();
     let incarnation = encode_incarnation(incarnation);
     let (group, provider, signer) = client.mls_parts_mut();
@@ -293,14 +303,13 @@ fn raw_update(
             |_| true,
         ),
         None => builder.build(provider.rand(), provider.crypto(), signer, |_| true),
-    }
-    .expect("build update commit");
-    complete
+    }?;
+    Ok(complete
         .stage_commit(provider)
         .expect("stage update commit")
         .commit()
         .tls_serialize_detached()
-        .expect("serialize commit")
+        .expect("serialize commit"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1310,32 +1319,41 @@ fn update_commit_reusing_old_signature_key_is_noncanonical() {
     let commit = raw_update(&mut bob, Some(&identity("bob")), &incarnation, Extra::None);
     refused_update(&mut w, &mut bob, &commit, "noncanonical_commit", None);
 
-    // A new key that is already registered to carol, or to the root.
-    let commit = raw_update(
-        &mut bob,
-        Some(&identity("carol")),
-        &incarnation,
-        Extra::None,
-    );
+    // A new key that is already registered to another subject. Dave is delegated, so
+    // his key is in the registry, but he was never admitted, so it is in no MLS leaf:
+    // OpenMLS builds the commit, and only the adapter can refuse it.
+    let commit = raw_update(&mut bob, Some(&identity("dave")), &incarnation, Extra::None);
     refused_update(
         &mut w,
         &mut bob,
         &commit,
         "noncanonical_commit",
-        Some(&identity("carol")),
+        Some(&identity("dave")),
     );
-    let commit = raw_update(&mut bob, Some(&identity(ROOT)), &incarnation, Extra::None);
-    refused_update(
-        &mut w,
-        &mut bob,
-        &commit,
-        "noncanonical_commit",
-        Some(&identity(ROOT)),
-    );
+
+    // A new key that is already in another member's leaf, carol's or the root's.
+    // OpenMLS enforces signature-key uniqueness across the tree, both when it builds a
+    // commit and when it processes one (`validate_key_uniqueness`), so such a commit
+    // can't be built with OpenMLS and is never accepted by an OpenMLS member.
+    for other in ["carol", ROOT] {
+        let err = try_raw_update(&mut bob, Some(&identity(other)), &incarnation, Extra::None)
+            .expect_err("OpenMLS refuses a leaf key that another member holds");
+        assert!(
+            matches!(
+                err,
+                CreateCommitError::ProposalValidationError(
+                    ProposalValidationError::DuplicateSignatureKey
+                )
+            ),
+            "{other}: {err:?}"
+        );
+        assert!(!w.authenticates("bob", &identity(other)));
+    }
 
     // The registry is unchanged: each key still authenticates only its own subject.
     assert!(w.authenticates("bob", &identity("bob")));
     assert!(w.authenticates("carol", &identity("carol")));
+    assert!(w.authenticates("dave", &identity("dave")));
     assert!(w.authenticates(ROOT, &identity(ROOT)));
     assert!(!w.authenticates("carol", &identity("bob")));
     assert!(!w.active("bob", "write"));
