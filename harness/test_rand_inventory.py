@@ -9,7 +9,8 @@ name are ignored; only code is checked.
 
 This is a static check of call sites, not a proof: randomness reached through a type
 alias, a re-export or ``Default::default()`` type inference is not detected here, and
-HPKE encapsulation randomness is a documented limitation (section 8, D-5).
+HPKE encapsulation randomness comes from the lab crypto provider's source-seeded DRBG
+(section 8), which this static scan does not inspect.
 
 Standard library only. It reads source files as text and imports no production module.
 

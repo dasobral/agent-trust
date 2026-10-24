@@ -40,7 +40,7 @@ GATES = ("build", "python-oracle", "rust", "harness", "integration")
 BOUNDARY_FIELDS = {
     "bridge_remove_etk": "open",
     "live_entropy_core": "unmet",
-    "hpke_randomness": "excluded",
+    "hpke_randomness": "drbg_seeded_from_source",
 }
 
 
@@ -191,7 +191,7 @@ def run_verification(*, runner=subprocess.run, which=shutil.which, out=sys.stdou
         failure = _gates(cargo, gates, runner=runner, out=out)
     passed = failure is None
     reason = ("every gate passed in this run; Bridge_remove^ETK remains an open proof "
-              "obligation and HPKE randomness is excluded" if passed else failure)
+              "obligation and HPKE randomness is DRBG output seeded from the selected source" if passed else failure)
     if not _write_manifest(gates, passed, reason, out):
         return 1
     print(f"claim_boundary.full_lap_mls: {'true' if passed else 'false'}", file=out)

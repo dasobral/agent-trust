@@ -5,8 +5,9 @@ source selected only through the environment (``AGENT_TRUST_ENTROPY_SOURCE`` or
 ``AGENT_TRUST_ENTROPY_CONFIG``). The ``mock`` source is openmls-qrand ``MockEntropy``: a
 seeded stream that is NOT random. With a fixed mock seed every lab identity key is a
 function of that seed, so two runs that agree on every exported key show that no key
-came from another source. HPKE randomness is outside the seam (section 8) and no
-assertion here depends on it.
+came from another source. HPKE encapsulation randomness is DRBG output of the lab crypto
+provider, seeded from the source when it is connected (section 8); no assertion here
+depends on it beyond the two seeding draws in the first entropy report.
 
 Every ``AGENT_TRUST_*`` variable is removed from the subprocess environment first, so
 a developer's shell cannot change what these tests select. They import no production

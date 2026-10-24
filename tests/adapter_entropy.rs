@@ -15,7 +15,9 @@
 //! The mock QRNG server below is a MOCK. It is not an entropy source: its "entropy" is a
 //! SHA-256 counter stream, so its output is predictable by design. Nothing in this file
 //! makes, or supports, any claim about quantum origin or entropy quality. HPKE
-//! encapsulation randomness is outside the seam (§8, D-5) and is not checked here.
+//! encapsulation randomness is DRBG output of the lab crypto provider (§8). The fork's
+//! `libcrux_crypto/tests/entropy_source.rs` checks that it comes from the DRBG's source;
+//! `tests/lab_entropy.rs` checks that connecting a lab source seeds that provider.
 //!
 //! `live_entropy_core_gate` is the only test that may reach a real endpoint. It is
 //! ignored by default, reads its endpoint only from the environment, and stays an unmet

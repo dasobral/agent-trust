@@ -565,17 +565,19 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 
 ## 8. Entropy seam
 
-| Randomness consumer | Path | Covered by the configured `OpenMlsRand` |
+| Randomness consumer | Path | Covered by the configured source |
 |---|---|---|
 | Path secrets, init and encryption key derivation | `OpenMlsRand` | Yes |
-| Client and APF signature keys | Seed from `provider.rand()`, then `SignatureKeyPair::from_raw` (fork `basic_credential/src/lib.rs:203`) | Yes, by construction in the adapter |
-| `SignatureKeyPair::new` | `OsRng` (fork `basic_credential/src/lib.rs:17`, `145`) | No. The adapter MUST NOT call it. |
-| RustCrypto `signature_key_gen` | Internal `ChaCha20Rng::from_entropy` (fork `openmls_rust_crypto/src/provider.rs:50`) | No. The adapter MUST NOT call it. |
-| HPKE seal (UpdatePath and Welcome encapsulation) | hpke-rs internal PRNG (fork `openmls_rust_crypto/src/provider.rs:673`) | No. This is a known limitation, documented and not claimed. |
+| Client and APF signature keys | Seed from `provider.rand()`, then `SignatureKeyPair::from_raw` (fork `basic_credential/src/lib.rs:271`) | Yes, by construction in the adapter |
+| `SignatureKeyPair::new` | The OS RNG, `SysRng` (fork `basic_credential/src/lib.rs:187`) | No. The adapter MUST NOT call it. |
+| Crypto provider `signature_key_gen` | The lab crypto provider's HMAC-DRBG | Derived: DRBG output seeded from the source. The adapter still MUST NOT call it, so that every key is a direct draw. |
+| HPKE seal (UpdatePath and Welcome encapsulation) | The lab crypto provider's HMAC-DRBG: a fresh seed per encapsulation (fork `libcrux_crypto/src/crypto.rs:126`, `hpke_sender`) | Derived: DRBG output seeded from the source |
 
-- `openmls-qrand` comes in through `[patch.crates-io] openmls_traits = { git = <fork>, rev = 6daabe33… }`, so that its `QrngOpenMlsProvider` implements the fork's trait.
+- **Lab crypto provider.** Since phase 4.8 the lab's `OpenMlsCrypto` is the OpenMLS libcrux provider, not RustCrypto. `crate::entropy` builds one per lab source with `CryptoProvider::with_entropy_source` (fork `libcrux_crypto/src/crypto.rs:102`): its HMAC-DRBG is seeded from the selected source when the source is connected, through openmls-qrand `EntropyRng`, and reseeds from it when its reseed interval is reached. For `os`, the source is the OS RNG. Every lab provider shares that crypto provider. Randomness drawn inside crypto operations is therefore DRBG output derived from the source, not raw source bytes. The HPKE receiver side draws no randomness and reads no other source (fork `libcrux_crypto/src/crypto.rs:698`, `NoRandomness`).
+- **Draws.** Connecting a `mock` or `qrng` source draws 64 bytes (two requests) to seed the crypto provider. Creating a provider draws nothing. During a mid-session outage, `rand()` draws fail closed as before; crypto-internal draws keep coming from the already-seeded DRBG.
+- **Fork.** All OpenMLS crates, `openmls_libcrux_crypto` included, are pinned to `dasobral/openmls` `agent-trust/integration` (`dd332780`): current upstream `main` with the staged KeyPackage API and the libcrux provider entropy source merged in. `openmls-qrand` comes in through `[patch.crates-io] openmls_traits = { git = <fork>, rev = dd332780… }`, so that its `QrngOpenMlsProvider` implements the fork's trait.
 - Fail-closed behavior is tested against a loopback mock QRNG Open API server labelled as a mock.
-- A live Entropy Core run remains an unmet gate until a real endpoint is reachable. No quantum-origin claim is made for consumers marked "No".
+- A live Entropy Core run remains an unmet gate until a real endpoint is reachable. No quantum-origin claim is made for consumers marked "No", or for DRBG output beyond what its seeding provides.
 
 ### 8.1 Lab entropy selection (C-40, D-12)
 
@@ -599,9 +601,9 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
       - OpenMLS reduces some refusals to another error: a `send` whose reuse-guard draw fails is `LibraryError … Malformed plaintext`. The lab therefore also reports `entropy_unavailable` for any step that fails while the selected source's failure count increases.
       - **Residual limitation.** The `os` source keeps no failure count. With `os`, a refused draw that OpenMLS reduces to another error stays `malformed: OpenMLS …`.
     - **Candidate identity.** Until the admission's Add is acked, a refused `admit` leaves the subject a candidate with the identity whose key the kernel registered at `delegate`. A later `admit` of the same subject uses that identity. The client API gives the identity and provider back: `PreparedJoin::try_prepare` on a refused preparation, and `PreparedJoin::abandon` / `JoinCandidate::abandon` after one. After a finalized KeyPackage is dropped, the lab gives the candidate a new provider, because the old provider's storage holds the dropped KeyPackage's private keys. `finalize` draws no randomness; a `finalize` failure still drops the candidate. The harness exercises only the refused KeyPackage draw. The restore paths after a refused admission certificate request or a refused Add submission exist by construction and are not yet exercised, and no test checks that the kernel issues a second admission certificate for the same subject.
-  - **Determinism.** With `mock` and a fixed seed, every identity key the lab exports is a function of that seed. `harness/test_entropy_lab.py` checks this, rekey included. HPKE randomness stays outside the seam (§8, D-5), so ciphertexts are not reproducible.
+  - **Determinism.** With `mock` and a fixed seed, every identity key the lab exports is a function of that seed. `harness/test_entropy_lab.py` checks this, rekey included. HPKE encapsulation randomness now derives from the same seed through the lab crypto provider (§8); whether ciphertexts are reproducible is not checked.
   - **Claim boundary.** A `mock` run exercises the real `QrngRand` / provider wiring, not the QRNG HTTP client, transport or Open API parsing. `tests/adapter_entropy.rs` keeps covering those against its loopback mock server. `live_entropy_core` stays `unmet` until a run against a real endpoint is recorded.
-  - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `11ee2edd042aea4803ee14086dcb8e53d709a673`, the openmls-qrand `main` merge of `fe9ea13`, which adds the `EntropyBackend` seam and `MockEntropy` (same tree; the evidence was recorded at `fe9ea13`). This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
+  - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `a102450febaa00e8955822c72bd309df6d8f43b9`, which adds `EntropyRng` (§8) on top of the `EntropyBackend` seam and `MockEntropy` of `fe9ea13`. This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
 
 ## 9. Traces and the independent oracle
 
@@ -646,7 +648,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - **Ordering.** Events follow the adapter trace order, which matches kernel history order because the adapter is the kernel's only writer.
 - **C-38, claim gate.** `scripts/verify.py` runs every gate: `cargo test --locked --all-targets`, every Python harness test (not only `test_oracle*`), and the integration harness.
   - `evidence/manifest.json` gets `full_lap_mls: true` only when every gate passed in that run, the integration harness's exported lab traces were accepted by the oracle, and its mutated broken controls were rejected. Any unmet or failed gate makes it `false` and makes the verifier exit nonzero.
-  - The manifest always records `bridge_remove_etk: "open"`, `live_entropy_core: "unmet"` and `hpke_randomness: "excluded"`.
+  - The manifest always records `bridge_remove_etk: "open"`, `live_entropy_core: "unmet"` and `hpke_randomness: "drbg_seeded_from_source"` (§8; `"excluded"` before phase 4.8).
   - `mls-demo` (the legacy `MlsLab`) keeps reporting `full_lap_mls: false`, because its claim concerns only that lab.
 
 - **C-39, resolved while authoring the phase 4.7b tests.** These refine C-36 and C-38.
@@ -717,7 +719,7 @@ Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` tes
 - the crash barriers B1–B8 pass;
 - the oracle accepts the exported trace and rejects the named broken controls.
 
-Even then, the README states that `Bridge_remove^ETK` is an open proof obligation, and it lists the HPKE randomness limitation (§8).
+Even then, the README states that `Bridge_remove^ETK` is an open proof obligation, and it states how HPKE randomness is covered (§8).
 
 ## 12. New error codes
 
@@ -730,6 +732,7 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
 - **D-3:** Two-step repair (canonical but still fenced, then confirmed and open) as two kernel commands, or as one adapter transaction that holds the canonical commit durably until confirmation. Recommendation: two kernel commands, so the history shows both cuts.
 - **D-4:** Confirmation by a designated member C ≠ committer R with matching `epoch_authenticator_hash`. Proposed fallback when R is the only continuing member: R alone confirms, recorded as weaker evidence.
 - **D-5:** Accept the HPKE randomness limitation (§8) for Task 4. The alternative is a fork change that routes hpke-rs randomness through `OpenMlsRand`. That change belongs to the separate OpenMLS fork project.
+  - **Resolved in phase 4.8 (2026-10-24).** The fork's libcrux provider draws HPKE encapsulation randomness from its HMAC-DRBG, which the lab seeds from the selected source (§8). It does not route through `OpenMlsRand`: the randomness is DRBG output derived from the source.
 - **D-6:** Proposed extension codepoints `0xf043` and `0xf044` (private-use range, next to the existing `0xf042`).
 - **D-9 (approved 2026-10-23 by Daniel: "I approve D-9: R-10 rekey as proposed in docs/adapter-contract.md. Implement phase 4.4b test-first after D-10."): rekey for non-read re-authorization.**
   - A current member whose write, admin or admit right is re-granted (or newly granted) must install fresh keys and a new `authz_incarnation` with an update commit (`self_update_with_new_signer`, §5.5). That commit advances the MLS epoch, but the kernel has no command that advances its frontier except `admit` and `repair`.

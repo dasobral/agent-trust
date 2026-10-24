@@ -22,7 +22,7 @@ Interface pinned here (C-38, resolved by the test author):
 - The manifest keeps its other top-level records. Its ``claim_boundary`` object
   carries ``full_lap_mls`` (a boolean) and the fixed fields
   ``bridge_remove_etk: "open"``, ``live_entropy_core: "unmet"`` and
-  ``hpke_randomness: "excluded"``, on every run, passing or not.
+  ``hpke_randomness: "drbg_seeded_from_source"``, on every run, passing or not.
 - The integration harness counts as passed only when its run reports both
   ``test_lab_scenario_trace_is_accepted_by_oracle ... ok`` and
   ``test_broken_controls_are_rejected_by_oracle ... ok`` (unittest verbose
@@ -63,7 +63,7 @@ NAMED_INTEGRATION_TESTS = (
 BOUNDARY_FIELDS = {
     "bridge_remove_etk": "open",
     "live_entropy_core": "unmet",
-    "hpke_randomness": "excluded",
+    "hpke_randomness": "drbg_seeded_from_source",
 }
 GATE_FAILURE_LINE = re.compile(r"^(FAIL|UNMET)\b", re.MULTILINE)
 

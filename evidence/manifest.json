@@ -14,12 +14,13 @@
   },
   "dependencies": {
     "rust_minimum": "1.91",
-    "openmls": "0.9.0 fork",
+    "openmls": "main-based fork (agent-trust/integration)",
     "openmls_traits": "0.6.0 fork",
     "openmls_rust_crypto": "0.6.0 fork",
     "openmls_basic_credential": "0.6.0 fork",
-    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f",
-    "openmls_qrand_git_revision": "11ee2edd042aea4803ee14086dcb8e53d709a673"
+    "openmls_libcrux_crypto": "0.4.0 fork",
+    "openmls_git_revision": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+    "openmls_qrand_git_revision": "a102450febaa00e8955822c72bd309df6d8f43b9"
   },
   "public_gates": [
     "python3 scripts/verify.py",

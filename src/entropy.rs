@@ -1,7 +1,9 @@
 //! Lab entropy selection (`docs/adapter-contract.md` C-40, §8.1).
 //!
 //! The lab draws every provider rand and every identity key from one source, selected at
-//! startup by a TOML file or by environment variables:
+//! startup by a TOML file or by environment variables. The lab crypto provider
+//! ([`LabCrypto`]) seeds its HMAC-DRBG from the same source, so randomness inside crypto
+//! operations, HPKE encapsulation included, derives from it too (§8):
 //!
 //! - `os` (the default): the OS-seeded RustCrypto rand;
 //! - `mock`: openmls-qrand `MockEntropy`, a seeded in-process stream that is **NOT

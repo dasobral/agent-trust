@@ -26,7 +26,7 @@ messaging system.
 | `full_lap_mls` | **`true`**, recorded 2026-10-24 ([log](evidence/verify-2026-10-24.txt)) |
 | `Bridge_remove^ETK` | **Open** cryptographic proof obligation |
 | Live Entropy Core run | **Not yet run** |
-| HPKE encapsulation randomness | **Excluded** from the entropy seam |
+| HPKE encapsulation randomness | **Derived** from the selected source: HMAC-DRBG output seeded from it ([§8](docs/adapter-contract.md#8-entropy-seam)) |
 
 `full_lap_mls` is `true` because one recorded run of `python3 scripts/verify.py`
 passed every gate of the claim gate
@@ -103,11 +103,14 @@ lab. The request set is specified in
 ### Entropy source
 
 The lab draws every key and every OpenMLS random value from one source, chosen
-at startup:
+at startup. Keys and values OpenMLS requests through `OpenMlsRand` are direct
+draws. Randomness inside crypto operations, such as HPKE encapsulation, comes
+from the lab crypto provider (the OpenMLS libcrux provider), whose HMAC-DRBG is
+seeded from the same source when it is connected:
 
 | Source | Select with | Use |
 | --- | --- | --- |
-| `os` | nothing (default) | OS-seeded RustCrypto RNG |
+| `os` | nothing (default) | The OS RNG: OS-seeded RustCrypto for direct draws, the OS RNG for the crypto provider's DRBG |
 | `mock` | `AGENT_TRUST_ENTROPY_SOURCE=mock`, optional `AGENT_TRUST_MOCK_SEED=N` | Seeded, **not random**. For development and tests: the same seed gives the same keys. |
 | `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` and `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Quside Entropy Core |
 

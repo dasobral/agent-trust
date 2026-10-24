@@ -4,7 +4,9 @@ The staged-KeyPackage construction hook is integrated into the real OpenMLS labo
 
 ## Current dependency boundary
 
-The project pins `openmls`, `openmls_traits`, `openmls_rust_crypto`, and `openmls_basic_credential` to custom-fork commit `6daabe33ddb616a6ed54b511d333e691db18a99f` on branch `agent-trust/keypackage-staging-v0.9`. The fork remains based on OpenMLS `0.9.0` and preserves the normal non-draft feature surface.
+The project pins every OpenMLS crate (`openmls`, `openmls_traits`, `openmls_rust_crypto`, `openmls_basic_credential`, `openmls_sqlite_storage` and `openmls_libcrux_crypto`) to custom-fork commit `dd33278099426c2ffc8a4ec686e88bde1f937963` on branch `agent-trust/integration`. That branch is current upstream `main` with the staged KeyPackage API (branch `agent-trust/keypackage-staging`) and the libcrux provider entropy source (branch `feat/libcrux-provider-rng`) merged in, and it keeps the normal non-draft feature surface.
+
+Until 2026-10-24 the pin was `6daabe33ddb616a6ed54b511d333e691db18a99f` on `agent-trust/keypackage-staging-v0.9`, based on OpenMLS `0.9.0`; that branch is kept unchanged, because earlier evidence was recorded against it.
 
 Each joining endpoint now calls `prepare`, signs an APF admission certificate over the SHA-256 digest of the returned canonical stripped bytes, inserts that certificate with `with_external_binding`, and calls `finalize`. Before the KeyPackage is admitted, the laboratory parses and validates the final MLS object, structurally recomputes the stripped bytes through the fork API, checks the certificate fields and digest, and verifies the APF Ed25519 signature. The certificate is a top-level KeyPackage extension, not a sidecar.
 
