@@ -34,13 +34,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use openmls_libcrux_crypto::{CryptoProvider as LibcruxCrypto, TryCryptoRng, TryRng};
 use openmls_qrand::{
-    ApiAuth, EntropyBackend, MockEntropy, QrngClient, QrngConfig, QrngError, QrngRand,
+    ApiAuth, EntropyBackend, EntropyRng, MockEntropy, QrngClient, QrngConfig, QrngError, QrngRand,
     TransportMode,
 };
 use openmls_rust_crypto::{MemoryStorage, RandError, RustCrypto};
 use openmls_traits::random::OpenMlsRand;
 use openmls_traits::OpenMlsProvider;
+use rand::rngs::SysRng;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -229,14 +231,14 @@ impl EntropyConfig {
         lookup: impl Fn(&str) -> Option<String>,
     ) -> Result<LabEntropy, String> {
         match self {
-            Self::Os => Ok(LabEntropy::os()),
+            Self::Os => LabEntropy::os(),
             Self::Mock { seed } => {
                 let mock = Arc::new(MockEntropy::new(*seed));
-                Ok(LabEntropy {
-                    label: "mock",
-                    backend: Some(Arc::clone(&mock) as Arc<dyn EntropyBackend>),
-                    mock: Some(mock),
-                })
+                LabEntropy::with_backend(
+                    "mock",
+                    Arc::clone(&mock) as Arc<dyn EntropyBackend>,
+                    Some(mock),
+                )
             }
             Self::Qrng(settings) => {
                 let secret = |name: &String| {
@@ -251,11 +253,7 @@ impl EntropyConfig {
                 };
                 let client = QrngClient::connect(settings.qrng_config(auth)?)
                     .map_err(|err| format!("QRNG connect failed: {}", qrng_error_category(&err)))?;
-                Ok(LabEntropy {
-                    label: "qrng",
-                    backend: Some(Arc::new(client)),
-                    mock: None,
-                })
+                LabEntropy::with_backend("qrng", Arc::new(client), None)
             }
         }
     }
@@ -458,16 +456,34 @@ pub struct LabEntropy {
     backend: Option<Arc<dyn EntropyBackend>>,
     /// The same backend as `backend` when the source is `mock`, for the outage control.
     mock: Option<Arc<MockEntropy>>,
+    /// The crypto provider every lab provider shares (see [`LabProvider`]).
+    crypto: Arc<LabCrypto>,
 }
 
 impl LabEntropy {
     /// The default source: the OS-seeded RustCrypto rand.
-    pub fn os() -> Self {
-        Self {
+    pub fn os() -> Result<Self, String> {
+        Ok(Self {
             label: "os",
             backend: None,
             mock: None,
-        }
+            crypto: Arc::new(lab_crypto(CryptoSource::Os(SysRng))?),
+        })
+    }
+
+    /// A backend source. Seeding the shared crypto provider draws from `backend`.
+    fn with_backend(
+        label: &'static str,
+        backend: Arc<dyn EntropyBackend>,
+        mock: Option<Arc<MockEntropy>>,
+    ) -> Result<Self, String> {
+        let crypto = lab_crypto(CryptoSource::Backend(EntropyRng::new(Arc::clone(&backend))))?;
+        Ok(Self {
+            label,
+            backend: Some(backend),
+            mock,
+            crypto: Arc::new(crypto),
+        })
     }
 
     pub fn label(&self) -> &'static str {
@@ -482,11 +498,11 @@ impl LabEntropy {
         }
     }
 
-    /// A new provider: RustCrypto crypto, memory storage and a rand over the selected
-    /// source.
+    /// A new provider: the shared crypto provider, new memory storage and a rand over the
+    /// selected source.
     pub fn provider(&self) -> LabProvider {
         LabProvider {
-            crypto: RustCrypto::default(),
+            crypto: Arc::clone(&self.crypto),
             storage: MemoryStorage::default(),
             rand: self.rand(),
         }
@@ -573,15 +589,75 @@ impl OpenMlsRand for LabRand {
     }
 }
 
-/// The lab's provider: RustCrypto crypto, memory storage and a [`LabRand`].
+/// The lab's crypto provider: the OpenMLS libcrux provider, whose HMAC-DRBG is seeded and
+/// reseeded from the selected source. Every randomness draw inside a crypto operation,
+/// HPKE encapsulation included, comes from that DRBG.
+pub type LabCrypto = LibcruxCrypto<CryptoSource>;
+
+fn lab_crypto(source: CryptoSource) -> Result<LabCrypto, String> {
+    LabCrypto::with_entropy_source(source)
+        .map_err(|_| "entropy_unavailable: seeding the crypto provider failed".to_string())
+}
+
+/// The entropy source of [`LabCrypto`]: the OS, or the selected backend.
+pub enum CryptoSource {
+    Os(SysRng),
+    Backend(EntropyRng<dyn EntropyBackend>),
+}
+
+/// A [`CryptoSource`] failure. A backend failure keeps only its category.
+#[derive(Debug)]
+pub struct CryptoSourceError(&'static str);
+
+impl std::fmt::Display for CryptoSourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "crypto entropy source failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for CryptoSourceError {}
+
+impl TryRng for CryptoSource {
+    type Error = CryptoSourceError;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut bytes = [0u8; 4];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut bytes = [0u8; 8];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        match self {
+            Self::Os(rng) => rng
+                .try_fill_bytes(dst)
+                .map_err(|_| CryptoSourceError("OS RNG")),
+            Self::Backend(rng) => rng
+                .try_fill_bytes(dst)
+                .map_err(|err| CryptoSourceError(qrng_error_category(&err))),
+        }
+    }
+}
+
+impl TryCryptoRng for CryptoSource {}
+
+/// The lab's provider: the shared [`LabCrypto`], memory storage and a [`LabRand`].
+///
+/// All providers of a lab share one `LabCrypto`, seeded once from the selected source when
+/// the source is connected. Creating a provider therefore draws nothing, and cannot fail.
 pub struct LabProvider {
-    crypto: RustCrypto,
+    crypto: Arc<LabCrypto>,
     storage: MemoryStorage,
     rand: LabRand,
 }
 
 impl OpenMlsProvider for LabProvider {
-    type CryptoProvider = RustCrypto;
+    type CryptoProvider = LabCrypto;
     type RandProvider = LabRand;
     type StorageProvider = MemoryStorage;
 

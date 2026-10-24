@@ -308,9 +308,10 @@ fn mock_source_drives_every_lab_draw_from_one_seeded_stream() {
         .connect_with(env(&[]))
         .expect("mock source");
     assert_eq!(lab.label(), "mock");
+    // Connecting seeds the lab crypto provider: 32 bytes of entropy and a 32-byte nonce.
     assert_eq!(
         lab.report(),
-        json!({ "source": "mock", "requests": 0, "bytes": 0, "failures": 0 })
+        json!({ "source": "mock", "requests": 2, "bytes": 64, "failures": 0 })
     );
 
     // Identity keys: one 32-byte draw each, from the same stream for rand() and provider().
@@ -319,14 +320,14 @@ fn mock_source_drives_every_lab_draw_from_one_seeded_stream() {
     let second = ClientIdentity::generate(provider.rand()).expect("identity from provider()");
     assert_eq!(
         lab.report(),
-        json!({ "source": "mock", "requests": 2, "bytes": 64, "failures": 0 })
+        json!({ "source": "mock", "requests": 4, "bytes": 128, "failures": 0 })
     );
     assert_ne!(first.public_key(), second.public_key());
 
     // Clones share the stream; the same seed replays it; another seed does not.
     let clone = lab.clone();
     clone.rand().random_vec(3).expect("draw through a clone");
-    assert_eq!(lab.report()["requests"], 3);
+    assert_eq!(lab.report()["requests"], 5);
     let replay = EntropyConfig::Mock { seed: 5 }
         .connect_with(env(&[]))
         .expect("mock source");
@@ -362,9 +363,10 @@ fn mock_outage_fails_closed_and_recovers() {
         .expect("no entropy, no identity");
     assert_eq!(error, "entropy_unavailable");
     assert!(lab.provider().rand().random_vec(16).is_err());
+    // The two successful requests are the seeding of the lab crypto provider at connect.
     assert_eq!(
         lab.report(),
-        json!({ "source": "mock", "requests": 0, "bytes": 0, "failures": 2 })
+        json!({ "source": "mock", "requests": 2, "bytes": 64, "failures": 2 })
     );
 
     lab.set_available(true).expect("mock outage control");
@@ -423,14 +425,21 @@ fn qrng_secret_is_read_only_from_the_named_variable() {
     assert!(!error.contains("not-a-real-token"), "{error}");
 }
 
-/// A QRNG that answers `/capabilities` once and then disappears.
+/// A QRNG that answers `/capabilities` and the two draws that seed the lab crypto
+/// provider at connect, and then disappears.
 fn vanishing_qrng() -> (String, u16) {
     let server = Server::http((Ipv4Addr::LOCALHOST, 0)).expect("loopback test server");
     let port = server.server_addr().to_ip().expect("ip address").port();
     thread::spawn(move || {
-        if let Ok(request) = server.recv() {
-            let body = json!({"entropy": {"min_block_size": 1, "max_block_size": 1024,
-                                          "min_block_count": 1, "max_block_count": 1}});
+        let capabilities = json!({"entropy": {"min_block_size": 1, "max_block_size": 1024,
+                                              "min_block_count": 1, "max_block_count": 1}});
+        // Two fixed 32-byte blocks (0x00..0x1f and 0x20..0x3f), base64-encoded.
+        let seed_draws = [
+            json!({"entropy": ["AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="]}),
+            json!({"entropy": ["ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8="]}),
+        ];
+        for body in std::iter::once(capabilities).chain(seed_draws) {
+            let Ok(request) = server.recv() else { return };
             let header = Header::from_bytes("Content-Type", "application/json").expect("header");
             let _ = request.respond(Response::from_string(body.to_string()).with_header(header));
         }
@@ -469,7 +478,8 @@ fn qrng_outage_mid_session_fails_closed_without_naming_the_endpoint() {
     );
     let report = lab.report();
     assert_eq!(report["source"], "qrng");
-    assert_eq!(report["requests"], 0);
+    // The two successful requests seeded the lab crypto provider at connect.
+    assert_eq!(report["requests"], 2);
     assert_eq!(report["failures"], 2);
 }
 

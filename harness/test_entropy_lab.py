@@ -128,7 +128,9 @@ class EntropyLabTests(unittest.TestCase):
 
     def test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace(self):
         reports, trace = self.scenario(clean_env(AGENT_TRUST_ENTROPY_SOURCE="mock"))
-        self.assertEqual(reports[0], {"source": "mock", "requests": 0, "bytes": 0, "failures": 0})
+        # Connecting seeds the lab crypto provider: two draws, 32 bytes of entropy and a
+        # 32-byte nonce, before the first request.
+        self.assertEqual(reports[0], {"source": "mock", "requests": 2, "bytes": 64, "failures": 0})
         for report in reports:
             self.assertEqual(set(report), {"source", "requests", "bytes", "failures"}, report)
             self.assertEqual(report["source"], "mock", report)

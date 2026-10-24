@@ -90,7 +90,7 @@ pub fn run_lab(
     input: impl BufRead,
     output: impl Write,
 ) -> Result<(), String> {
-    run_lab_with(dir, seed, LabEntropy::os(), input, output)
+    run_lab_with(dir, seed, LabEntropy::os()?, input, output)
 }
 
 /// [`run_lab`] with the selected entropy source (C-40).
