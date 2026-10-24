@@ -132,6 +132,17 @@ pub fn run() -> Result<(), String> {
         if segments.first() == Some(&"control") && !http::authorized(request, &token) {
             return Response::status(401, "unauthenticated: control token");
         }
+        // Under mutual TLS: only attctl controls the relay, only the owner reads or
+        // acknowledges a mailbox, and only a subject publishes its KeyPackage.
+        let owner = match (request.method.as_str(), segments.as_slice()) {
+            (_, ["control", ..]) => Some("attctl"),
+            ("GET", ["v1", "mailbox", to]) | ("POST", ["v1", "mailbox", to, "ack"]) => Some(*to),
+            ("PUT", ["v1", "keypackages", subject]) => Some(*subject),
+            _ => None,
+        };
+        if owner.is_some_and(|owner| !request.peer_is(&[owner])) {
+            return Response::forbidden_peer();
+        }
         let Ok(mut state) = state.lock() else {
             return Response::status(500, "crashed: lock poisoned");
         };

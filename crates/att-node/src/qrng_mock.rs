@@ -45,6 +45,9 @@ pub fn run() -> Result<(), String> {
         if segments.first() == Some(&"control") && !http::authorized(request, &token) {
             return Response::status(401, "unauthenticated: control token");
         }
+        if segments.first() == Some(&"control") && !request.peer_is(&["attctl"]) {
+            return Response::forbidden_peer();
+        }
         let Ok(mut state) = state.lock() else {
             return Response::status(500, "crashed: lock poisoned");
         };

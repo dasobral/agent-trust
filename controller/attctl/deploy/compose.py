@@ -12,10 +12,11 @@ import subprocess
 from pathlib import Path
 
 from .. import topology as topo
-from .common import deployment_record, load, write
+from .common import deployment_record, load, make_pki, write
 from .local import free_port
 
 DEFAULT_IMAGE = "agent-trust-testbed/att-node:local"
+PKI_PATH = "/etc/att/pki"
 
 
 def _yaml_scalar(value):
@@ -23,7 +24,7 @@ def _yaml_scalar(value):
     return json.dumps(str(value))
 
 
-def render(plan, host_ports, image, project):
+def render(plan, host_ports, image, project, pki=None):
     lines = [f"name: {project}", "services:"]
     for service in plan.services:
         lines.append(f"  {service.name}:")
@@ -40,12 +41,16 @@ def render(plan, host_ports, image, project):
         if service.depends_on:
             lines.append("    depends_on:")
             lines.extend(f"      - {dep}" for dep in service.depends_on)
+        volumes = []
         if service.role == "apf":
-            lines.append("    volumes:")
-            lines.append("      - apf-state:/var/lib/att/apf")
+            volumes.append("apf-state:/var/lib/att/apf")
         if service.role == "agent":
+            volumes.append(f"agent-{service.name}:/var/lib/att/agent")
+        if pki:
+            volumes.append(f"{pki}:{PKI_PATH}:ro")
+        if volumes:
             lines.append("    volumes:")
-            lines.append(f"      - agent-{service.name}:/var/lib/att/agent")
+            lines.extend(f"      - {_yaml_scalar(v)}" for v in volumes)
         lines.append("    networks: [testbed]")
     lines += ["networks:", "  testbed: {}", "volumes:", "  apf-state: {}"]
     lines += [f"  agent-{s.name}: {{}}" for s in plan.services if s.role == "agent"]
@@ -53,23 +58,26 @@ def render(plan, host_ports, image, project):
     return "\n".join(lines)
 
 
-def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None):
+def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, binary=None):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     project = "att-" + "".join(c for c in topology.name.lower() if c.isalnum())[:20]
 
-    def address(name, role):
-        return f"http://{name}:{topo.PORTS[role]}"
+    pki = make_pki(run_dir, topology, binary, world_readable=True) if topology.tls else None
 
-    plan = topo.plan(topology, address, extra_env=extra_env)
+    def address(name, role):
+        return f"{topology.scheme}://{name}:{topo.PORTS[role]}"
+
+    plan = topo.plan(topology, address, extra_env=extra_env, tls_dir=PKI_PATH if pki else None)
     host_ports = {service.name: free_port() for service in plan.services}
     compose_file = run_dir / "docker-compose.yml"
-    compose_file.write_text(render(plan, host_ports, image, project))
+    compose_file.write_text(render(plan, host_ports, image, project, pki=pki))
     compose_file.chmod(0o600)
-    endpoints = {name: f"http://127.0.0.1:{port}" for name, port in host_ports.items()}
+    endpoints = {name: f"{topology.scheme}://127.0.0.1:{port}" for name, port in host_ports.items()}
     deployment = deployment_record("compose", plan, run_dir, endpoints,
                                    {"project": project, "image": image,
-                                    "compose_file": str(compose_file)})
+                                    "compose_file": str(compose_file),
+                                    "pki": str(pki) if pki else None})
     write(run_dir, deployment)
     _compose(deployment, "up", "-d", "--quiet-pull", capture=True)
     return deployment

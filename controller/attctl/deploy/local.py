@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from .. import topology as topo
-from .common import deployment_record, load, write
+from .common import deployment_record, load, make_pki, write
 
 
 def free_port():
@@ -27,12 +27,13 @@ def up(topology, run_dir, binary, extra_env=None):
     run_dir = Path(run_dir)
     (run_dir / "logs").mkdir(parents=True, exist_ok=True)
     ports = {}
+    pki = make_pki(run_dir, topology, binary) if topology.tls else None
 
     def address(name, role):
         ports.setdefault(name, free_port())
-        return f"http://127.0.0.1:{ports[name]}"
+        return f"{topology.scheme}://127.0.0.1:{ports[name]}"
 
-    plan = topo.plan(topology, address, extra_env=extra_env)
+    plan = topo.plan(topology, address, extra_env=extra_env, tls_dir=str(pki) if pki else None)
     services, processes, endpoints = {}, {}, {}
     for service in plan.services:
         endpoints[service.name] = address(service.name, service.role)
@@ -47,7 +48,8 @@ def up(topology, run_dir, binary, extra_env=None):
         wait = service.role in ("qrng-mock", "apf", "relay")
         processes[service.name] = _spawn(run_dir, binary, service.name, services[service.name], wait)
     deployment = deployment_record("local", plan, run_dir, endpoints,
-                                   {"pids": processes, "binary": str(binary), "services": services})
+                                   {"pids": processes, "binary": str(binary), "services": services,
+                                    "pki": str(pki) if pki else None})
     write(run_dir, deployment)
     return deployment
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -33,3 +34,20 @@ def deployment_record(backend, plan, run_dir, endpoints, extra):
         "tokens": plan.tokens,
         **extra,
     }
+
+
+def make_pki(run_dir, topology, binary, namespace=None, world_readable=False):
+    """Creates the deployment CA and certificates in ``<run_dir>/pki`` with
+    ``att-node pki``. Returns the directory. ``world_readable`` makes the keys readable
+    by the unprivileged container user (compose backend only; a lab tradeoff)."""
+    pki = (Path(run_dir) / "pki").resolve()
+    command = [str(binary), "pki", "--dir", str(pki), "--names", ",".join(topology.pki_names())]
+    if namespace:
+        command += ["--namespace", namespace]
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    if world_readable:
+        pki.chmod(0o755)
+        for path in pki.glob("*.key"):
+            if path.name != "ca.key":
+                path.chmod(0o644)
+    return pki

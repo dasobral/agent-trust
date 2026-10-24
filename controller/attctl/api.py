@@ -6,9 +6,11 @@ Every service answers JSON. Protocol outcomes arrive as ``{"ok": v}`` or
 from __future__ import annotations
 
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 class ServiceError(Exception):
@@ -24,11 +26,13 @@ class ServiceError(Exception):
 
 
 class Service:
-    def __init__(self, name, base_url, token=None, timeout=60):
+    def __init__(self, name, base_url, token=None, timeout=60, context=None):
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.timeout = timeout
+        # Mutual TLS: the deployment CA and the attctl client certificate.
+        self.context = context
 
     def raw(self, method, path, body=None, token=None):
         data = None if body is None else json.dumps(body).encode()
@@ -38,7 +42,7 @@ class Service:
         if token:
             request.add_header("Authorization", f"Bearer {token}")
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout, context=self.context) as response:
                 return json.loads(response.read() or b"null")
         except urllib.error.HTTPError as error:
             try:
@@ -75,8 +79,8 @@ class Service:
 class Agent(Service):
     """Control and application API of one agent sidecar."""
 
-    def __init__(self, name, base_url, control_token, app_token):
-        super().__init__(name, base_url, control_token)
+    def __init__(self, name, base_url, control_token, app_token, context=None):
+        super().__init__(name, base_url, control_token, context=context)
         self.app_token = app_token
 
     def control(self, action, body=None, method="POST"):
@@ -101,11 +105,12 @@ class Testbed:
         endpoints = deployment["endpoints"]
         self.group = deployment["group"]
         self.root = deployment["root"]
-        self.apf = Service("apf", endpoints["apf"], tokens["control"])
-        self.relay = Service("relay", endpoints["relay"], tokens["control"])
-        self.qrng = (Service("qrng", endpoints["qrng"], tokens["control"])
+        context = tls_context(deployment.get("pki"))
+        self.apf = Service("apf", endpoints["apf"], tokens["control"], context=context)
+        self.relay = Service("relay", endpoints["relay"], tokens["control"], context=context)
+        self.qrng = (Service("qrng", endpoints["qrng"], tokens["control"], context=context)
                      if "qrng" in endpoints else None)
-        self.agents = {name: Agent(name, endpoints[name], tokens["control"], tokens["app"])
+        self.agents = {name: Agent(name, endpoints[name], tokens["control"], tokens["app"], context)
                        for name in deployment["agents"]}
 
     def services(self):
@@ -119,3 +124,13 @@ class Testbed:
     def wait_healthy(self, timeout=60):
         for service in self.services():
             service.wait_healthy(timeout)
+
+
+def tls_context(pki):
+    """The control plane's mutual TLS context, or None without TLS."""
+    if not pki:
+        return None
+    pki = Path(pki)
+    context = ssl.create_default_context(cafile=str(pki / "ca.crt"))
+    context.load_cert_chain(str(pki / "attctl.crt"), str(pki / "attctl.key"))
+    return context

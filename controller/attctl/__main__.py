@@ -75,7 +75,10 @@ def _up(topology_path, backend, run_dir, image, profile):
             sys.exit(f"missing {binary}; run `attctl build`")
         deployment = module.up(topology, run_dir, binary, extra_env=extra_env)
     else:
-        deployment = module.up(topology, run_dir, image=image, extra_env=extra_env)
+        binary = binary_path(profile)
+        if topology.tls and not binary.is_file():
+            sys.exit(f"missing {binary} (needed to create the PKI); run `attctl build`")
+        deployment = module.up(topology, run_dir, image=image, extra_env=extra_env, binary=binary)
     testbed = Testbed(deployment)
     testbed.wait_healthy(timeout=90)
     return deployment, testbed

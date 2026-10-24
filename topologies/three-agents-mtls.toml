@@ -1,0 +1,24 @@
+# The E1 topology with mutual TLS between every pair of services, the QRNG service
+# included. Every service presents a certificate from the deployment CA and requires
+# one from its peer; transport identity is bound to protocol identity.
+name = "three-agents-mtls"
+group = "lab"
+root = "alice"
+
+[tls]
+enabled = true
+
+[entropy]
+source = "qrng"
+
+[relay]
+seed = 7
+
+[[agent]]
+name = "alice"
+
+[[agent]]
+name = "bob"
+
+[[agent]]
+name = "carol"

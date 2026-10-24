@@ -93,10 +93,20 @@ impl Apf {
             ("GET", ["v1", "state"]) => {
                 Response::outcome(self.with_adapter(|_| public_state(&self.dir)))
             }
-            ("POST", ["v1", "request"]) => Response::outcome(self.request(&request.body)),
+            ("POST", ["v1", "request"]) => {
+                // Under mutual TLS, a request signed by an actor must come from that actor.
+                let actor = request.body.get("actor").and_then(Value::as_str).unwrap_or_default();
+                if !request.peer_is(&[actor]) {
+                    return Response::forbidden_peer();
+                }
+                Response::outcome(self.request(&request.body))
+            }
             ("POST", ["v1", "genesis", step]) => {
                 if !http::authorized(request, &self.bootstrap_token) {
                     return Response::status(401, "unauthenticated: bootstrap token");
+                }
+                if !request.peer_is(&[self.root.as_str()]) {
+                    return Response::forbidden_peer();
                 }
                 match *step {
                     "begin" => Response::outcome(self.begin(&request.body)),
@@ -107,6 +117,9 @@ impl Apf {
             ("GET", ["control", what]) => {
                 if !http::authorized(request, &self.control_token) {
                     return Response::status(401, "unauthenticated: control token");
+                }
+                if !request.peer_is(&["attctl"]) {
+                    return Response::forbidden_peer();
                 }
                 match *what {
                     "checkpoint" => Response::outcome(self.with_adapter(|a| a.checkpoint())),

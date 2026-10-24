@@ -413,6 +413,11 @@ impl Agent {
                 if !http::authorized(request, &self.cfg.app_token) {
                     return Response::status(401, "unauthenticated: app token");
                 }
+                // Under mutual TLS the application presents `<name>-app` (or is attctl).
+                let app = format!("{}-app", self.cfg.name);
+                if !request.peer_is(&[app.as_str(), "attctl"]) {
+                    return Response::forbidden_peer();
+                }
                 match (request.method.as_str(), *action) {
                     ("POST", "send") => Response::outcome(self.send(body)),
                     ("GET", "inbox") => {
@@ -428,6 +433,9 @@ impl Agent {
             ["control", action] => {
                 if !http::authorized(request, &self.cfg.control_token) {
                     return Response::status(401, "unauthenticated: control token");
+                }
+                if !request.peer_is(&["attctl"]) {
+                    return Response::forbidden_peer();
                 }
                 let result = match (request.method.as_str(), *action) {
                     ("GET", "status") => Ok(self.status()),

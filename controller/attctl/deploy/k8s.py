@@ -8,7 +8,8 @@ Objects per deployment (namespace ``att-<topology>``):
 
 - ``Secret att-tokens``: the control, app and bootstrap tokens. Pods read them with
   ``secretKeyRef``; no token appears in a Deployment.
-- ``Secret att-pki``: certificates and keys when the topology enables mTLS.
+- ``Secret att-pki-<service>``: the CA and that service's own certificate and key, when
+  the topology enables mutual TLS.
 - One ``Deployment`` (one replica, ``Recreate``) and one ``ClusterIP Service`` per
   service, with readiness and liveness probes on ``/healthz`` (an ``exec`` probe
   under mTLS, since the kubelet has no client certificate).
@@ -31,7 +32,7 @@ import time
 from pathlib import Path
 
 from .. import topology as topo
-from .common import deployment_record, load, write
+from .common import deployment_record, load, make_pki, write
 from .local import free_port
 
 DEFAULT_IMAGE = "agent-trust-testbed/att-node:local"
@@ -59,11 +60,15 @@ def render(plan, namespace, image, pull_policy="IfNotPresent", pki=None, storage
         {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "att-tokens", "namespace": namespace},
          "type": "Opaque", "stringData": dict(tokens)},
     ]
-    if pki:
-        items.append({"apiVersion": "v1", "kind": "Secret",
-                      "metadata": {"name": "att-pki", "namespace": namespace},
-                      "type": "Opaque", "stringData": pki})
     for service in plan.services:
+        if pki:
+            # Each pod gets the CA and only its own certificate and key.
+            items.append({"apiVersion": "v1", "kind": "Secret",
+                          "metadata": {"name": f"att-pki-{service.name}", "namespace": namespace},
+                          "type": "Opaque", "stringData": {
+                              "ca.crt": pki["ca.crt"],
+                              f"{service.name}.crt": pki[f"{service.name}.crt"],
+                              f"{service.name}.key": pki[f"{service.name}.key"]}})
         labels = _labels(service.name, service.role)
         env = []
         for key, value in sorted(service.env.items()):
@@ -87,7 +92,8 @@ def render(plan, namespace, image, pull_policy="IfNotPresent", pki=None, storage
             volumes.append({"name": "state", "persistentVolumeClaim": {"claimName": claim}})
         if pki:
             mounts.append({"name": "pki", "mountPath": PKI_PATH, "readOnly": True})
-            volumes.append({"name": "pki", "secret": {"secretName": "att-pki", "defaultMode": 0o440}})
+            volumes.append({"name": "pki", "secret": {"secretName": f"att-pki-{service.name}",
+                                                      "defaultMode": 0o440}})
         if pki:
             # The kubelet has no client certificate: probe from inside the pod.
             probe = {"exec": {"command": ["att-node", "probe", f"https://127.0.0.1:{service.port}/healthz"]}}
@@ -167,11 +173,14 @@ def _kubectl(*args, input_text=None, capture=True, check=True):
                           capture_output=capture, check=check).stdout
 
 
-def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, pki=None, scheme="http",
-       pull_policy=None):
+def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, binary=None, pull_policy=None):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     namespace = namespace_of(topology)
+    scheme = topology.scheme
+    pki_dir = make_pki(run_dir, topology, binary, namespace=namespace) if topology.tls else None
+    pki = ({p.name: p.read_text() for p in pki_dir.iterdir() if p.name != "ca.key"}
+           if pki_dir else None)
 
     def address(name, role):
         return f"{scheme}://{name}:{topo.PORTS[role]}"
@@ -188,6 +197,7 @@ def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, pki=None, scheme=
         "namespace": namespace, "image": image, "manifest": str(manifest_file),
         "services": {s.name: {"role": s.role, "port": s.port} for s in plan.services},
         "forwards": {},
+        "pki": str(pki_dir) if pki_dir else None,
     })
     for service in plan.services:
         _kubectl("-n", namespace, "rollout", "status", f"deployment/{service.name}", "--timeout=180s")

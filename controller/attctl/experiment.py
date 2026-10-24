@@ -640,6 +640,66 @@ class Runner:
             raise StepFailure(f"{op}: " + "; ".join(problems))
         return {k: record.get(k) for k in ("op", "actor", "invocation", "status", "right", "resource")}
 
+    def do_check_mtls(self, step):
+        """Negative controls of the transport: every probe below must be refused."""
+        import ssl
+        import subprocess
+        import tempfile
+        import urllib.request
+        from pathlib import Path as _Path
+        pki = self.tb.deployment.get("pki")
+        if not pki:
+            raise StepFailure("this deployment has no PKI")
+        pki = _Path(pki)
+        endpoints = self.tb.deployment["endpoints"]
+
+        def context(name=None, ca=pki / "ca.crt"):
+            ctx = ssl.create_default_context(cafile=str(ca))
+            if name:
+                ctx.load_cert_chain(str(pki / f"{name}.crt"), str(pki / f"{name}.key"))
+            return ctx
+
+        def attempt(url, ctx, body=None, method="GET"):
+            data = None if body is None else json.dumps(body).encode()
+            request = urllib.request.Request(url, data=data, method=method,
+                                             headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(request, timeout=10, context=ctx) as response:
+                    return f"HTTP {response.status}"
+            except urllib.error.HTTPError as error:
+                return f"HTTP {error.code}"
+            except (urllib.error.URLError, ssl.SSLError, OSError) as error:
+                return f"refused: {str(getattr(error, 'reason', error))[:90]}"
+
+        relay, apf = endpoints["relay"], endpoints["apf"]
+        results = {
+            "no client certificate": attempt(f"{relay}/healthz", context()),
+            "bob reads carol's mailbox": attempt(f"{relay}/v1/mailbox/carol", context("bob")),
+            "bob publishes carol's KeyPackage": attempt(
+                f"{relay}/v1/keypackages/carol", context("bob"), {"key_package": "00"}, "PUT"),
+            "alice sends a request in bob's name": attempt(
+                f"{apf}/v1/request", context("alice"),
+                {"actor": "bob", "sequence": 999, "body": "7b7d", "signature": "00"}, "POST"),
+            "an agent calls the APF control API": attempt(f"{apf}/control/trace", context("alice")),
+        }
+        with tempfile.TemporaryDirectory() as foreign:
+            import os
+            binary = (self.tb.deployment.get("binary") or os.environ.get("ATT_NODE_BIN")
+                      or str(_Path(__file__).resolve().parents[2] / "target" / "release" / "att-node"))
+            subprocess.run([binary, "pki", "--dir", foreign,
+                            "--names", "bob"], check=True, capture_output=True)
+            ctx = ssl.create_default_context(cafile=str(pki / "ca.crt"))
+            ctx.load_cert_chain(f"{foreign}/bob.crt", f"{foreign}/bob.key")
+            results["a certificate from a foreign CA"] = attempt(f"{relay}/v1/mailbox/bob", ctx)
+        # Positive control: the same probe with the right identity is accepted.
+        results["bob reads his own mailbox (positive control)"] = attempt(
+            f"{relay}/v1/mailbox/bob", context("bob"))
+        accepted = [label for label, outcome in results.items()
+                    if outcome == "HTTP 200" and "positive control" not in label]
+        if accepted or results["bob reads his own mailbox (positive control)"] != "HTTP 200":
+            raise StepFailure(f"transport controls failed: {results}")
+        return results
+
     def do_check_apf(self, step):
         state = self.tb.apf.call("GET", "/v1/state")
         problems = []

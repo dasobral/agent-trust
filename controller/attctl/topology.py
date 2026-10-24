@@ -26,6 +26,7 @@ class Topology:
     agents: list[str]
     entropy: dict
     relay_seed: int
+    tls: bool = False
     path: Path | None = None
 
     @classmethod
@@ -40,6 +41,7 @@ class Topology:
             agents=agents,
             entropy=dict(data.get("entropy", {"source": "os"})),
             relay_seed=int(data.get("relay", {}).get("seed", 0)),
+            tls=bool(data.get("tls", {}).get("enabled", False)),
             path=path,
         )
         topology.validate()
@@ -55,6 +57,16 @@ class Topology:
             raise ValueError(f"entropy source must be one of {ENTROPY_SOURCES}")
         if source == "qrng" and "url" in self.entropy and self.entropy.get("mock_service"):
             raise ValueError("entropy: give either url (external QRNG) or mock_service, not both")
+
+    @property
+    def scheme(self) -> str:
+        return "https" if self.tls else "http"
+
+    def pki_names(self):
+        """Certificate names: every service, an application certificate per agent
+        (``<agent>-app``) and ``attctl`` (added by ``att-node pki``)."""
+        names = (["qrng"] if self.qrng_mock else []) + ["apf", "relay", *self.agents]
+        return names + [f"{agent}-app" for agent in self.agents]
 
     @property
     def qrng_mock(self) -> bool:
@@ -86,9 +98,11 @@ def new_tokens() -> dict:
     return {kind: secrets.token_hex(16) for kind in ("control", "app", "bootstrap")}
 
 
-def plan(topology: Topology, address, tokens=None, extra_env=None) -> Plan:
+def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None) -> Plan:
     """Builds the service list. ``address(service_name, role)`` returns the base URL
-    under which *other services* reach that service (backend specific)."""
+    under which *other services* reach that service (backend specific). With
+    ``tls_dir`` (the PKI directory as the services see it) every service gets its
+    certificate, and nodes reach the QRNG service over mutual TLS."""
     tokens = tokens or new_tokens()
     extra_env = extra_env or {}
     services = []
@@ -139,4 +153,12 @@ def plan(topology: Topology, address, tokens=None, extra_env=None) -> Plan:
             env["ATT_BOOTSTRAP_TOKEN"] = tokens["bootstrap"]
         services.append(Service(name, "agent", env, PORTS["agent"],
                                 ["apf", "relay", *entropy_deps]))
+    if tls_dir:
+        for service in services:
+            service.env["ATT_TLS_DIR"] = tls_dir
+            service.env["ATT_TLS_NAME"] = service.name
+            if service.role in ("apf", "agent") and topology.qrng_mock:
+                service.env["AGENT_TRUST_QRNG_CA_PEM"] = f"{tls_dir}/ca.crt"
+                service.env["AGENT_TRUST_QRNG_CLIENT_CERT_PEM"] = f"{tls_dir}/{service.name}.crt"
+                service.env["AGENT_TRUST_QRNG_CLIENT_KEY_PEM"] = f"{tls_dir}/{service.name}.key"
     return Plan(topology, services, tokens)
