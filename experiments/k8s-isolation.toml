@@ -1,0 +1,57 @@
+# K8S: the network isolation the Kubernetes backend promises, checked on a live
+# cluster (NetworkPolicy enforcement depends on the cluster's network plugin; k3s
+# enforces it). Then a short end-to-end flow to show the isolated group still works.
+#   ./attctl run experiments/k8s-isolation.toml --backend k8s
+
+[experiment]
+id = "K8S"
+title = "Kubernetes network isolation of the testbed services"
+topology = "../topologies/three-agents.toml"
+hypothesis = """(H1) Agents reach the APF, the relay and the QRNG service, and nothing else \
+reaches an agent: not another agent, not the relay, not the APF. (H2) The relay \
+cannot reach the APF. (H3) With these policies the group works end to end."""
+
+[[step]]
+do = "check.network_policy"
+name = "I1 allowed and denied service paths"
+allowed = ["alice->apf", "alice->relay", "bob->qrng", "apf->qrng"]
+denied = ["alice->bob", "bob->carol", "relay->alice", "apf->alice", "relay->apf", "qrng->apf"]
+
+[[step]]
+do = "genesis"
+name = "I2 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "I3 delegate bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "I4 admit bob"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "send"
+name = "I5 alice sends m1"
+agent = "alice"
+label = "m1"
+text = "m1 inside the cluster"
+
+[[step]]
+do = "quiesce"
+name = "I6 drain"
+
+[[step]]
+do = "check.delivered"
+name = "I7 bob received m1"
+agent = "bob"
+ops = ["m1"]
+
+[[step]]
+do = "check.oracle"
+name = "I8 the oracle accepts the trace"

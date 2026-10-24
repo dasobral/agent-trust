@@ -1,0 +1,2 @@
+{"event":"listening","listen":"127.0.0.1:57365","role":"relay","seed":5,"ts":1792861289}
+{"drop":10,"duplicate":10,"event":"faults","reorder":true,"role":"relay","seed":3,"ts":1792861370}

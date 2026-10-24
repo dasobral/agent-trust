@@ -37,9 +37,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_trust::adapter::ClientIdentity;
+use agent_trust::adapter::SignedRequest;
 use agent_trust::client::{ClientEndpoint, JoinCandidate, PendingDelivery, PreparedJoin};
 use agent_trust::entropy::{DurableLabProvider, EntropyConfig, LabEntropy};
-use agent_trust::adapter::SignedRequest;
 use agent_trust::wire::{
     operation_digest, CanonicalAck, Envelope, Frontier, ReleaseCertificate, Right, SignedStructure,
 };
@@ -220,7 +220,9 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     options.mode(0o600);
-    let mut file = options.open(&tmp).map_err(|err| format!("persist: {err}"))?;
+    let mut file = options
+        .open(&tmp)
+        .map_err(|err| format!("persist: {err}"))?;
     file.write_all(bytes)
         .and_then(|()| file.sync_all())
         .map_err(|err| format!("persist: {err}"))?;
@@ -239,7 +241,13 @@ impl Agent {
     // Persistence
     // -----------------------------------------------------------------------
 
-    fn blank(cfg: Config, entropy: LabEntropy, data_dir: PathBuf, signer: SignatureKeyPair, membership: Membership) -> Self {
+    fn blank(
+        cfg: Config,
+        entropy: LabEntropy,
+        data_dir: PathBuf,
+        signer: SignatureKeyPair,
+        membership: Membership,
+    ) -> Self {
         Agent {
             public_key: signer.public().to_vec(),
             signer,
@@ -278,7 +286,13 @@ impl Agent {
         let provider = entropy.durable_provider(&Self::storage_path(&data_dir, 1))?;
         let identity = ClientIdentity::generate(provider.rand())?;
         let signer = identity.signer().clone();
-        Ok(Self::blank(cfg, entropy, data_dir, signer, Membership::Candidate(identity, provider)))
+        Ok(Self::blank(
+            cfg,
+            entropy,
+            data_dir,
+            signer,
+            Membership::Candidate(identity, provider),
+        ))
     }
 
     /// A restarted agent: its stored identity, MLS state and bookkeeping.
@@ -295,10 +309,14 @@ impl Agent {
         let signer = identity.signer().clone();
         let storage = state["storage"].as_u64().unwrap_or(1);
         let provider = entropy.durable_provider(&Self::storage_path(&data_dir, storage))?;
-        let apf_public = state["apf_public"].as_str().and_then(|key| hex::decode(key).ok());
+        let apf_public = state["apf_public"]
+            .as_str()
+            .and_then(|key| hex::decode(key).ok());
         let membership = match (state["membership"].as_str(), &apf_public) {
             (Some(label @ ("member" | "removed")), Some(apf)) => {
-                let endpoint = ClientEndpoint::load(&cfg.group, &cfg.name, identity, provider, apf, None, None)?;
+                let endpoint = ClientEndpoint::load(
+                    &cfg.group, &cfg.name, identity, provider, apf, None, None,
+                )?;
                 if label == "member" {
                     Membership::Member(Box::new(endpoint))
                 } else {
@@ -323,10 +341,14 @@ impl Agent {
         agent.future = list("future");
         agent.restarts = state["restarts"].as_u64().unwrap_or(0) + 1;
         agent.saved_identity = agent.public_key.clone();
-        config::log(ROLE, "restored", json!({
-            "name": agent.cfg.name, "membership": agent.membership_label(),
-            "sequence": agent.sequence, "cursor": agent.cursor, "restarts": agent.restarts,
-        }));
+        config::log(
+            ROLE,
+            "restored",
+            json!({
+                "name": agent.cfg.name, "membership": agent.membership_label(),
+                "sequence": agent.sequence, "cursor": agent.cursor, "restarts": agent.restarts,
+            }),
+        );
         Ok(agent)
     }
 
@@ -399,7 +421,11 @@ impl Agent {
             }
         }
         if let Err(error) = self.save() {
-            config::log(ROLE, "persist_error", json!({ "name": self.cfg.name, "error": error }));
+            config::log(
+                ROLE,
+                "persist_error",
+                json!({ "name": self.cfg.name, "error": error }),
+            );
         }
         response
     }
@@ -562,7 +588,12 @@ impl Agent {
     }
 
     /// Submits a staged commit; a refused commit is discarded at the client (§5.2).
-    fn submit(&mut self, kind: &str, parent: &Frontier, commit: &[u8]) -> Result<(Frontier, Vec<u8>), String> {
+    fn submit(
+        &mut self,
+        kind: &str,
+        parent: &Frontier,
+        commit: &[u8],
+    ) -> Result<(Frontier, Vec<u8>), String> {
         let body = json!({
             "command": "submit_commit", "kind": kind, "parent_epoch": parent.epoch,
             "parent_branch": parent.branch, "commit": hex::encode(commit)
@@ -652,7 +683,10 @@ impl Agent {
 
     /// C-1: the parent submits the child's public key, never the child's secret.
     fn delegate(&mut self, body: &Value) -> Result<Value, String> {
-        let ttl = body.get("ttl_secs").and_then(Value::as_u64).unwrap_or(30 * 24 * 3600);
+        let ttl = body
+            .get("ttl_secs")
+            .and_then(Value::as_u64)
+            .unwrap_or(30 * 24 * 3600);
         let resources = body
             .get("resources")
             .cloned()
@@ -742,7 +776,9 @@ impl Agent {
             "welcome": hex::encode(&staged.welcome),
         }))?;
         self.cursor = index + 1;
-        Ok(json!({ "subject": subject, "epoch": frontier.epoch, "branch": frontier.branch, "index": index }))
+        Ok(
+            json!({ "subject": subject, "epoch": frontier.epoch, "branch": frontier.branch, "index": index }),
+        )
     }
 
     /// §5.4 and C-20 to C-23: plan, stage, submit, merge, publish, confirm.
@@ -824,7 +860,11 @@ impl Agent {
             .get("retain")
             .and_then(Value::as_bool)
             .ok_or("malformed: retain")?;
-        config::log(ROLE, "adversary", json!({ "name": self.cfg.name, "retain": self.retain }));
+        config::log(
+            ROLE,
+            "adversary",
+            json!({ "name": self.cfg.name, "retain": self.retain }),
+        );
         Ok(json!({ "retain": self.retain }))
     }
 
@@ -885,7 +925,14 @@ impl Agent {
             let generation = generation_of(&state, &reader, "read").unwrap_or(0);
             cover.push(json!([{ "subject": reader, "right": "read", "generation": generation }]));
         }
-        let digest = operation_digest(&op, &self.cfg.group, &content_type, &payload, &frontier, policy_revision)?;
+        let digest = operation_digest(
+            &op,
+            &self.cfg.group,
+            &content_type,
+            &payload,
+            &frontier,
+            policy_revision,
+        )?;
         let released = self.request(json!({
             "command": "release", "op": op, "right": "write", "digest": digest, "cover": cover,
             "policy_revision": policy_revision, "epoch": frontier.epoch, "branch": frontier.branch
@@ -893,7 +940,10 @@ impl Agent {
         let certificate = hex_field(&released, "certificate")?;
         let verifier = openmls_rust_crypto::RustCrypto::default();
         let released = ReleaseCertificate::verify(&certificate, &apf_public, &verifier)?;
-        let envelope = match self.endpoint_mut()?.protect(&certificate, &content_type, &payload) {
+        let envelope = match self
+            .endpoint_mut()?
+            .protect(&certificate, &content_type, &payload)
+        {
             Ok(envelope) => envelope,
             Err(error) => {
                 // Barrier B2: a released operation that was never protected is abandoned
@@ -918,7 +968,9 @@ impl Agent {
                 Some(&json!({ "from": from, "op": op, "envelope": envelope_hex })),
             )?;
         }
-        Ok(json!({ "op": op, "recipients": recipients, "epoch": frontier.epoch, "sent_ms": unix_ms() }))
+        Ok(
+            json!({ "op": op, "recipients": recipients, "epoch": frontier.epoch, "sent_ms": unix_ms() }),
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -966,17 +1018,28 @@ impl Agent {
         if self.retain {
             return Ok(());
         }
-        if !matches!(self.membership, Membership::Member(_) | Membership::Joining(_)) {
+        if !matches!(
+            self.membership,
+            Membership::Member(_) | Membership::Joining(_)
+        ) {
             return Ok(());
         }
         let path = format!(
             "/v1/groups/{}/handshake?after={}&reader={}",
             self.cfg.group, self.cursor, self.cfg.name
         );
-        let mut entries = self.cfg.relay.call("GET", &path, None)?.as_array().cloned().unwrap_or_default();
+        let mut entries = self
+            .cfg
+            .relay
+            .call("GET", &path, None)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         entries.sort_by_key(|entry| entry["index"].as_u64().unwrap_or(u64::MAX));
         for entry in entries {
-            let Some(index) = entry["index"].as_u64() else { continue };
+            let Some(index) = entry["index"].as_u64() else {
+                continue;
+            };
             if index < self.cursor || self.resolved.contains(&index) {
                 continue;
             }
@@ -1050,7 +1113,9 @@ impl Agent {
         // A removed member that applies the repair ack becomes inactive (C-24, C-26).
         let active = endpoint.confirmation().is_ok();
         if !active {
-            if let Membership::Member(endpoint) = std::mem::replace(&mut self.membership, Membership::Busy) {
+            if let Membership::Member(endpoint) =
+                std::mem::replace(&mut self.membership, Membership::Busy)
+            {
                 self.membership = Membership::Removed(endpoint);
             }
             config::log(ROLE, "removed", json!({ "name": self.cfg.name }));
@@ -1064,7 +1129,10 @@ impl Agent {
     }
 
     fn drain_mailbox(&mut self) -> Result<(), String> {
-        if matches!(self.membership, Membership::Candidate(..) | Membership::Joining(_) | Membership::Busy) {
+        if matches!(
+            self.membership,
+            Membership::Candidate(..) | Membership::Joining(_) | Membership::Busy
+        ) {
             return Ok(());
         }
         // 1. Consumptions that failed in transport.
@@ -1075,15 +1143,26 @@ impl Agent {
         let mut messages = std::mem::take(&mut self.future);
         // 3. New envelopes, leased by the relay until acknowledged.
         let path = format!("/v1/mailbox/{}", self.cfg.name);
-        let fetched = self.cfg.relay.call("GET", &path, None)?.as_array().cloned().unwrap_or_default();
-        let ids: Vec<u64> = fetched.iter().filter_map(|m| m["relay_id"].as_u64()).collect();
+        let fetched = self
+            .cfg
+            .relay
+            .call("GET", &path, None)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let ids: Vec<u64> = fetched
+            .iter()
+            .filter_map(|m| m["relay_id"].as_u64())
+            .collect();
         messages.extend(fetched);
         self.process_messages(messages);
         // Acknowledge only after the outcome is on disk: a crash before this point makes
         // the relay retransmit the batch (at-least-once transport).
         self.save()?;
         if !ids.is_empty() {
-            self.cfg.relay.call("POST", &format!("{path}/ack"), Some(&json!({ "ids": ids })))?;
+            self.cfg
+                .relay
+                .call("POST", &format!("{path}/ack"), Some(&json!({ "ids": ids })))?;
         }
         Ok(())
     }
@@ -1108,7 +1187,10 @@ impl Agent {
                 }
                 continue;
             }
-            match self.endpoint_mut().and_then(|endpoint| endpoint.receive(&envelope)) {
+            match self
+                .endpoint_mut()
+                .and_then(|endpoint| endpoint.receive(&envelope))
+            {
                 Ok(pending) if pending.op() == op => self.finish(op, from, pending),
                 Ok(_) => self.reject(&op, &from, "binding_mismatch: operation"),
                 Err(error) => self.reject(&op, &from, &error),
@@ -1119,14 +1201,18 @@ impl Agent {
     /// True when the envelope's certificate verifies and names a later epoch than this
     /// member's: its commit has not reached this member yet.
     fn is_future(&mut self, envelope: &[u8]) -> bool {
-        let Some(apf_public) = self.apf_public.clone() else { return false };
+        let Some(apf_public) = self.apf_public.clone() else {
+            return false;
+        };
         let Ok(own) = self.endpoint_mut().and_then(|endpoint| endpoint.frontier()) else {
             return false;
         };
         let verifier = openmls_rust_crypto::RustCrypto::default();
         Envelope::decode(envelope)
             .ok()
-            .and_then(|envelope| ReleaseCertificate::verify(&envelope.certificate, &apf_public, &verifier).ok())
+            .and_then(|envelope| {
+                ReleaseCertificate::verify(&envelope.certificate, &apf_public, &verifier).ok()
+            })
             .is_some_and(|certificate| certificate.frontier.epoch > own.epoch)
     }
 
@@ -1146,7 +1232,11 @@ impl Agent {
         };
         match pending.deliver(&receipt) {
             Ok((content_type, payload)) => {
-                config::log(ROLE, "delivered", json!({ "name": self.cfg.name, "op": op }));
+                config::log(
+                    ROLE,
+                    "delivered",
+                    json!({ "name": self.cfg.name, "op": op }),
+                );
                 let item = json!({
                     "seq": self.inbox.len(),
                     "op": op,
@@ -1163,7 +1253,11 @@ impl Agent {
     }
 
     fn reject(&mut self, op: &str, from: &str, error: &str) {
-        config::log(ROLE, "rejected", json!({ "name": self.cfg.name, "op": op, "error": error }));
+        config::log(
+            ROLE,
+            "rejected",
+            json!({ "name": self.cfg.name, "op": op, "error": error }),
+        );
         push_limited(
             &mut self.rejections,
             json!({ "op": op, "from": from, "code": error_code(error), "error": error }),
@@ -1216,7 +1310,6 @@ impl Agent {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Policy view helpers
 // ---------------------------------------------------------------------------
@@ -1224,22 +1317,34 @@ impl Agent {
 fn roster_of(state: &Value) -> Result<Vec<String>, String> {
     state["roster"]
         .as_array()
-        .map(|roster| roster.iter().filter_map(|n| n.as_str().map(str::to_owned)).collect())
+        .map(|roster| {
+            roster
+                .iter()
+                .filter_map(|n| n.as_str().map(str::to_owned))
+                .collect()
+        })
         .ok_or_else(|| "malformed: APF roster".to_string())
 }
 
 fn grants(state: &Value) -> Vec<Map<String, Value>> {
     state["grants"]
         .as_array()
-        .map(|grants| grants.iter().filter_map(|g| g.as_object().cloned()).collect())
+        .map(|grants| {
+            grants
+                .iter()
+                .filter_map(|g| g.as_object().cloned())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn generation_of(state: &Value, subject: &str, right: &str) -> Option<u64> {
     grants(state)
         .into_iter()
-        .find(|g| g.get("subject").and_then(Value::as_str) == Some(subject)
-            && g.get("right").and_then(Value::as_str) == Some(right))
+        .find(|g| {
+            g.get("subject").and_then(Value::as_str) == Some(subject)
+                && g.get("right").and_then(Value::as_str) == Some(right)
+        })
         .and_then(|g| g.get("generation").and_then(Value::as_u64))
 }
 

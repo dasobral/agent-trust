@@ -21,11 +21,17 @@ source = "qrng"          # os | mock | qrng
 [relay]
 seed = 7
 
+[tls]
+enabled = false          # true: mutual TLS between every pair of services
+
 [[agent]]
 name = "alice"
 [[agent]]
 name = "bob"
 ```
+
+Provided topologies: `three-agents` (E1 to E4), `three-agents-mtls` (E1 over mTLS),
+`four-agents` (E7), `scale-8` (E5; `scripts/make-topology.py N` makes others).
 
 From a topology, `attctl` plans these services:
 
@@ -84,6 +90,41 @@ through to the nodes.
   `--base mirror.gcr.io/library/ubuntu:24.04`.
 - The prebuilt image needs a base whose glibc is at least the build host's.
 
+### `k8s` (tested on k3s)
+
+```bash
+./attctl build && ./attctl image && deploy/k3s/import-image.sh
+./attctl up topologies/three-agents.toml --backend k8s
+```
+
+- One namespace per deployment (`att-<topology>`); one Deployment, Service and (for
+  the APF and agents) PersistentVolumeClaim per service; tokens and certificates in
+  Secrets; default-deny ingress NetworkPolicies; unprivileged, read-only pods.
+- The control plane reaches services through `kubectl port-forward` on `127.0.0.1`.
+- `./attctl render TOPOLOGY --out FILE` writes the same objects as static manifests.
+- Cluster setup, image import, multi-node notes and sandbox caveats:
+  [`deploy/k3s/README.md`](../deploy/k3s/README.md).
+
+### Mutual TLS
+
+With `[tls] enabled = true`, `attctl up` first creates a deployment CA and one
+certificate per service, per application (`<agent>-app`) and for itself
+(`att-node pki`, in `<run_dir>/pki`). Each backend gives each service its own
+certificate: local processes read `<run_dir>/pki`; compose mounts it read-only at
+`/etc/att/pki` (its keys are made readable by the container user: a lab tradeoff);
+Kubernetes mounts a per-service Secret with only the CA and that service's own
+certificate and key. Every URL becomes `https://`.
+
+### Service lifecycle
+
+Experiments can stop and start one service (`stop`, `start`, `restart` steps):
+
+| Backend | Stop | Start | State kept in |
+|---|---|---|---|
+| local | `SIGKILL` of the process group | the same command and environment | `<run_dir>/state/<service>` |
+| compose | `docker compose kill` | `docker compose start` | named volumes |
+| k8s | scale to 0 | delete any failing pod, scale to 1 | PersistentVolumeClaims |
+
 ### Adding a backend
 
 A backend is a module in `controller/attctl/deploy/` with three functions:
@@ -92,13 +133,14 @@ A backend is a module in `controller/attctl/deploy/` with three functions:
 def up(topology, run_dir, ...) -> dict      # start services, write deploy.json
 def down(run_dir) -> None
 def logs(run_dir) -> dict[str, str]
+def stop(run_dir, name) -> None             # optional: restart experiments
+def start(run_dir, name) -> None
 ```
 
 `up` calls `topology.plan(topology, address)`, where `address(name, role)` returns
 the URL under which other services reach `name`, and records the endpoints the
 control plane uses in `deploy.json` (`common.deployment_record`). Nothing above the
-backend changes. A Kubernetes backend, for example, renders one Deployment and
-Service per planned service, with `address = http://<name>.<namespace>.svc:<port>`.
+backend changes.
 
 ## `deploy.json`
 

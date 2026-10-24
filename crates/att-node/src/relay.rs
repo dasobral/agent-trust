@@ -191,10 +191,12 @@ fn route(state: &mut State, request: &Request, segments: &[&str]) -> Response {
             Response::outcome(Ok(json!({ "stored": subject })))
         }
         // Kept after a read: an admin whose Add fails (for example, no entropy) can retry.
-        ("GET", ["v1", "keypackages", subject]) => match state.key_packages.get(*subject).cloned() {
-            Some(body) => Response::outcome(Ok(body)),
-            None => Response::outcome(Err(format!("not_found: no KeyPackage for {subject}"))),
-        },
+        ("GET", ["v1", "keypackages", subject]) => {
+            match state.key_packages.get(*subject).cloned() {
+                Some(body) => Response::outcome(Ok(body)),
+                None => Response::outcome(Err(format!("not_found: no KeyPackage for {subject}"))),
+            }
+        }
         ("POST", ["v1", "mailbox", to]) => {
             post(state, to, request.body.clone());
             Response::outcome(Ok(json!({ "queued": true })))
@@ -210,7 +212,9 @@ fn route(state: &mut State, request: &Request, segments: &[&str]) -> Response {
         ("POST", ["control", "faults"]) => Response::outcome(set_faults(state, &request.body)),
         ("POST", ["control", "hold"]) => Response::outcome(set_hold(state, &request.body)),
         ("POST", ["control", "tap"]) => Response::outcome(set_tap(state, &request.body)),
-        ("POST", ["control", "handshake"]) => Response::outcome(handshake_fault(state, &request.body)),
+        ("POST", ["control", "handshake"]) => {
+            Response::outcome(handshake_fault(state, &request.body))
+        }
         ("GET", ["control", "stats"]) => Response::outcome(Ok(stats(state))),
         _ => Response::not_found(),
     }
@@ -223,7 +227,11 @@ fn enqueue(state: &mut State, to: &str, body: Value, copy: bool) {
         body,
         copy,
     };
-    state.mailboxes.entry(to.to_owned()).or_default().push(message);
+    state
+        .mailboxes
+        .entry(to.to_owned())
+        .or_default()
+        .push(message);
 }
 
 fn post(state: &mut State, to: &str, body: Value) {
@@ -270,7 +278,10 @@ fn fetch(state: &mut State, to: &str) -> Vec<Value> {
         }
         state.stats.fetched += 1;
         let until = std::time::Instant::now() + state.lease;
-        state.leased.entry(to.to_owned()).or_default().push(Leased { message: message.clone(), until });
+        state.leased.entry(to.to_owned()).or_default().push(Leased {
+            message: message.clone(),
+            until,
+        });
         let mut body = message.body;
         if let Some(object) = body.as_object_mut() {
             object.insert("relay_id".into(), json!(message.id));
@@ -292,8 +303,11 @@ fn fetch(state: &mut State, to: &str) -> Vec<Value> {
 /// Messages whose lease ended go back to the front of the queue (retransmission).
 fn expire_leases(state: &mut State, to: &str) {
     let now = std::time::Instant::now();
-    let Some(leased) = state.leased.get_mut(to) else { return };
-    let (expired, kept): (Vec<Leased>, Vec<Leased>) = leased.drain(..).partition(|l| l.until <= now);
+    let Some(leased) = state.leased.get_mut(to) else {
+        return;
+    };
+    let (expired, kept): (Vec<Leased>, Vec<Leased>) =
+        leased.drain(..).partition(|l| l.until <= now);
     *leased = kept;
     if !expired.is_empty() {
         state.stats.expired += expired.len() as u64;
@@ -305,7 +319,9 @@ fn expire_leases(state: &mut State, to: &str) {
 }
 
 fn ack(state: &mut State, to: &str, ids: &[u64]) -> usize {
-    let Some(leased) = state.leased.get_mut(to) else { return 0 };
+    let Some(leased) = state.leased.get_mut(to) else {
+        return 0;
+    };
     let before = leased.len();
     leased.retain(|l| !ids.contains(&l.message.id));
     before - leased.len()
@@ -325,7 +341,10 @@ fn set_faults(state: &mut State, body: &Value) -> Result<Value, String> {
     state.faults = Faults {
         drop: percent(body, "drop")?,
         duplicate: percent(body, "duplicate")?,
-        reorder: body.get("reorder").and_then(Value::as_bool).unwrap_or(false),
+        reorder: body
+            .get("reorder")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     };
     if let Some(seed) = body.get("seed").and_then(Value::as_u64) {
         state.rng = SplitMix(seed);
@@ -336,7 +355,10 @@ fn set_faults(state: &mut State, body: &Value) -> Result<Value, String> {
 
 fn set_hold(state: &mut State, body: &Value) -> Result<Value, String> {
     let mailbox = str_field(body, "mailbox")?.to_owned();
-    let held = body.get("held").and_then(Value::as_bool).ok_or("malformed: held")?;
+    let held = body
+        .get("held")
+        .and_then(Value::as_bool)
+        .ok_or("malformed: held")?;
     if held {
         state.held.insert(mailbox.clone());
     } else {
@@ -371,7 +393,10 @@ fn append(state: &mut State, group: &str, mut entry: Value) -> u64 {
 }
 
 fn entry_at(state: &State, group: &str, body: &Value, key: &str) -> Result<Value, String> {
-    let index = body.get(key).and_then(Value::as_u64).ok_or_else(|| format!("malformed: {key}"))?;
+    let index = body
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("malformed: {key}"))?;
     state
         .handshake
         .get(group)
@@ -385,7 +410,10 @@ fn handshake_fault(state: &mut State, body: &Value) -> Result<Value, String> {
     let result = match action {
         "hide" => {
             let reader = str_field(body, "reader")?.to_owned();
-            let from = body.get("from_index").and_then(Value::as_u64).unwrap_or(u64::MAX);
+            let from = body
+                .get("from_index")
+                .and_then(Value::as_u64)
+                .unwrap_or(u64::MAX);
             let indices: BTreeSet<u64> = body
                 .get("indices")
                 .and_then(Value::as_array)
@@ -486,7 +514,11 @@ mod tests {
             taps: BTreeMap::new(),
             hidden: BTreeMap::new(),
             reversed: BTreeSet::new(),
-            faults: Faults { drop, duplicate, reorder: true },
+            faults: Faults {
+                drop,
+                duplicate,
+                reorder: true,
+            },
             rng: SplitMix(seed),
             next_id: 0,
             stats: Stats::default(),
@@ -498,7 +530,10 @@ mod tests {
         let mut out = Vec::new();
         for _ in 0..10_000 {
             let batch = fetch(state, to);
-            let ids: Vec<u64> = batch.iter().map(|m| m["relay_id"].as_u64().unwrap()).collect();
+            let ids: Vec<u64> = batch
+                .iter()
+                .map(|m| m["relay_id"].as_u64().unwrap())
+                .collect();
             ack(state, to, &ids);
             out.extend(batch.iter().map(|m| m["op"].as_str().unwrap().to_owned()));
             if state.mailboxes.get(to).is_none() {
@@ -517,8 +552,14 @@ mod tests {
             }
             let delivered = drain(&mut state, "bob");
             for i in 0..20 {
-                let count = delivered.iter().filter(|op| **op == format!("op-{i}")).count();
-                assert!((1..=2).contains(&count), "seed {seed}: op-{i} delivered {count} times");
+                let count = delivered
+                    .iter()
+                    .filter(|op| **op == format!("op-{i}"))
+                    .count();
+                assert!(
+                    (1..=2).contains(&count),
+                    "seed {seed}: op-{i} delivered {count} times"
+                );
             }
             assert_eq!(delivered.len() as u64, 20 + state.stats.duplicated);
         }
@@ -554,7 +595,11 @@ mod tests {
         state.lease = std::time::Duration::from_millis(0);
         post(&mut state, "bob", json!({ "op": "m" }));
         assert_eq!(fetch(&mut state, "bob").len(), 1);
-        assert_eq!(stats(&state)["pending"], 1, "a leased message is still pending");
+        assert_eq!(
+            stats(&state)["pending"],
+            1,
+            "a leased message is still pending"
+        );
         let again = fetch(&mut state, "bob");
         assert_eq!(again.len(), 1, "the expired lease retransmits the message");
         let id = again[0]["relay_id"].as_u64().unwrap();
@@ -565,7 +610,11 @@ mod tests {
     #[test]
     fn a_tap_copies_the_victim_traffic_to_the_observer() {
         let mut state = state(1, 0, 0);
-        state.taps.entry("bob".into()).or_default().insert("carol".into());
+        state
+            .taps
+            .entry("bob".into())
+            .or_default()
+            .insert("carol".into());
         post(&mut state, "bob", json!({ "op": "m" }));
         let copy = fetch(&mut state, "carol");
         assert_eq!(copy.len(), 1);

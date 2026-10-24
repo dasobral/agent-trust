@@ -11,7 +11,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "controller"))
 
 from attctl import experiment, oracle, topology  # noqa: E402
-from attctl.deploy import compose  # noqa: E402
+from attctl.deploy import compose, k8s  # noqa: E402
 
 TOPOLOGY = REPO / "topologies" / "three-agents.toml"
 
@@ -54,6 +54,62 @@ class ComposeTests(unittest.TestCase):
         self.assertIn('"127.0.0.1:20000:7200"', text)
         self.assertNotIn('"0.0.0.0:', text.replace('ATT_LISTEN: "0.0.0.0', ""))
         self.assertIn("apf-state:/var/lib/att/apf", text)
+
+
+class TlsPlanTests(unittest.TestCase):
+    def test_tls_topology_gives_every_service_its_certificate_and_qrng_mtls(self):
+        topo = topology.Topology.load(REPO / "topologies" / "three-agents-mtls.toml")
+        self.assertTrue(topo.tls)
+        plan = topology.plan(topo, lambda n, r: f"https://{n}:1", tls_dir="/pki")
+        for service in plan.services:
+            self.assertEqual(service.env["ATT_TLS_NAME"], service.name)
+            self.assertEqual(service.env["ATT_TLS_DIR"], "/pki")
+        bob = plan.service("bob").env
+        self.assertEqual(bob["AGENT_TRUST_QRNG_CLIENT_CERT_PEM"], "/pki/bob.crt")
+        self.assertTrue(bob["AGENT_TRUST_QRNG_BASE_URL"].startswith("https://"))
+        self.assertIn("bob-app", topo.pki_names())
+
+
+class KubernetesRenderTests(unittest.TestCase):
+    def render(self, tls=False):
+        name = "three-agents-mtls.toml" if tls else "three-agents.toml"
+        topo = topology.Topology.load(REPO / "topologies" / name)
+        plan = topology.plan(topo, lambda n, r: f"http://{n}:{topology.PORTS[r]}",
+                             tls_dir=k8s.PKI_PATH if tls else None)
+        pki = None
+        if tls:
+            pki = {"ca.crt": "CA"}
+            for service in plan.services:
+                pki[f"{service.name}.crt"] = f"CRT {service.name}"
+                pki[f"{service.name}.key"] = f"KEY {service.name}"
+        return plan, k8s.render(plan, "att-test", "img:tag", pki=pki)["items"]
+
+    def test_no_token_appears_in_a_deployment(self):
+        plan, items = self.render()
+        text = json.dumps([i for i in items if i["kind"] == "Deployment"])
+        for token in plan.tokens.values():
+            self.assertNotIn(token, text)
+
+    def test_each_pod_mounts_only_its_own_key(self):
+        plan, items = self.render(tls=True)
+        secrets = {i["metadata"]["name"]: i for i in items if i["kind"] == "Secret"}
+        bob = secrets["att-pki-bob"]["stringData"]
+        self.assertEqual(sorted(bob), ["bob.crt", "bob.key", "ca.crt"])
+        deployment = next(i for i in items if i["kind"] == "Deployment" and i["metadata"]["name"] == "bob")
+        volumes = deployment["spec"]["template"]["spec"]["volumes"]
+        self.assertIn({"name": "pki", "secret": {"secretName": "att-pki-bob", "defaultMode": 0o440}}, volumes)
+
+    def test_pods_are_unprivileged_and_ingress_is_denied_by_default(self):
+        _, items = self.render()
+        for deployment in (i for i in items if i["kind"] == "Deployment"):
+            context = deployment["spec"]["template"]["spec"]["containers"][0]["securityContext"]
+            self.assertTrue(context["runAsNonRoot"] and context["readOnlyRootFilesystem"])
+            self.assertEqual(context["capabilities"], {"drop": ["ALL"]})
+        policies = {i["metadata"]["name"]: i["spec"] for i in items if i["kind"] == "NetworkPolicy"}
+        self.assertEqual(policies["default-deny-ingress"]["podSelector"], {})
+        sources = policies["allow-to-apf"]["ingress"][0]["from"]
+        self.assertEqual(sources, [{"podSelector": {"matchLabels": {"app.kubernetes.io/component": "agent"}}}])
+        self.assertNotIn("allow-to-agent", policies)
 
 
 class ExperimentTests(unittest.TestCase):

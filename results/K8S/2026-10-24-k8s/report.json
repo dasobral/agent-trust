@@ -1,0 +1,371 @@
+{
+ "experiment": "K8S",
+ "title": "Kubernetes network isolation of the testbed services",
+ "hypothesis": "(H1) Agents reach the APF, the relay and the QRNG service, and nothing else reaches an agent: not another agent, not the relay, not the APF. (H2) The relay cannot reach the APF. (H3) With these policies the group works end to end.",
+ "result": "pass",
+ "started": 1792860110.0975661,
+ "seconds": 2.832,
+ "steps": [
+  {
+   "index": 0,
+   "do": "check.network_policy",
+   "name": "I1 allowed and denied service paths",
+   "status": "pass",
+   "detail": {
+    "alice->apf": "connects",
+    "alice->relay": "connects",
+    "bob->qrng": "connects",
+    "apf->qrng": "connects",
+    "alice->bob": "blocked",
+    "bob->carol": "blocked",
+    "relay->alice": "blocked",
+    "apf->alice": "blocked",
+    "relay->apf": "blocked",
+    "qrng->apf": "blocked"
+   },
+   "seconds": 1.843
+  },
+  {
+   "index": 1,
+   "do": "genesis",
+   "name": "I2 alice founds the group",
+   "status": "pass",
+   "detail": {
+    "branch": "39d2458e281d340e5119ff57562313858bb1bc7b230a8ae9e3c36f0516745aaf",
+    "epoch": 0
+   },
+   "seconds": 0.063
+  },
+  {
+   "index": 2,
+   "do": "delegate",
+   "name": "I3 delegate bob",
+   "status": "pass",
+   "detail": {
+    "revision": 1
+   },
+   "seconds": 0.02
+  },
+  {
+   "index": 3,
+   "do": "admit",
+   "name": "I4 admit bob",
+   "status": "pass",
+   "detail": {
+    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "epoch": 1,
+    "index": 0,
+    "subject": "bob"
+   },
+   "seconds": 0.222
+  },
+  {
+   "index": 4,
+   "do": "send",
+   "name": "I5 alice sends m1",
+   "status": "pass",
+   "detail": {
+    "epoch": 1,
+    "op": "alice-000001",
+    "recipients": [
+     "bob"
+    ],
+    "sent_ms": 1792860112283
+   },
+   "seconds": 0.039
+  },
+  {
+   "index": 5,
+   "do": "quiesce",
+   "name": "I6 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 1,
+    "fetched": 1,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.32
+  },
+  {
+   "index": 6,
+   "do": "check.delivered",
+   "name": "I7 bob received m1",
+   "status": "pass",
+   "detail": {
+    "agent": "bob",
+    "delivered": [
+     "alice-000001"
+    ]
+   },
+   "seconds": 0.006
+  },
+  {
+   "index": 7,
+   "do": "check.oracle",
+   "name": "I8 the oracle accepts the trace",
+   "status": "pass",
+   "detail": {
+    "oracle": "oracle.py",
+    "events": 11,
+    "kinds": {
+     "admit": 1,
+     "allocate": 1,
+     "allow": 3,
+     "consume": 1,
+     "emit": 1,
+     "init": 1,
+     "persist": 1,
+     "recover": 1,
+     "release": 1
+    }
+   },
+   "seconds": 0.319
+  }
+ ],
+ "skipped_steps": 0,
+ "backend": "k8s",
+ "topology": "three-agents",
+ "entropy": {
+  "source": "qrng"
+ },
+ "stack": {
+  "agent-trust": "5cf724e2a8af2d7a3a76e6a24d03de62f29f4a83",
+  "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
+  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+ },
+ "observations": {
+  "apf_state": {
+   "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+   "epoch": 1,
+   "grants": [
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admin",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "bob"
+    }
+   ],
+   "group": "lab",
+   "policy_revision": 1,
+   "read_fenced": false,
+   "repair_pending": null,
+   "roster": [
+    "alice",
+    "bob"
+   ]
+  },
+  "relay_stats": {
+   "dropped": 0,
+   "duplicated": 0,
+   "expired": 0,
+   "faults": {
+    "drop": 0,
+    "duplicate": 0,
+    "reorder": false
+   },
+   "fetched": 1,
+   "handshake": {
+    "lab": 1
+   },
+   "held": [],
+   "hidden": {},
+   "key_packages": [
+    "bob"
+   ],
+   "leased": 0,
+   "pending": 0,
+   "posted": 1,
+   "queued": {},
+   "reversed": [],
+   "tapped": 0
+  },
+  "agents": {
+   "alice": {
+    "adversary": [],
+    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "confirmations": [],
+    "cursor": 1,
+    "entropy": {
+     "bytes": 260,
+     "failures": 0,
+     "requests": 9,
+     "source": "qrng"
+    },
+    "epoch": 1,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 0,
+    "membership": "member",
+    "name": "alice",
+    "polls": 74,
+    "public_key": "7fff68d4434126bf431bfa916f449aa2991d0048190f739442d877e8a1769899",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 6,
+    "skipped_entries": 0,
+    "waiting": []
+   },
+   "bob": {
+    "adversary": [],
+    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "confirmations": [],
+    "cursor": 1,
+    "entropy": {
+     "bytes": 160,
+     "failures": 0,
+     "requests": 5,
+     "source": "qrng"
+    },
+    "epoch": 1,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 1,
+    "membership": "member",
+    "name": "bob",
+    "polls": 75,
+    "public_key": "36ad9cb6cb9e81ab045339995902b547489ce6b4082e4573c6f571014ccacd0f",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 2,
+    "skipped_entries": 0,
+    "waiting": []
+   },
+   "carol": {
+    "adversary": [],
+    "branch": null,
+    "confirmations": [],
+    "cursor": 0,
+    "entropy": {
+     "bytes": 96,
+     "failures": 0,
+     "requests": 3,
+     "source": "qrng"
+    },
+    "epoch": null,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 0,
+    "membership": "candidate",
+    "name": "carol",
+    "polls": 76,
+    "public_key": "ec5804b47cc3d950627ade80c4bedef2784927c4c007f6975216fe42655f8b28",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 0,
+    "skipped_entries": 0,
+    "waiting": []
+   }
+  },
+  "qrng_stats": {
+   "available": true,
+   "bytes": 612,
+   "clients": {
+    "10.42.0.82": 260,
+    "10.42.0.83": 96,
+    "10.42.0.84": 160,
+    "10.42.0.85": 96
+   },
+   "mock": true,
+   "refused": 0,
+   "requests": 20
+  },
+  "adapter_trace": [
+   {
+    "actor": "alice",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "bob",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 2
+   }
+  ]
+ }
+}

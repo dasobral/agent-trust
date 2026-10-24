@@ -9,7 +9,8 @@ application APIs and the deployment record `deploy.json`; it holds no agent key.
 |---|---|
 | `./attctl build [--debug]` | `cargo build --locked -p att-node` |
 | `./attctl image [--base IMG] [--from-source]` | Build `agent-trust-testbed/att-node:local` |
-| `./attctl up TOPOLOGY [--backend local\|compose]` | Deploy and wait until every service is healthy |
+| `./attctl up TOPOLOGY [--backend local\|compose\|k8s]` | Deploy and wait until every service is healthy |
+| `./attctl render TOPOLOGY [--out FILE]` | Static Kubernetes manifests |
 | `./attctl status` | APF policy view, each agent's membership and epoch, relay counters |
 | `./attctl call SERVICE METHOD PATH [JSON]` | One raw call with the right token, for example `./attctl call relay POST /control/faults '{"drop": 30}'` |
 | `./attctl trace [--out FILE]` | Export the APF trace and run the oracle; exit 1 on a violation |
@@ -78,6 +79,14 @@ fails the step.
 | `rekey` | `agent, right, generation` | New key and incarnation |
 | `adversary` | `agent, retain` | Retained key adversary mode |
 | `sync` | | Every member applies the handshake log |
+| `join` | `agent` | The candidate certifies and publishes its KeyPackage |
+| `add` | `by, subject` | Add a published KeyPackage, wait for the Welcome, sync |
+| `admit_all` | `by, rights` | Delegate and admit every other agent, timing each admission |
+| `rounds` | `count`, optional `agents, except, per_agent, label, max_round_seconds` | Parallel send rounds, each drained; records round time and APF time per request |
+| `invoke` | `by, executor, rights`, optional `parent, resources, label` | An APF invocation (confused deputy); `send` takes `invocation = "<label>"` |
+| `stop`, `start`, `restart` | `service`; `start` takes `expect = "fails"` | Service lifecycle through the backend |
+| `entropy_outage` | `available` | QRNG service outage on or off |
+| `handshake` | `action` and its fields | Relay attack on the commit log (replay, inject, splice, hide, show, reverse) |
 
 ### Checks
 
@@ -87,15 +96,22 @@ fails the step.
 | `check.frontiers` | `agents` | Each agent's epoch and branch equal the APF's |
 | `check.delivered` | `agent, ops`, optional `exact` | Each labelled message was delivered exactly once, from its sender, with its payload; with `exact` (default), nothing else was |
 | `check.not_delivered` | `agent, ops` | None of them reached the application |
-| `check.complete` | optional `exclude = ["agent:label"]` | Every sent message reached every reader of its certificate exactly once |
+| `check.complete` | optional `exclude = ["agent:label"]`, `exclude_prefix = ["agent:prefix"]` | Every sent message reached every reader of its certificate exactly once (`exclude`: must be missing; `exclude_prefix`: may be missing) |
 | `check.rejected` | `agent, op, codes`, optional `duplicate_codes` | The first copy was refused with one of `codes`; later copies only as duplicates |
 | `check.rejections_are_duplicates` | `agents` | Every refused copy belongs to a message that agent already delivered |
 | `check.adversary` | `agent, ops` | Every leaked copy failed raw MLS decryption and the APF refused its consumption |
-| `check.exactly_once` | | No duplicate delivery; the set of delivered pairs equals the APF's consumed set |
+| `check.exactly_once` | optional `allow_lost` | No duplicate delivery; delivered pairs equal the APF's consumed pairs (`allow_lost`: consumed but undelivered pairs, B5, are reported, not failed) |
 | `check.oracle` | | The independent oracle accepts the exported trace (saved as `trace.json`) |
 | `check.broken_controls` | `revoked_reader, writer`, optional `minimum` | Every control trace derived from the real trace is rejected with its named code |
 | `check.entropy` | `source` | Every node used `source` with zero failures; the QRNG service refused nothing |
 | `check.no_errors` | `agents` | The agents logged no processing error |
+| `check.errors_within` | `indices` | Every logged error is a handshake error on one of these (forged) log indices |
+| `check.agent` | `agent`, any of `membership, restarts, retain, on_frontier, min_skipped` | One agent's status |
+| `check.at_most_once` | `agent, prefix` | Labelled messages arrived at most once; reports losses |
+| `check.operation` | `op`, any of `actor, invocation, status` | The APF's record of an operation (executor, invocation) |
+| `check.metrics` | optional `max_send_p95, max_delivery_p95` | Send, delivery and admission latency; APF time per request against history length |
+| `check.mtls` | | Transport negative controls (no certificate, wrong peer, foreign CA) and one positive control |
+| `check.network_policy` | `allowed, denied` (`"src->dst"`) | Kubernetes only: connectivity probed from inside the pods |
 
 ## Reports and evidence
 

@@ -23,7 +23,7 @@ contract each network flow implements.
 |---|---|---|---|
 | L0 | `dasobral/openmls-qrand` | `a102450` | `OpenMlsRand` over a QRNG Open API endpoint; fail closed |
 | L1 | `dasobral/openmls` (`agent-trust/integration`) | `dd33278` | MLS groups, the public sequencer, staged KeyPackages, a DRBG seeded from L0 |
-| L2 | `dasobral/agent-trust` | `9af877c` | The APF kernel and adapter, the client endpoint, the trace export and the oracle |
+| L2 | `dasobral/agent-trust` | `5cf724e` (branch `feat/durable-lab-provider`: `9af877c` plus the durable provider, F-2) | The APF kernel and adapter, the client endpoint, the trace export and the oracle |
 | L3 | this repository, `crates/att-node` | | The L2 parties as separate network processes |
 | L4 | this repository, `controller/attctl` | | Deployment, control, experiments, evidence |
 
@@ -51,8 +51,8 @@ from the same revision. `report.json` of every run records the revisions it used
 
 | Service | Holds | Trusted for | Not trusted for |
 |---|---|---|---|
-| `apf` | APF signing key, kernel database, public sequencer, adapter store | Authorization decisions, frontier sequencing, certificates | Group secrets: it never has them |
-| `agent` | Its own signature key, its MLS group state | Its own confidentiality | Anything about other agents |
+| `apf` | APF signing key, kernel database, public sequencer, adapter store (on disk) | Authorization decisions, frontier sequencing, certificates | Group secrets: it never has them |
+| `agent` | Its own signature key, its MLS group state, its bookkeeping (on disk) | Its own confidentiality | Anything about other agents |
 | `relay` | Opaque bytes only | Nothing. It may drop, duplicate, reorder, delay, misroute and leak | |
 | `qrng` | Nothing secret | Supplying randomness (the mock: OS RNG bytes) | |
 | `attctl` | The per deployment tokens | Operating the testbed | It holds no agent key and cannot sign for an agent |
@@ -83,11 +83,25 @@ These are explicit choices of this testbed, not properties of agent-trust:
    release cover and digest. The view is advisory: the kernel checks every value
    again at `release` and `consume`. The contract has no worker request for it yet
    (see `docs/findings.md`).
-4. **Transport security.** Services speak plain HTTP on a private network. Each
-   deployment generates three random tokens: `control` (control plane), `app`
-   (applications), `bootstrap` (genesis, held only by the APF and the root agent).
-   Request authenticity towards the APF does not depend on transport: every worker
-   request is signed (contract §4.8). mTLS between services is future work.
+4. **Transport security.** Each deployment generates three random tokens: `control`
+   (control plane), `app` (applications), `bootstrap` (genesis, held only by the APF
+   and the root agent). Request authenticity towards the APF never depends on
+   transport: every worker request is signed (contract §4.8). With `[tls] enabled`
+   in the topology, every connection is mutual TLS under a deployment CA
+   (`att-node pki`), the QRNG traffic included, and services bind the peer's
+   certificate name to the protocol identity:
+
+   | Service | Accepts only |
+   |---|---|
+   | APF `POST /v1/request` | the agent that signed the request |
+   | APF genesis | the configured root |
+   | relay mailbox read and ack | the mailbox owner |
+   | relay KeyPackage publication | the subject |
+   | every `/control/*` | `attctl` |
+   | agent `/app/*` | `<agent>-app` or `attctl` |
+
+   Transport keys come from the OS RNG (rcgen over ring); they are outside the
+   agent-trust entropy seam, which covers MLS and identity keys.
 5. **Time.** The APF uses the system clock (`SystemClock`). Delegations expire after
    `ttl_secs` (default 30 days).
 
@@ -154,7 +168,33 @@ key from its entropy source, stages `self_update_with_new_signer` with the new
 `authz_incarnation`, and submits it (kind update). The APF replaces the registered
 key; the old key no longer authenticates.
 
-### 3.6 Adversary mode
+### 3.6 Durability and delivery guarantees
+
+- **APF.** The adapter directory is on disk (a volume in containers); a restarted APF
+  reopens it and recovers interrupted requests (contract C-31 to C-34).
+- **Agents.** With `ATT_DATA_DIR` a sidecar stores its identity (`identity.json`, mode
+  0600, restored with agent-trust `ClientIdentity::restore`), its MLS state
+  (agent-trust `LabEntropy::durable_provider`, one SQLite file) and its bookkeeping
+  (`state.json`). The request sequence is written before each request is sent, so a
+  restart never reuses one. A restarted agent resumes as the same member.
+- **Mailbox: at least once.** A fetch leases the returned messages; the agent
+  acknowledges them only after it has processed them and saved its state. A lease
+  that ends sends the messages again.
+- **Delivery: at most once.** A copy that MLS already decrypted fails again
+  (`undecryptable`); a consumed pair is never consumed twice (`replay`). Crash windows
+  can lose a message (B4, B5), never duplicate one.
+- **APF outage.** A consumption that fails in transport is retried every poll with
+  the decrypted message held; nothing is delivered before the APF consents.
+- **Epoch changes.** Before applying a commit, an agent drains its mailbox at the
+  current epoch; an envelope of a later epoch waits in a buffer until the commit
+  arrives. A message still unconsumed when the APF's epoch moves cannot be delivered
+  (finding F-7): the kernel binds `consume` to its current epoch.
+- **Commit log.** The relay's handshake log is untrusted. An entry applies only under
+  an APF ack whose parent is the member's frontier; an older parent is skipped, a
+  newer one waits for the missing commit, and the cursor moves only over a contiguous
+  run of resolved indices, so a hidden entry is fetched once it appears (E4).
+
+### 3.7 Adversary mode
 
 `POST /control/adversary {retain: true}` turns an agent into the retained key
 adversary of contract §5.4: it stops applying commits, keeps the keys of its last

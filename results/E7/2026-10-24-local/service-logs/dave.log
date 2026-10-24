@@ -1,0 +1,6 @@
+{"entropy":"qrng","event":"listening","listen":"127.0.0.1:39023","name":"dave","public_key":"84cab2286556af66c272530ef78ade7e992efaa20015d91434f9f5ae48eeacb9","role":"agent","ts":1792861286}
+{"event":"joined","name":"dave","role":"agent","ts":1792861287}
+{"event":"delivered","name":"dave","op":"bob-000001","role":"agent","ts":1792861287}
+{"action":"request","error":"unauthorized","event":"control_error","name":"dave","role":"agent","ts":1792861287}
+{"event":"delivered","name":"dave","op":"alice-000001","role":"agent","ts":1792861287}
+{"event":"delivered","name":"dave","op":"bob-000004","role":"agent","ts":1792861288}

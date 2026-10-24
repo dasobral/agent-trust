@@ -1,0 +1,3 @@
+{"event":"listening","listen":"0.0.0.0:7100","role":"relay","seed":7,"ts":1792861649}
+{"event":"hold","held":true,"mailbox":"carol","role":"relay","ts":1792861652}
+{"event":"hold","held":false,"mailbox":"carol","role":"relay","ts":1792861653}

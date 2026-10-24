@@ -15,8 +15,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: Swatinem/rust-cache@v2
-      - name: Unit tests and E1 (local backend)
-        run: scripts/ci.sh
+      - name: Unit tests and every experiment (local backend)
+        run: SCALE=1 scripts/ci.sh
       - name: Keep the run directories
         if: always()
         uses: actions/upload-artifact@v4
@@ -36,13 +36,43 @@ jobs:
         with:
           python-version: "3.12"
       - uses: Swatinem/rust-cache@v2
-      - name: Unit tests, image and E1 (compose backend)
-        run: BACKEND=compose scripts/ci.sh
+      - name: Unit tests, image and experiments (compose backend)
+        run: BACKEND=compose EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts" scripts/ci.sh
       - name: Keep the run directories
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e1-compose-runs
+          path: |
+            runs/*/report.*
+            runs/*/trace.json
+            runs/*/service-logs/
+
+  k3s:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install k3s
+        run: sudo deploy/k3s/install-k3s.sh
+      - name: Build and import the image
+        run: |
+          ./attctl build
+          ./attctl image
+          deploy/k3s/import-image.sh
+      - name: Experiments on k3s
+        run: |
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          BACKEND=k8s EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts" scripts/ci.sh
+      - name: Keep the run directories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k3s-runs
           path: |
             runs/*/report.*
             runs/*/trace.json

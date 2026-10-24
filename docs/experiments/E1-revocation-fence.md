@@ -71,15 +71,23 @@ steps pass. In particular:
 
 ## Results
 
-Recorded runs are in [`results/E1/`](../../results/E1/), one directory per run with
-`report.md`, `report.json`, `trace.json` and the service logs. Summary of the
-runs recorded on 2026-10-24 at agent-trust `9af877c`:
+Recorded runs are in [`results/E1/`](../../results/E1/) and
+[`results/E1-mtls/`](../../results/E1-mtls/), one directory per run with
+`report.md`, `report.json`, `trace.json` and the service logs:
 
-| Run | Backend | Result | Steps | Notes |
-|---|---|---|---|---|
-| `2026-10-24-local` | local processes | PASS | 55/55 | |
-| `2026-10-24-compose` | Docker Compose | PASS | 55/55 | Four distinct container addresses drew entropy from `qrng` |
-| Stability | local | 20/20 PASS | | `scripts/stability.sh 20` (see `results/E1/stability-2026-10-24.txt`) |
+| Variant | Backends | Result | Steps |
+|---|---|---|---|
+| E1 | local processes, Docker Compose, k3s | PASS | 55/55 |
+| E1-mtls (mutual TLS everywhere, QRNG included) | local processes, Docker Compose, k3s | PASS | 56/56 (step F7 adds the transport negative controls) |
+| Stability, first version (2026-10-24) | local | 20/20 PASS | `results/E1/stability-2026-10-24.txt` |
+| Stability, current version | local | 10/10 PASS each for E1 and E1-mtls | `results/stability-2026-10-24.txt` |
+
+In the compose run, four distinct container addresses drew entropy from the QRNG
+service, one per node. Over mTLS, F7 shows that a client without a certificate and a
+certificate from a foreign CA are refused at the handshake, that bob's certificate
+cannot read carol's mailbox or publish carol's KeyPackage (403), that alice cannot
+send a request signed in bob's name (403), and that bob can read his own mailbox
+(the positive control).
 
 Observed details that the pass criteria do not show:
 
@@ -105,9 +113,7 @@ for later copies.
   `live_entropy_core` gate.
 - Thread timing varies; the relay seed fixes fault decisions per fetch, not the
   global interleaving. The stability series addresses this statistically only.
-- The handshake log on the relay is reliable and in order. Faults on commit
-  distribution (a hidden or reordered commit) are not exercised yet.
-- One group, three agents, one APF. Scale and APF crash recovery over the network
-  are later experiments (see `docs/roadmap.md`).
+- In E1 the handshake log on the relay is reliable and in order; E4 attacks it.
+- One group, three agents, one APF. E3 covers crashes and E5 a larger group.
 - Like the agent-trust claim, a pass covers the executed schedules only. It is not
   a proof; `Bridge_remove^ETK` stays an open proof obligation.

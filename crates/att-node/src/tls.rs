@@ -48,7 +48,10 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 }
 
 fn load() -> Result<Option<Tls>, String> {
-    let (Some(dir), Some(name)) = (config::optional("ATT_TLS_DIR"), config::optional("ATT_TLS_NAME")) else {
+    let (Some(dir), Some(name)) = (
+        config::optional("ATT_TLS_DIR"),
+        config::optional("ATT_TLS_NAME"),
+    ) else {
         return Ok(None);
     };
     let dir = Path::new(&dir);
@@ -131,15 +134,27 @@ pub fn run_pki(args: &[String]) -> Result<(), String> {
         names.push("attctl".into());
     }
 
-    use rcgen::{BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose};
+    use rcgen::{
+        BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair,
+        KeyUsagePurpose,
+    };
     let ca_key = KeyPair::generate().map_err(|err| err.to_string())?;
-    let mut ca_params = CertificateParams::new(Vec::<String>::new()).map_err(|err| err.to_string())?;
+    let mut ca_params =
+        CertificateParams::new(Vec::<String>::new()).map_err(|err| err.to_string())?;
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
-    ca_params.distinguished_name.push(DnType::CommonName, "agent-trust-testbed CA");
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "agent-trust-testbed CA");
     ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
-    let ca = ca_params.self_signed(&ca_key).map_err(|err| err.to_string())?;
+    let ca = ca_params
+        .self_signed(&ca_key)
+        .map_err(|err| err.to_string())?;
     write_file(&dir.join("ca.crt"), ca.pem().as_bytes(), 0o644)?;
-    write_file(&dir.join("ca.key"), ca_key.serialize_pem().as_bytes(), 0o600)?;
+    write_file(
+        &dir.join("ca.key"),
+        ca_key.serialize_pem().as_bytes(),
+        0o600,
+    )?;
 
     for name in &names {
         let mut sans = vec![name.clone(), "localhost".into(), "127.0.0.1".into()];
@@ -149,7 +164,9 @@ pub fn run_pki(args: &[String]) -> Result<(), String> {
             }
         }
         let mut params = CertificateParams::new(sans).map_err(|err| err.to_string())?;
-        params.distinguished_name.push(DnType::CommonName, name.as_str());
+        params
+            .distinguished_name
+            .push(DnType::CommonName, name.as_str());
         params.extended_key_usages = vec![
             ExtendedKeyUsagePurpose::ServerAuth,
             ExtendedKeyUsagePurpose::ClientAuth,
@@ -161,8 +178,16 @@ pub fn run_pki(args: &[String]) -> Result<(), String> {
         let cert = params
             .signed_by(&key, &ca, &ca_key)
             .map_err(|err| err.to_string())?;
-        write_file(&dir.join(format!("{name}.crt")), cert.pem().as_bytes(), 0o644)?;
-        write_file(&dir.join(format!("{name}.key")), key.serialize_pem().as_bytes(), 0o600)?;
+        write_file(
+            &dir.join(format!("{name}.crt")),
+            cert.pem().as_bytes(),
+            0o644,
+        )?;
+        write_file(
+            &dir.join(format!("{name}.key")),
+            key.serialize_pem().as_bytes(),
+            0o600,
+        )?;
     }
     println!("{}", names.join(","));
     Ok(())

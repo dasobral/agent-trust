@@ -6,6 +6,7 @@
     attctl status                                  health and state of every service
     attctl call SERVICE METHOD PATH [JSON]         one raw control call
     attctl trace [--out FILE]                      export the APF trace and run the oracle
+    attctl render TOPOLOGY [--out FILE]            static Kubernetes manifests
     attctl logs [SERVICE]                          service logs
     attctl down                                    stop the deployment
     attctl run EXPERIMENT [--backend B] [--record DIR] [--keep]
@@ -26,6 +27,7 @@ import time
 from pathlib import Path
 
 from . import deploy, experiment as exp_mod, oracle as oracle_mod
+from .deploy import common as _common  # noqa: F401
 from .api import ServiceError, Testbed
 from .topology import Topology
 
@@ -80,7 +82,16 @@ def _up(topology_path, backend, run_dir, image, profile):
             sys.exit(f"missing {binary} (needed to create the PKI); run `attctl build`")
         deployment = module.up(topology, run_dir, image=image, extra_env=extra_env, binary=binary)
     testbed = Testbed(deployment)
-    testbed.wait_healthy(timeout=90)
+    try:
+        testbed.wait_healthy(timeout=90)
+    except ServiceError:
+        # A deployment that never became healthy is torn down; its logs stay.
+        logs = deploy.get(deployment["backend"]).logs(run_dir)
+        (run_dir / "service-logs").mkdir(exist_ok=True)
+        for name, text in logs.items():
+            (run_dir / "service-logs" / f"{name}.log").write_text(text)
+        _down(run_dir)
+        raise
     return deployment, testbed
 
 
@@ -125,6 +136,33 @@ def cmd_call(args):
     service = {s.name: s for s in testbed.services()}[args.service]
     body = json.loads(args.body) if args.body else None
     print(json.dumps(service.raw(args.method.upper(), args.path, body), indent=2))
+
+
+def cmd_render(args):
+    """Static Kubernetes manifests for a topology (GitOps, review, or kubectl apply).
+    The Secret carries newly generated tokens; mTLS certificates are created in
+    ``--pki-dir`` when the topology enables TLS."""
+    from .deploy import k8s
+    from . import topology as topo
+    topology = Topology.load(args.topology)
+    namespace = k8s.namespace_of(topology)
+    pki = None
+    if topology.tls:
+        binary = binary_path(args.profile)
+        pki_dir = deploy.common.make_pki(Path(args.pki_dir), topology, binary, namespace=namespace)
+        pki = {p.name: p.read_text() for p in pki_dir.iterdir() if p.name != "ca.key"}
+
+    def address(name, role):
+        return f"{topology.scheme}://{name}:{topo.PORTS[role]}"
+    plan = topo.plan(topology, address, tls_dir=k8s.PKI_PATH if pki else None)
+    manifest = k8s.render(plan, namespace, args.image, args.pull_policy, pki=pki)
+    text = json.dumps(manifest, indent=1)
+    if args.out:
+        Path(args.out).write_text(text)
+        Path(args.out).chmod(0o600)
+        print(f"wrote {args.out} (namespace {namespace}); it contains secrets")
+    else:
+        print(text)
 
 
 def cmd_trace(args):
@@ -245,6 +283,15 @@ def main(argv=None):
     p.add_argument("path")
     p.add_argument("body", nargs="?")
     p.set_defaults(func=cmd_call)
+
+    p = sub.add_parser("render", help="static Kubernetes manifests for a topology")
+    p.add_argument("topology")
+    p.add_argument("--image", default=deploy.compose.DEFAULT_IMAGE)
+    p.add_argument("--pull-policy", default="IfNotPresent")
+    p.add_argument("--pki-dir", default=str(REPO / "runs" / "render-pki"))
+    p.add_argument("--profile", default="release", choices=["release", "debug"])
+    p.add_argument("--out")
+    p.set_defaults(func=cmd_render)
 
     p = sub.add_parser("trace")
     p.add_argument("--out")

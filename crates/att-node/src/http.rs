@@ -52,7 +52,9 @@ impl Request {
         if !tls::enabled() {
             return true;
         }
-        self.peer.as_deref().is_some_and(|peer| names.contains(&peer))
+        self.peer
+            .as_deref()
+            .is_some_and(|peer| names.contains(&peer))
     }
 }
 
@@ -103,7 +105,8 @@ pub fn serve<H>(addr: &str, workers: usize, handler: H) -> Result<(), String>
 where
     H: Fn(&Request) -> Response + Send + Sync + 'static,
 {
-    let listener = TcpListener::bind(addr).map_err(|err| format!("cannot listen on {addr}: {err}"))?;
+    let listener =
+        TcpListener::bind(addr).map_err(|err| format!("cannot listen on {addr}: {err}"))?;
     let handler = Arc::new(handler);
     let (sender, receiver) = mpsc::channel::<TcpStream>();
     let receiver = Arc::new(Mutex::new(receiver));
@@ -130,9 +133,16 @@ fn serve_connection<H>(stream: TcpStream, handler: &H) -> Result<(), String>
 where
     H: Fn(&Request) -> Response,
 {
-    stream.set_read_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
-    let remote = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+    stream
+        .set_read_timeout(Some(IO_TIMEOUT))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_write_timeout(Some(IO_TIMEOUT))
+        .map_err(|e| e.to_string())?;
+    let remote = stream
+        .peer_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default();
     match tls::get() {
         None => exchange(stream, remote, None, handler),
         Some(tls) => {
@@ -156,7 +166,12 @@ where
     }
 }
 
-fn exchange<S, H>(stream: S, remote: String, peer: Option<String>, handler: &H) -> Result<(), String>
+fn exchange<S, H>(
+    stream: S,
+    remote: String,
+    peer: Option<String>,
+    handler: &H,
+) -> Result<(), String>
 where
     S: Read + Write,
     H: Fn(&Request) -> Response,
@@ -193,11 +208,17 @@ fn reason(status: u16) -> &'static str {
     }
 }
 
-fn parse<R: BufRead>(reader: &mut R, remote: String, peer: Option<String>) -> Result<Request, Response> {
+fn parse<R: BufRead>(
+    reader: &mut R,
+    remote: String,
+    peer: Option<String>,
+) -> Result<Request, Response> {
     let bad = |message: &str| Response::status(400, message);
     let mut head_size = 0;
     let mut line = String::new();
-    reader.read_line(&mut line).map_err(|_| bad("malformed: request line"))?;
+    reader
+        .read_line(&mut line)
+        .map_err(|_| bad("malformed: request line"))?;
     head_size += line.len();
     let mut parts = line.split_whitespace();
     let (Some(method), Some(target)) = (parts.next(), parts.next()) else {
@@ -208,7 +229,9 @@ fn parse<R: BufRead>(reader: &mut R, remote: String, peer: Option<String>) -> Re
     let mut bearer = None;
     loop {
         let mut header = String::new();
-        reader.read_line(&mut header).map_err(|_| bad("malformed: header"))?;
+        reader
+            .read_line(&mut header)
+            .map_err(|_| bad("malformed: header"))?;
         head_size += header.len();
         if head_size > MAX_HEAD {
             return Err(bad("malformed: header too large"));
@@ -222,7 +245,9 @@ fn parse<R: BufRead>(reader: &mut R, remote: String, peer: Option<String>) -> Re
         };
         let value = value.trim();
         if name.eq_ignore_ascii_case("content-length") {
-            length = value.parse().map_err(|_| bad("malformed: content-length"))?;
+            length = value
+                .parse()
+                .map_err(|_| bad("malformed: content-length"))?;
         } else if name.eq_ignore_ascii_case("authorization") {
             bearer = value.strip_prefix("Bearer ").map(str::to_owned);
         }
@@ -231,7 +256,9 @@ fn parse<R: BufRead>(reader: &mut R, remote: String, peer: Option<String>) -> Re
         return Err(Response::status(413, "malformed: body too large"));
     }
     let mut bytes = vec![0u8; length];
-    reader.read_exact(&mut bytes).map_err(|_| bad("malformed: body"))?;
+    reader
+        .read_exact(&mut bytes)
+        .map_err(|_| bad("malformed: body"))?;
     let body = if bytes.is_empty() {
         Value::Null
     } else {
@@ -246,7 +273,15 @@ fn parse<R: BufRead>(reader: &mut R, remote: String, peer: Option<String>) -> Re
         .filter_map(|pair| pair.split_once('='))
         .map(|(key, value)| (key.to_owned(), value.to_owned()))
         .collect();
-    Ok(Request { method, path, query, bearer, remote, peer, body })
+    Ok(Request {
+        method,
+        path,
+        query,
+        bearer,
+        remote,
+        peer,
+        body,
+    })
 }
 
 /// A JSON HTTP client for one base URL, with an optional bearer token. An `https://`
@@ -273,7 +308,9 @@ impl Client {
 
     /// The decoded JSON body of any 2xx or 4xx response; `transport:` for anything else.
     fn send(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
-        let mut request = self.agent.request(method, &format!("{}{}", self.base, path));
+        let mut request = self
+            .agent
+            .request(method, &format!("{}{}", self.base, path));
         if let Some(token) = &self.token {
             request = request.set("Authorization", &format!("Bearer {token}"));
         }
@@ -308,7 +345,10 @@ impl Client {
 /// `att-node probe URL`: exits 0 when `GET URL` answers `{"ok": ...}` (a readiness
 /// probe that also works under mutual TLS).
 pub fn run_probe(url: &str) -> Result<(), String> {
-    let (base, path) = match url.find("://").and_then(|i| url[i + 3..].find('/').map(|j| i + 3 + j)) {
+    let (base, path) = match url
+        .find("://")
+        .and_then(|i| url[i + 3..].find('/').map(|j| i + 3 + j))
+    {
         Some(split) => (&url[..split], &url[split..]),
         None => (url, "/healthz"),
     };

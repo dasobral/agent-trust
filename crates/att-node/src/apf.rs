@@ -95,7 +95,11 @@ impl Apf {
             }
             ("POST", ["v1", "request"]) => {
                 // Under mutual TLS, a request signed by an actor must come from that actor.
-                let actor = request.body.get("actor").and_then(Value::as_str).unwrap_or_default();
+                let actor = request
+                    .body
+                    .get("actor")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 if !request.peer_is(&[actor]) {
                     return Response::forbidden_peer();
                 }
@@ -242,7 +246,11 @@ impl Apf {
             "acc_context": hex::encode(pending.acc_context()),
         });
         *phase = Phase::Pending(Box::new(pending));
-        config::log(ROLE, "genesis_begin", json!({ "group": group, "root": root }));
+        config::log(
+            ROLE,
+            "genesis_begin",
+            json!({ "group": group, "root": root }),
+        );
         Ok(response)
     }
 
@@ -276,7 +284,9 @@ fn history_length(dir: &std::path::Path) -> Result<u64, String> {
     )
     .map_err(|err| err.to_string())?;
     connection
-        .query_row("SELECT COUNT(*) FROM authority_events", [], |row| row.get::<_, i64>(0))
+        .query_row("SELECT COUNT(*) FROM authority_events", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .map(|count| count as u64)
         .map_err(|err| err.to_string())
 }
@@ -294,7 +304,9 @@ fn public_state(dir: &std::path::Path) -> Result<Value, String> {
     )
     .map_err(|err| format!("uninitialized: kernel state: {err}"))?;
     let raw: String = connection
-        .query_row("SELECT v FROM authority_meta WHERE k='state'", [], |row| row.get(0))
+        .query_row("SELECT v FROM authority_meta WHERE k='state'", [], |row| {
+            row.get(0)
+        })
         .map_err(|err| format!("uninitialized: kernel state: {err}"))?;
     let state: Value = serde_json::from_str(&raw).map_err(|_| "corrupt: kernel state")?;
     let mut view = serde_json::Map::new();
@@ -308,7 +320,10 @@ fn public_state(dir: &std::path::Path) -> Result<Value, String> {
         "roster",
         "grants",
     ] {
-        view.insert(key.to_owned(), state.get(key).cloned().unwrap_or(Value::Null));
+        view.insert(
+            key.to_owned(),
+            state.get(key).cloned().unwrap_or(Value::Null),
+        );
     }
     Ok(Value::Object(view))
 }

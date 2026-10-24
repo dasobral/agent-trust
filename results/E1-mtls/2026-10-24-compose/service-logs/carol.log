@@ -1,0 +1,18 @@
+{"entropy":"qrng","event":"listening","listen":"0.0.0.0:7300","name":"carol","public_key":"21644d1bdb1947c55ff46ac3693c9013f89232a9c0dd861e6f258cdbe0b32136","role":"agent","ts":1792861562}
+{"event":"joined","name":"carol","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"bob-000001","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"alice-000001","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"bob-000002","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"alice-000002","role":"agent","ts":1792861563}
+{"error":"undecryptable: MLS processing","event":"rejected","name":"carol","op":"alice-000002","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"alice-000003","role":"agent","ts":1792861563}
+{"event":"delivered","name":"carol","op":"bob-000003","role":"agent","ts":1792861564}
+{"event":"delivered","name":"carol","op":"alice-000004","role":"agent","ts":1792861564}
+{"event":"delivered","name":"carol","op":"bob-000004","role":"agent","ts":1792861564}
+{"error":"undecryptable: MLS processing","event":"rejected","name":"carol","op":"alice-000004","role":"agent","ts":1792861564}
+{"error":"undecryptable: MLS processing","event":"rejected","name":"carol","op":"bob-000004","role":"agent","ts":1792861564}
+{"event":"delivered","name":"carol","op":"alice-000005","role":"agent","ts":1792861564}
+{"event":"delivered","name":"carol","op":"bob-000005","role":"agent","ts":1792861565}
+{"error":"read_fenced","event":"rejected","name":"carol","op":"alice-000006","role":"agent","ts":1792861566}
+{"event":"adversary","name":"carol","retain":true,"role":"agent","ts":1792861567}
+{"consume":"unauthorized","event":"adversary_attempt","mls":"refused: ValidationError(WrongEpoch)","name":"carol","op":"alice-000008","role":"agent","ts":1792861567}

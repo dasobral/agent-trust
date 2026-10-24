@@ -168,15 +168,37 @@ def _network_policies(plan, namespace):
     return policies
 
 
+def kubeconfig():
+    """The cluster: ``KUBECONFIG``, else k3s's own file when present, else kubectl's
+    default. It is recorded in deploy.json, so later commands reach the same cluster."""
+    if os.environ.get("KUBECONFIG"):
+        return os.environ["KUBECONFIG"]
+    if Path("/etc/rancher/k3s/k3s.yaml").is_file():
+        return "/etc/rancher/k3s/k3s.yaml"
+    return str(Path.home() / ".kube" / "config")
+
+
+_KUBECONFIG = None
+
+
 def _kubectl(*args, input_text=None, capture=True, check=True):
-    return subprocess.run(["kubectl", *args], input=input_text, text=True,
+    command = ["kubectl", "--kubeconfig", _KUBECONFIG or kubeconfig(), *args]
+    return subprocess.run(command, input=input_text, text=True,
                           capture_output=capture, check=check).stdout
+
+
+def _use(deployment):
+    global _KUBECONFIG
+    _KUBECONFIG = deployment.get("kubeconfig")
 
 
 def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, binary=None, pull_policy=None):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     namespace = namespace_of(topology)
+    if _namespace_exists(namespace):
+        # A namespace that is still terminating would keep pods with the old tokens.
+        _wait_namespace_gone(namespace, timeout=120)
     scheme = topology.scheme
     pki_dir = make_pki(run_dir, topology, binary, namespace=namespace) if topology.tls else None
     pki = ({p.name: p.read_text() for p in pki_dir.iterdir() if p.name != "ca.key"}
@@ -198,6 +220,7 @@ def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, binary=None, pull
         "services": {s.name: {"role": s.role, "port": s.port} for s in plan.services},
         "forwards": {},
         "pki": str(pki_dir) if pki_dir else None,
+        "kubeconfig": _KUBECONFIG or kubeconfig(),
     })
     for service in plan.services:
         _kubectl("-n", namespace, "rollout", "status", f"deployment/{service.name}", "--timeout=180s")
@@ -217,7 +240,8 @@ def _forward(deployment, name, scheme=None):
     service_port = deployment["services"][name]["port"]
     log = open(Path(deployment["run_dir"]) / f"port-forward-{name}.log", "ab")
     process = subprocess.Popen(
-        ["kubectl", "-n", deployment["namespace"], "port-forward", f"svc/{name}",
+        ["kubectl", "--kubeconfig", deployment["kubeconfig"], "-n", deployment["namespace"],
+         "port-forward", f"svc/{name}",
          f"{port}:{service_port}", "--address", "127.0.0.1"],
         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     deadline = time.monotonic() + 30
@@ -242,6 +266,7 @@ def _stop_forward(deployment, name):
 
 def stop(run_dir, name):
     deployment = load(run_dir)
+    _use(deployment)
     _kubectl("-n", deployment["namespace"], "scale", f"deployment/{name}", "--replicas=0")
     _kubectl("-n", deployment["namespace"], "wait", "--for=delete", "pod",
              "-l", f"app.kubernetes.io/name={name}", "--timeout=120s", check=False)
@@ -251,7 +276,12 @@ def stop(run_dir, name):
 
 def start(run_dir, name):
     deployment = load(run_dir)
+    _use(deployment)
     namespace = deployment["namespace"]
+    # A pod in crash-loop back-off (for example after a failed start) is replaced at
+    # once instead of after its back-off delay.
+    _kubectl("-n", namespace, "delete", "pod", "-l", f"app.kubernetes.io/name={name}",
+             "--wait=false", check=False)
     _kubectl("-n", namespace, "scale", f"deployment/{name}", "--replicas=1")
     try:
         _kubectl("-n", namespace, "rollout", "status", f"deployment/{name}", "--timeout=60s")
@@ -265,13 +295,35 @@ def start(run_dir, name):
 
 def down(run_dir):
     deployment = load(run_dir)
+    _use(deployment)
     for name in list(deployment.get("forwards", {})):
         _stop_forward(deployment, name)
-    _kubectl("delete", "namespace", deployment["namespace"], "--wait=true", "--timeout=180s", check=False)
+    _kubectl("delete", "namespace", deployment["namespace"], "--wait=false", check=False)
+    _wait_namespace_gone(deployment["namespace"])
+
+
+def _namespace_exists(namespace):
+    result = subprocess.run(["kubectl", "--kubeconfig", _KUBECONFIG or kubeconfig(), "get",
+                             "namespace", namespace], capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    if "NotFound" in result.stderr:
+        return False
+    raise RuntimeError(f"kubectl cannot reach the cluster: {result.stderr.strip()[:200]}")
+
+
+def _wait_namespace_gone(namespace, timeout=300):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _namespace_exists(namespace):
+            return
+        time.sleep(1)
+    raise RuntimeError(f"namespace {namespace} still exists after {timeout}s")
 
 
 def logs(run_dir):
     deployment = load(run_dir)
+    _use(deployment)
     out = {}
     for name in deployment["services"]:
         out[name] = _kubectl("-n", deployment["namespace"], "logs", f"deployment/{name}",

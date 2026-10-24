@@ -700,6 +700,36 @@ class Runner:
             raise StepFailure(f"transport controls failed: {results}")
         return results
 
+    def do_check_network_policy(self, step):
+        """Kubernetes only: from inside each source pod, probe each destination service.
+        Every ``allowed`` pair must connect and every ``denied`` pair must not."""
+        import subprocess
+        deployment = self.tb.deployment
+        if deployment["backend"] != "k8s":
+            raise StepFailure("check.network_policy needs the k8s backend")
+        namespace, services = deployment["namespace"], deployment["services"]
+        scheme = "https" if deployment.get("pki") else "http"
+
+        def connects(source, destination):
+            port = services[destination]["port"]
+            result = subprocess.run(
+                ["kubectl", "--kubeconfig", deployment["kubeconfig"], "-n", namespace, "exec",
+                 f"deploy/{source}", "--", "att-node", "probe",
+                 f"{scheme}://{destination}:{port}/healthz"], capture_output=True, text=True, timeout=60)
+            return result.returncode == 0
+
+        report, problems = {}, []
+        for expected, pairs in ((True, step.get("allowed", [])), (False, step.get("denied", []))):
+            for pair in pairs:
+                source, destination = pair.split("->")
+                ok = connects(source, destination)
+                report[pair] = "connects" if ok else "blocked"
+                if ok != expected:
+                    problems.append(f"{pair} {report[pair]}")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return report
+
     def do_check_apf(self, step):
         state = self.tb.apf.call("GET", "/v1/state")
         problems = []

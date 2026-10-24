@@ -14,10 +14,10 @@ A new backend (Kubernetes, Nomad, bare metal over SSH) implements ``up``,
 """
 from __future__ import annotations
 
-from . import compose, local
+from . import compose, k8s, local
 from .common import deployment_record, load, write  # noqa: F401
 
-BACKENDS = {"local": local, "compose": compose}
+BACKENDS = {"local": local, "compose": compose, "k8s": k8s}
 
 
 def get(name):
