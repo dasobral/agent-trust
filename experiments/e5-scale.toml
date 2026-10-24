@@ -1,0 +1,137 @@
+# E5: the stack at eight agents. Measures admission, send and delivery latency, and
+# how the APF's cost per request grows with its kernel history (finding F-8), and
+# checks that every safety property still holds at that size.
+#   ./attctl run experiments/e5-scale.toml --backend local
+#   (other sizes: scripts/make-topology.py N > topologies/scale-N.toml)
+# Design and expected results: docs/experiments/E5-scale.md
+
+[experiment]
+id = "E5"
+title = "Eight agents in parallel: latency, APF cost growth and safety at scale"
+topology = "../topologies/scale-8.toml"
+hypothesis = """(H1) Admission, release and delivery keep working as the group grows to eight \
+members; their cost is measured, not assumed. (H2) With all eight agents sending in \
+parallel, with and without relay faults, every message reaches every reader exactly \
+once and only after an APF consumption. (H3) A revocation and repair with seven \
+continuing members completes and excludes the revoked member. (H4) The APF's time \
+per request grows with its kernel history, because the kernel validates its whole \
+hash chain of full snapshots on every request; E5 measures the growth. (H5) The \
+oracle accepts the full trace."""
+
+[[step]]
+do = "genesis"
+name = "A1 agent01 founds the group"
+agent = "agent01"
+
+[[step]]
+do = "admit_all"
+name = "A2 delegate and admit the seven other agents, one at a time"
+by = "agent01"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "check.apf"
+name = "A3 eight members at epoch 7"
+epoch = 7
+
+[[step]]
+do = "check.frontiers"
+name = "A4 every agent is on the APF frontier"
+
+[[step]]
+do = "rounds"
+name = "B1 four rounds: all eight agents send one message each in parallel (32 messages, 224 deliveries)"
+count = 4
+label = "clean"
+max_round_seconds = 120
+
+[[step]]
+do = "check.complete"
+name = "B2 every message reached its seven readers exactly once"
+
+[[step]]
+do = "check.exactly_once"
+name = "B3 no delivery without APF consumption"
+
+[[step]]
+do = "check.metrics"
+name = "B4 latency without faults"
+
+[[step]]
+do = "faults"
+name = "C1 relay drops 10%, duplicates 10%, reorders"
+drop = 10
+duplicate = 10
+reorder = true
+seed = 3
+
+[[step]]
+do = "rounds"
+name = "C2 one round under faults"
+count = 1
+label = "faulty"
+max_round_seconds = 180
+
+[[step]]
+do = "check.complete"
+name = "C3 every message reached every reader exactly once despite the faults"
+
+[[step]]
+do = "check.rejections_are_duplicates"
+name = "C4 every refused copy was a duplicate"
+agents = "*"
+
+[[step]]
+do = "revoke"
+name = "D1 agent01 revokes agent08's read right"
+by = "agent01"
+subject = "agent08"
+right = "read"
+
+[[step]]
+do = "repair"
+name = "D2 repair with seven continuing members"
+by = "agent01"
+expect_removed = ["agent08"]
+expect_evidence = "pair"
+
+[[step]]
+do = "rounds"
+name = "D3 one round from the seven continuing members"
+count = 1
+except = ["agent08"]
+label = "after"
+max_round_seconds = 180
+
+[[step]]
+do = "check.agent"
+name = "D4 agent08 applied its own removal"
+agent = "agent08"
+membership = "removed"
+
+[[step]]
+do = "check.complete"
+name = "D5 completeness over the whole run"
+
+[[step]]
+do = "check.exactly_once"
+name = "D6 no duplicate, no delivery without consumption, over the whole run"
+
+[[step]]
+do = "check.oracle"
+name = "D7 the oracle accepts the full trace"
+
+[[step]]
+do = "check.broken_controls"
+name = "D8 the oracle rejects the broken controls"
+revoked_reader = "agent08"
+writer = "agent01"
+
+[[step]]
+do = "check.entropy"
+name = "D9 every node drew from the QRNG service without failure"
+source = "qrng"
+
+[[step]]
+do = "check.metrics"
+name = "D10 latency over the whole run, and APF time per request against history length"

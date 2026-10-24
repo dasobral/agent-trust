@@ -130,6 +130,9 @@ struct Agent {
     future: Vec<Value>,
     /// Handshake entries skipped as stale or invalid.
     skipped_entries: u64,
+    /// Resolved handshake indices above the cursor. The cursor moves only over a
+    /// contiguous run, so an entry the relay hides is fetched again once it appears.
+    resolved: std::collections::BTreeSet<u64>,
 }
 
 pub fn run() -> Result<(), String> {
@@ -262,6 +265,7 @@ impl Agent {
             waiting: Vec::new(),
             future: Vec::new(),
             skipped_entries: 0,
+            resolved: std::collections::BTreeSet::new(),
         }
     }
 
@@ -959,24 +963,24 @@ impl Agent {
         entries.sort_by_key(|entry| entry["index"].as_u64().unwrap_or(u64::MAX));
         for entry in entries {
             let Some(index) = entry["index"].as_u64() else { continue };
-            if index < self.cursor {
+            if index < self.cursor || self.resolved.contains(&index) {
                 continue;
             }
             match self.apply_entry(&entry) {
-                Ok(Entry::Applied) => self.cursor = index + 1,
-                Ok(Entry::Skipped) => {
-                    self.skipped_entries += 1;
-                    self.cursor = index + 1;
-                }
+                Ok(Entry::Applied) => {}
+                Ok(Entry::Skipped) => self.skipped_entries += 1,
                 Ok(Entry::Future) => break,
                 Err(error) => {
                     self.skipped_entries += 1;
-                    self.cursor = index + 1;
                     push_limited(
                         &mut self.errors,
                         json!({ "stage": "handshake", "index": index, "error": error }),
                     );
                 }
+            }
+            self.resolved.insert(index);
+            while self.resolved.remove(&self.cursor) {
+                self.cursor += 1;
             }
         }
         Ok(())

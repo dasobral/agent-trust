@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from collections import Counter
 import json
+import statistics
+import threading
 import time
 import tomllib
 from pathlib import Path
@@ -49,6 +51,8 @@ class Runner:
         self.log = log
         self.sent = {}          # op -> {"from", "text", "payload_hex", "recipients"}
         self.labels = {}        # experiment label -> op id chosen by the sidecar
+        self.metrics = {"send_ms": [], "admit_ms": []}
+        self._lock = threading.Lock()
         self.artifacts = {}
 
     # ------------------------------------------------------------------
@@ -193,11 +197,19 @@ class Runner:
     def do_send(self, step):
         agent = self.tb.agent(step["agent"])
         body = {k: step[k] for k in ("text", "payload_hex", "op", "content_type") if k in step}
+        begin = time.monotonic()
         result = self._expect(step, lambda: agent.send(**body))
+        elapsed = (time.monotonic() - begin) * 1000
+        with self._lock:
+            return self._record_send(step, result, elapsed)
+
+    def _record_send(self, step, result, elapsed):
         if "op" in result:
+            self.metrics["send_ms"].append(elapsed)
             self.sent[result["op"]] = {"from": step["agent"], "text": step.get("text"),
                                        "payload_hex": step.get("payload_hex"),
                                        "recipients": result["recipients"]}
+            self.sent[result["op"]]["sent_ms"] = result.get("sent_ms")
             if "label" in step:
                 self.labels[step["label"]] = result["op"]
         return result
@@ -206,14 +218,84 @@ class Runner:
         """``count`` messages from each of ``agents``, interleaved, labelled
         ``<label>-<agent>-<i>``. Every send must succeed."""
         prefix = step.get("label", "burst")
-        sent = []
-        for i in range(1, step["count"] + 1):
-            for name in step["agents"]:
-                label = f"{prefix}-{name}-{i}"
-                text = f"{label}: {step.get('text', 'burst message')}"
-                self.do_send({"agent": name, "label": label, "text": text})
-                sent.append(label)
-        return {"sent": len(sent)}
+        agents = list(self.tb.agents) if step["agents"] == "*" else step["agents"]
+        agents = [a for a in agents if a not in step.get("except", [])]
+
+        def one(name, i):
+            label = f"{prefix}-{name}-{i}"
+            self.do_send({"agent": name, "label": label, "text": f"{label}: {step.get('text', 'burst message')}"})
+
+        begin = time.monotonic()
+        if step.get("parallel"):
+            # One thread per agent; each agent sends its messages in order.
+            errors = []
+
+            def worker(name):
+                try:
+                    for i in range(1, step["count"] + 1):
+                        one(name, i)
+                except (StepFailure, ServiceError) as error:
+                    errors.append(f"{name}: {error}")
+            threads = [threading.Thread(target=worker, args=(name,)) for name in agents]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            if errors:
+                raise StepFailure("; ".join(errors[:5]))
+        else:
+            for i in range(1, step["count"] + 1):
+                for name in agents:
+                    one(name, i)
+        seconds = time.monotonic() - begin
+        total = len(agents) * step["count"]
+        return {"sent": total, "seconds": round(seconds, 3), "sends_per_second": round(total / seconds, 1)}
+
+    def do_rounds(self, step):
+        """``count`` rounds; in each, every agent (but ``except``) sends ``per_agent``
+        messages in parallel, then the testbed drains. Records each round's duration and
+        the APF's median request time against its kernel history length."""
+        rounds = []
+        for number in range(1, step["count"] + 1):
+            before = len(self.tb.apf.call("GET", "/control/metrics")["samples"])
+            begin = time.monotonic()
+            self.do_burst({"agents": step.get("agents", "*"), "except": step.get("except", []),
+                           "count": step.get("per_agent", 1), "parallel": True,
+                           "label": f"{step.get('label', 'round')}{number}"})
+            self.do_quiesce({"timeout": step.get("timeout", 300)})
+            seconds = time.monotonic() - begin
+            samples = self.tb.apf.call("GET", "/control/metrics")["samples"][before:]
+            micros = sorted(s[1] for s in samples)
+            rounds.append({
+                "round": number,
+                "seconds": round(seconds, 2),
+                "apf_requests": len(samples),
+                "history_from": samples[0][0] if samples else None,
+                "history_to": samples[-1][0] if samples else None,
+                "apf_p50_ms": round(statistics.median(micros) / 1000, 1) if micros else None,
+            })
+        first, last = rounds[0], rounds[-1]
+        growth = (round(last["apf_p50_ms"] / first["apf_p50_ms"], 1)
+                  if first["apf_p50_ms"] and last["apf_p50_ms"] else None)
+        if "max_round_seconds" in step and last["seconds"] > step["max_round_seconds"]:
+            raise StepFailure(f"the last round took {last['seconds']} s")
+        return {"rounds": rounds, "apf_p50_growth": growth}
+
+    def do_admit_all(self, step):
+        """Delegates ``rights`` to every agent but ``by`` and admits them one by one;
+        records each admission's duration against the group size."""
+        by = step["by"]
+        timings = []
+        for name in self.tb.agents:
+            if name == by:
+                continue
+            self.do_delegate({"by": by, "subject": name, "rights": step["rights"]})
+            begin = time.monotonic()
+            self.do_admit({"by": by, "subject": name})
+            elapsed = (time.monotonic() - begin) * 1000
+            self.metrics["admit_ms"].append(elapsed)
+            timings.append({"member": name, "group_size": len(timings) + 2, "ms": round(elapsed, 1)})
+        return {"admitted": len(timings), "admissions": timings}
 
     def do_quiesce(self, step):
         """Waits until the relay has nothing pending, every reachable agent finished two
@@ -430,7 +512,8 @@ class Runner:
         """C-39: an honest member may reject only a copy of a message it already
         delivered (the relay's duplicates), never a first copy."""
         report = {}
-        for name in step["agents"]:
+        names = list(self.tb.agents) if step["agents"] == "*" else step["agents"]
+        for name in names:
             agent = self.tb.agent(name)
             delivered = {i["op"] for i in agent.inbox()}
             rejections = agent.status()["rejections"]
@@ -620,6 +703,62 @@ class Runner:
         if problems:
             raise StepFailure("; ".join(problems))
         return detail
+
+    def do_check_metrics(self, step):
+        """Latency and throughput of the run so far. Bounds (``max_*``) are loose sanity
+        limits; the numbers are the result."""
+        inboxes = self._inboxes()
+        delivery = []
+        for name, inbox in inboxes.items():
+            for item in inbox:
+                sent = self.sent.get(item["op"], {})
+                if sent.get("sent_ms") and item.get("delivered_ms"):
+                    delivery.append(item["delivered_ms"] - sent["sent_ms"])
+
+        def summary(values):
+            if not values:
+                return None
+            ordered = sorted(values)
+            return {"n": len(ordered), "p50": round(statistics.median(ordered), 1),
+                    "p95": round(ordered[max(0, int(len(ordered) * 0.95) - 1)], 1),
+                    "max": round(ordered[-1], 1)}
+        result = {"send_ms": summary(self.metrics["send_ms"]),
+                  "delivery_ms": summary(delivery),
+                  "admit_ms": summary(self.metrics["admit_ms"])}
+        samples = self.tb.apf.call("GET", "/control/metrics")["samples"]
+        if samples:
+            # APF request time per tenth of the kernel history seen so far.
+            top = max(s[0] for s in samples) or 1
+            buckets = {}
+            for history, micros, _ in samples:
+                buckets.setdefault(min(9, history * 10 // (top + 1)), []).append(micros / 1000)
+            result["apf_ms_by_history"] = [
+                {"history_up_to": (b + 1) * (top + 1) // 10, "requests": len(v),
+                 "p50": round(statistics.median(v), 2)} for b, v in sorted(buckets.items())]
+        problems = []
+        for key, bound in step.items():
+            if key.startswith("max_") and key.endswith("_p95"):
+                metric = result.get(key[4:-4] + "_ms")
+                if metric is None or metric["p95"] > bound:
+                    problems.append(f"{key[4:-4]} p95 {metric and metric['p95']} ms > {bound} ms")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return result
+
+    def do_check_errors_within(self, step):
+        """Every error the agents logged is a handshake error on one of ``indices`` (the
+        forged entries of an attack); there is no other error."""
+        allowed = set(step["indices"])
+        report, bad = {}, {}
+        for name in step.get("agents") or list(self.tb.agents):
+            errors = self.tb.agent(name).status()["errors"]
+            report[name] = sorted({e.get("index") for e in errors})
+            unexpected = [e for e in errors if e.get("stage") != "handshake" or e.get("index") not in allowed]
+            if unexpected:
+                bad[name] = unexpected
+        if bad:
+            raise StepFailure(f"unexpected errors: {bad}")
+        return {"forged_indices_logged": report}
 
     def do_check_no_errors(self, step):
         names = step.get("agents") or list(self.tb.agents)

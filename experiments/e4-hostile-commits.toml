@@ -1,0 +1,316 @@
+# E4: a hostile relay attacks commit distribution. It can cost liveness, never safety.
+#   ./attctl run experiments/e4-hostile-commits.toml --backend local
+# Design and expected results: docs/experiments/E4-hostile-commits.md
+#
+# Handshake log indices in this run: 0 = bob's admission, 1 = carol's admission,
+# 2 to 4 = forged entries (phase B), 5 = carol's rekey, 6 = a spliced entry,
+# 7 and 8 = bob's two rekeys.
+
+[experiment]
+id = "E4"
+title = "Hostile commit distribution: forged, replayed, spliced, hidden and reordered commits"
+topology = "../topologies/three-agents.toml"
+hypothesis = """(H1) A member never merges a commit without a valid APF ack whose parent is its \
+own frontier: replayed, garbage and spliced handshake entries are skipped and change \
+nothing. (H2) A member from which the relay hides a commit stays at its old epoch: \
+it cannot release, and envelopes of the newer epoch wait instead of being decrypted \
+or lost; once the commit appears it catches up and delivers them. (H3) Entries served \
+out of order are applied in parent order. (H4) The trace stays acceptable to the \
+oracle."""
+
+# ---------------------------------------------------------------- A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 delegate bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 delegate carol"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "A4 admit bob (log index 0)"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "admit"
+name = "A5 admit carol (log index 1)"
+by = "alice"
+subject = "carol"
+
+# ------------------------------------------------------------ B: forged entries (H1)
+[[step]]
+do = "handshake"
+name = "B1 the relay replays bob's admission commit (index 2)"
+action = "replay"
+index = 0
+
+[[step]]
+do = "handshake"
+name = "B2 the relay injects an entry with a garbage ack (index 3)"
+action = "inject"
+entry = { kind = "admit", commit = "00", ack = "00ff" }
+
+[[step]]
+do = "handshake"
+name = "B3 the relay splices carol's commit with bob's ack (index 4)"
+action = "splice"
+commit_from = 1
+ack_from = 0
+
+[[step]]
+do = "sync"
+name = "B4 every member processes the forged entries"
+
+[[step]]
+do = "check.frontiers"
+name = "B5 every member is still on the APF frontier"
+agents = ["alice", "bob", "carol"]
+
+[[step]]
+do = "check.agent"
+name = "B6 bob skipped the three forged entries"
+agent = "bob"
+min_skipped = 3
+
+[[step]]
+do = "send"
+name = "B7 alice sends m1: the group still works"
+agent = "alice"
+label = "m1"
+text = "m1 after the forged entries"
+
+[[step]]
+do = "quiesce"
+name = "B8 drain"
+
+# -------------------------------------------------- C: a hidden commit (H1, H2)
+[[step]]
+do = "handshake"
+name = "C1 the relay hides log index 5 from bob"
+action = "hide"
+reader = "bob"
+indices = [5]
+
+[[step]]
+do = "revoke"
+name = "C2 alice revokes carol's write"
+by = "alice"
+subject = "carol"
+right = "write"
+
+[[step]]
+do = "grant"
+name = "C3 alice offers carol write at generation 1"
+by = "alice"
+subject = "carol"
+right = "write"
+generation = 1
+expect_result = { pending = true }
+
+[[step]]
+do = "rekey"
+name = "C4 carol commits its rekey (log index 5, hidden from bob)"
+agent = "carol"
+right = "write"
+generation = 1
+
+[[step]]
+do = "handshake"
+name = "C5 the relay splices the old admission commit with the new rekey ack (index 6)"
+action = "splice"
+commit_from = 1
+ack_from = 5
+
+[[step]]
+do = "sync"
+name = "C5b every member processes the log"
+
+[[step]]
+do = "check.agent"
+name = "C6 bob is stuck at the old epoch and refused the splice"
+agent = "bob"
+on_frontier = false
+min_skipped = 4
+
+[[step]]
+do = "send"
+name = "C7 bob cannot release from a stale frontier"
+agent = "bob"
+text = "must not be released"
+expect = "not_ready"
+
+[[step]]
+do = "send"
+name = "C8 alice sends m2 at the new epoch"
+agent = "alice"
+label = "m2"
+text = "m2 at the new epoch"
+
+[[step]]
+do = "quiesce"
+name = "C9 carol's copy drains; bob's copy waits for its commit"
+allow_waiting = true
+
+[[step]]
+do = "check.not_delivered"
+name = "C10 bob has not delivered m2 yet"
+agent = "bob"
+ops = ["m2"]
+
+[[step]]
+do = "handshake"
+name = "C11 the relay shows index 5 to bob again"
+action = "show"
+reader = "bob"
+
+[[step]]
+do = "quiesce"
+name = "C12 bob catches up and delivers the waiting envelope"
+
+[[step]]
+do = "check.agent"
+name = "C13 bob is back on the APF frontier"
+agent = "bob"
+on_frontier = true
+
+[[step]]
+do = "check.delivered"
+name = "C14 bob received m2 once: delay, not loss"
+agent = "bob"
+ops = ["m2"]
+exact = false
+
+# --------------------------------------------------------- D: reordered commits (H3)
+[[step]]
+do = "handshake"
+name = "D1 the relay hides everything from index 7 on from carol"
+action = "hide"
+reader = "carol"
+from_index = 7
+
+[[step]]
+do = "revoke"
+name = "D2 alice revokes bob's write"
+by = "alice"
+subject = "bob"
+right = "write"
+
+[[step]]
+do = "grant"
+name = "D3 offer write at generation 1"
+by = "alice"
+subject = "bob"
+right = "write"
+generation = 1
+
+[[step]]
+do = "rekey"
+name = "D4 bob rekeys write (log index 7)"
+agent = "bob"
+right = "write"
+generation = 1
+
+[[step]]
+do = "revoke"
+name = "D5 alice revokes bob's admit"
+by = "alice"
+subject = "bob"
+right = "admit"
+
+[[step]]
+do = "grant"
+name = "D6 offer admit at generation 1"
+by = "alice"
+subject = "bob"
+right = "admit"
+generation = 1
+
+[[step]]
+do = "rekey"
+name = "D7 bob rekeys admit (log index 8)"
+agent = "bob"
+right = "admit"
+generation = 1
+
+[[step]]
+do = "handshake"
+name = "D8 the relay will serve carol's entries in reverse order"
+action = "reverse"
+reader = "carol"
+
+[[step]]
+do = "handshake"
+name = "D9 the relay shows carol both commits at once"
+action = "show"
+reader = "carol"
+
+[[step]]
+do = "sync"
+name = "D10 carol processes the reversed batch"
+
+[[step]]
+do = "check.frontiers"
+name = "D11 every member is on the APF frontier"
+agents = ["alice", "bob", "carol"]
+
+[[step]]
+do = "send"
+name = "D12 carol sends m3"
+agent = "carol"
+label = "m3"
+text = "m3 after the reordered commits"
+
+[[step]]
+do = "send"
+name = "D13 bob sends m4 with its newest key"
+agent = "bob"
+label = "m4"
+text = "m4"
+
+[[step]]
+do = "quiesce"
+name = "D14 drain"
+
+# ------------------------------------------------------------- E: verification (H4)
+[[step]]
+do = "check.apf"
+name = "E1 roster and epoch: two admissions and three rekeys"
+roster = ["alice", "bob", "carol"]
+epoch = 5
+
+[[step]]
+do = "check.complete"
+name = "E2 every message reached every certified reader exactly once"
+
+[[step]]
+do = "check.exactly_once"
+name = "E3 no delivery without APF consumption"
+
+[[step]]
+do = "check.oracle"
+name = "E4 the oracle accepts the trace: no forged entry reached the APF"
+
+[[step]]
+do = "check.broken_controls"
+name = "E5 the oracle rejects the broken controls that apply"
+revoked_reader = "nobody"
+writer = "alice"
+minimum = 4
+
+[[step]]
+do = "check.errors_within"
+name = "E6 the only errors any agent logged are the forged entries 3 and 6"
+indices = [3, 6]

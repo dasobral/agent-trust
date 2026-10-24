@@ -40,7 +40,12 @@ struct Apf {
     bootstrap_token: Option<String>,
     entropy: LabEntropy,
     phase: Mutex<Phase>,
+    /// `(kernel history length before the request, handling time in µs, command)` of
+    /// recent worker requests, for scale measurements (`GET /control/metrics`).
+    samples: Mutex<Vec<(u64, u64, String)>>,
 }
+
+const SAMPLE_LIMIT: usize = 20_000;
 
 pub fn run() -> Result<(), String> {
     let dir = PathBuf::from(config::required("ATT_STATE_DIR")?);
@@ -69,6 +74,7 @@ pub fn run() -> Result<(), String> {
         bootstrap_token: config::optional("ATT_BOOTSTRAP_TOKEN"),
         entropy,
         phase: Mutex::new(phase),
+        samples: Mutex::new(Vec::new()),
     };
     config::log(
         ROLE,
@@ -84,7 +90,9 @@ impl Apf {
         match (request.method.as_str(), segments.as_slice()) {
             ("GET", ["healthz"]) => Response::json(json!({ "ok": "apf" })),
             ("GET", ["v1", "info"]) => Response::outcome(self.info()),
-            ("GET", ["v1", "state"]) => Response::outcome(self.with_adapter(public_state)),
+            ("GET", ["v1", "state"]) => {
+                Response::outcome(self.with_adapter(|_| public_state(&self.dir)))
+            }
             ("POST", ["v1", "request"]) => Response::outcome(self.request(&request.body)),
             ("POST", ["v1", "genesis", step]) => {
                 if !http::authorized(request, &self.bootstrap_token) {
@@ -107,6 +115,7 @@ impl Apf {
                     }
                     "trace" => Response::outcome(self.trace()),
                     "entropy" => Response::json(json!({ "ok": self.entropy.report() })),
+                    "metrics" => Response::outcome(self.metrics()),
                     _ => Response::not_found(),
                 }
             }
@@ -157,16 +166,41 @@ impl Apf {
             .ok()
             .and_then(|b| b.get("command").and_then(Value::as_str).map(str::to_owned))
             .unwrap_or_default();
-        let result = self.with_adapter(|adapter| adapter.handle(&request));
+        // History length and handling time are measured under the lock, so they exclude
+        // the wait for other requests.
+        let mut history = 0;
+        let mut micros = 0;
+        let result = self.with_adapter(|adapter| {
+            history = history_length(&self.dir).unwrap_or(0);
+            let begin = std::time::Instant::now();
+            let result = adapter.handle(&request);
+            micros = begin.elapsed().as_micros() as u64;
+            result
+        });
+        if let Ok(mut samples) = self.samples.lock() {
+            if samples.len() >= SAMPLE_LIMIT {
+                samples.remove(0);
+            }
+            samples.push((history, micros, command.clone()));
+        }
         config::log(
             ROLE,
             "request",
             json!({
                 "actor": request.actor, "sequence": request.sequence, "command": command,
-                "outcome": match &result { Ok(_) => "ok".to_owned(), Err(e) => config::error_code(e) }
+                "outcome": match &result { Ok(_) => "ok".to_owned(), Err(e) => config::error_code(e) },
+                "us": micros, "history": history,
             }),
         );
         result
+    }
+
+    fn metrics(&self) -> Result<Value, String> {
+        let samples = self.samples.lock().map_err(|_| "crashed: lock poisoned")?;
+        Ok(json!({
+            "requests": samples.len(),
+            "samples": samples.iter().map(|(h, us, c)| json!([h, us, c])).collect::<Vec<_>>(),
+        }))
     }
 
     /// `{group, root, root_key}` from the root agent: §5.1 steps 1 and 2.
@@ -221,10 +255,35 @@ impl Apf {
     }
 }
 
+/// Number of kernel history events, read from the kernel file (0 before genesis).
+fn history_length(dir: &std::path::Path) -> Result<u64, String> {
+    let connection = rusqlite::Connection::open_with_flags(
+        dir.join(agent_trust::adapter::AUTHORITY_FILE),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|err| err.to_string())?;
+    connection
+        .query_row("SELECT COUNT(*) FROM authority_events", [], |row| row.get::<_, i64>(0))
+        .map(|count| count as u64)
+        .map_err(|err| err.to_string())
+}
+
 /// The public policy view: what a member needs to build a release cover and digest.
-/// It is advisory. The kernel re-checks every field at `release` and `consume`.
-fn public_state(adapter: &mut Adapter<LabProvider, SystemClock>) -> Result<Value, String> {
-    let checkpoint = adapter.checkpoint()?;
+/// It is advisory. The kernel re-checks every value at `release` and `consume`.
+///
+/// It reads the kernel's current state row (`authority_meta`, key `state`), not
+/// `checkpoint`, which loads the whole hash-chained history and makes every send cost
+/// time proportional to the history (finding F-8).
+fn public_state(dir: &std::path::Path) -> Result<Value, String> {
+    let connection = rusqlite::Connection::open_with_flags(
+        dir.join(agent_trust::adapter::AUTHORITY_FILE),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|err| format!("uninitialized: kernel state: {err}"))?;
+    let raw: String = connection
+        .query_row("SELECT v FROM authority_meta WHERE k='state'", [], |row| row.get(0))
+        .map_err(|err| format!("uninitialized: kernel state: {err}"))?;
+    let state: Value = serde_json::from_str(&raw).map_err(|_| "corrupt: kernel state")?;
     let mut view = serde_json::Map::new();
     for key in [
         "group",
@@ -236,7 +295,7 @@ fn public_state(adapter: &mut Adapter<LabProvider, SystemClock>) -> Result<Value
         "roster",
         "grants",
     ] {
-        view.insert(key.to_owned(), checkpoint.get(key).cloned().unwrap_or(Value::Null));
+        view.insert(key.to_owned(), state.get(key).cloned().unwrap_or(Value::Null));
     }
     Ok(Value::Object(view))
 }

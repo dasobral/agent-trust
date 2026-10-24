@@ -27,3 +27,4 @@ ureq = { version = "2", default-features = false, features = ["json"] }
 base64 = "0.22"
 getrandom = "0.2"
 tls_codec = "0.5"
+rusqlite = { version = "0.40", features = ["bundled"] }

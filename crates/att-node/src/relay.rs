@@ -79,8 +79,8 @@ struct State {
     held: BTreeSet<String>,
     /// `victim -> observers`: every message for the victim is copied to the observers.
     taps: BTreeMap<String, BTreeSet<String>>,
-    /// `reader -> first hidden index` of the handshake log.
-    hidden: BTreeMap<String, u64>,
+    /// `reader -> (first hidden index, individually hidden indices)` of the handshake log.
+    hidden: BTreeMap<String, (u64, BTreeSet<u64>)>,
     /// Readers that get their handshake entries in reverse order.
     reversed: BTreeSet<String>,
     faults: Faults,
@@ -149,14 +149,21 @@ fn route(state: &mut State, request: &Request, segments: &[&str]) -> Response {
         ("GET", ["v1", "groups", group, "handshake"]) => {
             let after = request.query_u64("after").unwrap_or(0) as usize;
             let reader = request.query.get("reader").cloned().unwrap_or_default();
-            let hidden_from = state.hidden.get(&reader).copied().unwrap_or(u64::MAX);
+            let (hidden_from, hidden_set) = state
+                .hidden
+                .get(&reader)
+                .cloned()
+                .unwrap_or((u64::MAX, BTreeSet::new()));
             let mut entries: Vec<Value> = state
                 .handshake
                 .get(*group)
                 .map(|log| {
                     log.iter()
                         .skip(after)
-                        .filter(|entry| entry["index"].as_u64().unwrap_or(0) < hidden_from)
+                        .filter(|entry| {
+                            let index = entry["index"].as_u64().unwrap_or(0);
+                            index < hidden_from && !hidden_set.contains(&index)
+                        })
                         .cloned()
                         .collect()
                 })
@@ -367,9 +374,17 @@ fn handshake_fault(state: &mut State, body: &Value) -> Result<Value, String> {
     let result = match action {
         "hide" => {
             let reader = str_field(body, "reader")?.to_owned();
-            let from = body.get("from_index").and_then(Value::as_u64).ok_or("malformed: from_index")?;
-            state.hidden.insert(reader.clone(), from);
-            json!({ "reader": reader, "hidden_from": from })
+            let from = body.get("from_index").and_then(Value::as_u64).unwrap_or(u64::MAX);
+            let indices: BTreeSet<u64> = body
+                .get("indices")
+                .and_then(Value::as_array)
+                .map(|list| list.iter().filter_map(Value::as_u64).collect())
+                .unwrap_or_default();
+            if from == u64::MAX && indices.is_empty() {
+                return Err("malformed: give from_index or indices".into());
+            }
+            state.hidden.insert(reader.clone(), (from, indices.clone()));
+            json!({ "reader": reader, "hidden_from": body.get("from_index"), "indices": indices })
         }
         "show" => {
             let reader = str_field(body, "reader")?.to_owned();
