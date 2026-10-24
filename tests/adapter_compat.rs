@@ -193,9 +193,19 @@ fn credential(name: &str, signer: &SignatureKeyPair) -> CredentialWithKey {
     }
 }
 
+/// Leaf capabilities declaring only the ciphersuite and credential type.
+fn base_capabilities() -> Capabilities {
+    Capabilities::builder()
+        .ciphersuites(vec![CIPHERSUITE])
+        .credentials(vec![CredentialType::Basic])
+        .build()
+}
+
 /// Leaf capabilities declaring the adapter's unknown extension types.
 fn acc_capabilities() -> Capabilities {
     Capabilities::builder()
+        .ciphersuites(vec![CIPHERSUITE])
+        .credentials(vec![CredentialType::Basic])
         .extensions(vec![
             ExtensionType::Unknown(ACC_CONTEXT),
             ExtensionType::Unknown(AUTHZ_INCARNATION),
@@ -251,7 +261,7 @@ fn plain_group(name: &str) -> Member<OpenMlsRustCrypto> {
         OpenMlsRustCrypto::default(),
         name,
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
-        Capabilities::default(),
+        base_capabilities(),
         vec![],
     )
 }
@@ -282,7 +292,7 @@ fn plain_candidate(name: &str) -> Candidate<OpenMlsRustCrypto> {
     candidate(
         OpenMlsRustCrypto::default(),
         name,
-        Capabilities::default(),
+        base_capabilities(),
         None,
     )
 }
@@ -873,6 +883,8 @@ fn required_capabilities_reject_key_package_without_acc_extensions() {
         OpenMlsRustCrypto::default(),
         "trent",
         Capabilities::builder()
+            .ciphersuites(vec![CIPHERSUITE])
+            .credentials(vec![CredentialType::Basic])
             .extensions(vec![ExtensionType::Unknown(ACC_CONTEXT)])
             .build(),
         None,
@@ -897,7 +909,7 @@ fn sqlite_storage_round_trips_mls_group_load() {
     let bob_candidate = candidate(
         SqliteProvider::open(&bob_path),
         "bob",
-        Capabilities::default(),
+        base_capabilities(),
         None,
     );
     let bob = admit(

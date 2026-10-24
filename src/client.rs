@@ -529,6 +529,8 @@ pub(crate) fn unknown_payloads<T: ExtensionValidator>(
 
 fn leaf_capabilities() -> Capabilities {
     Capabilities::builder()
+        .ciphersuites(vec![CIPHERSUITE])
+        .credentials(vec![CredentialType::Basic])
         .extensions(
             ADAPTER_EXTENSIONS
                 .iter()

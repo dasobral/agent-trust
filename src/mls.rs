@@ -92,6 +92,8 @@ impl PendingMember {
         let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(error)?;
         signer.store(provider.storage()).map_err(error)?;
         let capabilities = Capabilities::builder()
+            .ciphersuites(vec![CIPHERSUITE])
+            .credentials(vec![CredentialType::Basic])
             .extensions(vec![ExtensionType::Unknown(APF_BINDING_EXTENSION_TYPE)])
             .build();
         let prepared = KeyPackage::builder()

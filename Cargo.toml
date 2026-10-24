@@ -22,13 +22,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 hex = "0.4"
-rusqlite = { version = "0.37", features = ["bundled"] }
-openmls = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
-openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
-openmls_rust_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
-openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f", features = ["clonable"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+openmls_rust_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable"] }
 tls_codec = "0.5"
-openmls_sqlite_storage = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
+openmls_sqlite_storage = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
 ed25519-dalek = "2"
 # Lab entropy selection (C-40): QRNG-backed OpenMLS rand provider. The `mock` feature adds
 # MockEntropy, a seeded in-process backend that is NOT an entropy source.
@@ -44,4 +44,4 @@ tiny_http = "0.12"
 # openmls_qrand depends on crates.io openmls_traits 0.6.0; resolve it to the pinned fork so
 # its provider implements the same OpenMlsProvider trait as the rest of the graph.
 [patch.crates-io]
-openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "6daabe33ddb616a6ed54b511d333e691db18a99f" }
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }

@@ -762,6 +762,10 @@ fn admit(
 
 fn leaf_capabilities() -> Capabilities {
     Capabilities::builder()
+        .ciphersuites(vec![
+            Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
+        ])
+        .credentials(vec![CredentialType::Basic])
         .extensions(vec![
             ExtensionType::Unknown(CERT_EXT),
             ExtensionType::Unknown(ACC_EXT),
