@@ -508,6 +508,13 @@ impl LabEntropy {
         }
     }
 
+    /// Draws the source has refused so far; `None` for `os`, which keeps no count.
+    pub fn failures(&self) -> Option<u64> {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.metrics_snapshot().entropy_failures_total)
+    }
+
     /// Simulates a mock outage or its end. Only the `mock` source has this control.
     pub fn set_available(&self, available: bool) -> Result<(), String> {
         let mock = self

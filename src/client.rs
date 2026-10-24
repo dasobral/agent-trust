@@ -4,6 +4,7 @@
 use openmls::extensions::ExtensionValidator;
 use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
+use openmls_traits::types::CryptoError;
 use openmls_traits::OpenMlsProvider;
 use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
@@ -60,6 +61,14 @@ pub struct PreparedJoin<P: OpenMlsProvider> {
     group: String,
     subject: String,
     apf_public_key: Vec<u8>,
+}
+
+/// A refused [`PreparedJoin::try_prepare`]: the error, and the identity and provider it
+/// was given, unused. Preparation writes nothing to the provider's storage.
+pub struct Unprepared<P: OpenMlsProvider> {
+    pub error: String,
+    pub identity: ClientIdentity,
+    pub provider: P,
 }
 
 /// A candidate with a finalized KeyPackage, waiting for a Welcome.
@@ -334,38 +343,41 @@ impl<P: OpenMlsProvider> PreparedJoin<P> {
         provider: P,
         apf_public_key: &[u8],
     ) -> Result<Self, String> {
-        let incarnation = AuthzIncarnation {
-            version: 1,
-            subject: subject.to_owned(),
-            rights: sorted_rights(rights)?,
-            admission_cert_hash: ZERO_HASH.to_vec(),
+        Self::try_prepare(group, subject, rights, identity, provider, apf_public_key)
+            .map_err(|unprepared| unprepared.error)
+    }
+
+    /// [`PreparedJoin::prepare`], but a refusal (a refused draw included) gives the
+    /// identity and provider back, so the same candidate can try again.
+    pub fn try_prepare(
+        group: &str,
+        subject: &str,
+        rights: &[(Right, u64)],
+        identity: ClientIdentity,
+        provider: P,
+        apf_public_key: &[u8],
+    ) -> Result<Self, Unprepared<P>> {
+        match prepare_key_package(subject, rights, &identity, &provider) {
+            Ok(prepared) => Ok(Self {
+                provider,
+                identity,
+                prepared,
+                group: group.to_owned(),
+                subject: subject.to_owned(),
+                apf_public_key: apf_public_key.to_vec(),
+            }),
+            Err(error) => Err(Unprepared {
+                error,
+                identity,
+                provider,
+            }),
         }
-        .encode()?;
-        let prepared = KeyPackage::builder()
-            .leaf_node_capabilities(leaf_capabilities())
-            .leaf_node_extensions(
-                Extensions::single(Extension::Unknown(
-                    AUTHZ_INCARNATION_EXTENSION_TYPE,
-                    UnknownExtension(incarnation),
-                ))
-                .map_err(mls)?,
-            )
-            .prepare(
-                CIPHERSUITE,
-                &provider,
-                identity.signer(),
-                credential(subject, &identity),
-                ADMISSION_EXTENSION_TYPE,
-            )
-            .map_err(mls)?;
-        Ok(Self {
-            provider,
-            identity,
-            prepared,
-            group: group.to_owned(),
-            subject: subject.to_owned(),
-            apf_public_key: apf_public_key.to_vec(),
-        })
+    }
+
+    /// Drops the prepared KeyPackage and gives the identity and provider back, e.g. when
+    /// no admission certificate is issued.
+    pub fn abandon(self) -> (ClientIdentity, P) {
+        (self.identity, self.provider)
     }
 
     /// Canonical stripped KeyPackage preimage bytes to certify.
@@ -397,6 +409,13 @@ impl<P: OpenMlsProvider> JoinCandidate<P> {
     /// Final KeyPackage TLS bytes.
     pub fn key_package(&self) -> &[u8] {
         &self.key_package
+    }
+
+    /// Drops the KeyPackage and gives the identity and provider back, e.g. when its Add
+    /// is not acked. The provider's storage still holds the dropped KeyPackage's private
+    /// keys.
+    pub fn abandon(self) -> (ClientIdentity, P) {
+        (self.identity, self.provider)
     }
 
     /// Joins from `welcome` only under a valid matching admit ack (C-12).
@@ -447,6 +466,39 @@ impl<P: OpenMlsProvider> JoinCandidate<P> {
             pending_identity: None,
         })
     }
+}
+
+/// The candidate's KeyPackage, prepared and not yet bound to a certificate.
+fn prepare_key_package<P: OpenMlsProvider>(
+    subject: &str,
+    rights: &[(Right, u64)],
+    identity: &ClientIdentity,
+    provider: &P,
+) -> Result<PreparedKeyPackage, String> {
+    let incarnation = AuthzIncarnation {
+        version: 1,
+        subject: subject.to_owned(),
+        rights: sorted_rights(rights)?,
+        admission_cert_hash: ZERO_HASH.to_vec(),
+    }
+    .encode()?;
+    KeyPackage::builder()
+        .leaf_node_capabilities(leaf_capabilities())
+        .leaf_node_extensions(
+            Extensions::single(Extension::Unknown(
+                AUTHZ_INCARNATION_EXTENSION_TYPE,
+                UnknownExtension(incarnation),
+            ))
+            .map_err(mls)?,
+        )
+        .prepare(
+            CIPHERSUITE,
+            provider,
+            identity.signer(),
+            credential(subject, identity),
+            ADMISSION_EXTENSION_TYPE,
+        )
+        .map_err(mls)
 }
 
 /// The frontier of a GroupContext (§4.1).
@@ -511,8 +563,15 @@ fn sorted_rights(rights: &[(Right, u64)]) -> Result<Vec<(Right, u64)>, String> {
     Ok(sorted)
 }
 
+/// An OpenMLS error as a lab code. A refused draw is the §12 `entropy_unavailable`, with
+/// no provider text. OpenMLS keeps the `CryptoError` in `LibraryError`'s private field,
+/// so the refusal is recognized by that variant's name in the error's debug form.
 fn mls<E: std::fmt::Debug>(err: E) -> String {
-    format!("malformed: OpenMLS {err:?}")
+    let text = format!("{err:?}");
+    if text.contains(&format!("{:?}", CryptoError::InsufficientRandomness)) {
+        return "entropy_unavailable".into();
+    }
+    format!("malformed: OpenMLS {text}")
 }
 
 // ---------------------------------------------------------------------------

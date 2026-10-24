@@ -1,0 +1,85 @@
+# C-40 mid-session outage follow-ups: green (2026-10-24)
+# src/client.rs: PreparedJoin::try_prepare / abandon, JoinCandidate::abandon, refused draws mapped to entropy_unavailable.
+# src/lab.rs: a refused admit gives the candidate back; a step that fails while the source refuses a draw is entropy_unavailable. src/entropy.rs: LabEntropy::failures.
+# tests/adapter_entropy.rs and tests/lab_entropy.rs are unchanged and pass.
+
+$ cargo fmt --check
+exit=0
+
+$ cargo clippy --locked --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.38s
+exit=0
+
+$ cargo build --locked
+   Compiling agent-trust v0.1.0 (<repo>)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.93s
+exit=0
+
+$ python3 -m unittest harness.test_entropy_lab -v
+test_admit_refused_by_an_outage_keeps_the_candidate_identity (harness.test_entropy_lab.EntropyLabTests.test_admit_refused_by_an_outage_keeps_the_candidate_identity) ... ok
+test_config_file_selects_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source) ... ok
+test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... ok
+test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) ... ok
+test_mls_draws_refused_by_an_outage_are_entropy_unavailable (harness.test_entropy_lab.EntropyLabTests.test_mls_draws_refused_by_an_outage_are_entropy_unavailable) ... ok
+test_mock_outage_mid_session_fails_closed_and_recovers (harness.test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers) ... ok
+test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (harness.test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace) ... ok
+test_no_selection_uses_the_os_source (harness.test_entropy_lab.EntropyLabTests.test_no_selection_uses_the_os_source) ... ok
+test_outage_control_needs_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_outage_control_needs_the_mock_source) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 15.029s
+
+OK
+exit=0
+
+$ cargo test --locked --all-targets
+     Running unittests src/lib.rs (target/debug/deps/agent_trust-1e1f8686a231b846)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (target/debug/deps/agent_trust-5f20742163bd66bc)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/adapter_admission.rs (target/debug/deps/adapter_admission-719a9bec08ed1f3c)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
+     Running tests/adapter_compat.rs (target/debug/deps/adapter_compat-e6fa693f73e25eee)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+     Running tests/adapter_entropy.rs (target/debug/deps/adapter_entropy-d641770772c35079)
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.80s
+     Running tests/adapter_identity.rs (target/debug/deps/adapter_identity-53c8111d50843584)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running tests/adapter_recovery.rs (target/debug/deps/adapter_recovery-b51d0fef5d8774c2)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.30s
+     Running tests/adapter_rekey.rs (target/debug/deps/adapter_rekey-707b5da848c82c0d)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+     Running tests/adapter_release.rs (target/debug/deps/adapter_release-8fed659404d5890d)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s
+     Running tests/adapter_repair.rs (target/debug/deps/adapter_repair-3918cc3cd12b0048)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.25s
+     Running tests/adapter_repair_stacked.rs (target/debug/deps/adapter_repair_stacked-e2d1772fbab7eaec)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.88s
+     Running tests/authority_adversarial.rs (target/debug/deps/authority_adversarial-7ba438acd1ece989)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/authority_contract.rs (target/debug/deps/authority_contract-2321c03f4511f952)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/authority_corrections.rs (target/debug/deps/authority_corrections-05f12e1566b0ea00)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+     Running tests/authority_gap_contract.rs (target/debug/deps/authority_gap_contract-1778dba9ec9f689b)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/authority_invocation_resources.rs (target/debug/deps/authority_invocation_resources-22a194a26d050e10)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+     Running tests/authority_rekey_contract.rs (target/debug/deps/authority_rekey_contract-c6d4e362bb51f522)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+     Running tests/authority_resource_contract.rs (target/debug/deps/authority_resource_contract-5df0b4332bd51d59)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+     Running tests/authority_subject_status.rs (target/debug/deps/authority_subject_status-730b3078284f7cb0)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/confused_deputy_red.rs (target/debug/deps/confused_deputy_red-32d37f73756cbd6d)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-6526209a169a52d1)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s
+     Running tests/mls_contract.rs (target/debug/deps/mls_contract-c793bbb2f17273ef)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+exit=0
+
+$ python3 -m unittest discover -s harness -v
+Ran 106 tests in 89.615s
+OK
+exit=0

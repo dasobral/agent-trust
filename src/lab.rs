@@ -22,7 +22,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::adapter::{Adapter, ClientIdentity, Clock, SignedRequest, ADAPTER_FILE, AUTHORITY_FILE};
-use crate::client::{ClientEndpoint, PreparedJoin};
+use crate::client::{ClientEndpoint, JoinCandidate, PreparedJoin, StagedAdd};
 use crate::entropy::{LabEntropy, LabProvider};
 use crate::wire::{operation_digest, Frontier, ReleaseCertificate, Right, SignedStructure};
 
@@ -171,7 +171,8 @@ impl Lab<'_> {
         let Some(world) = self.world.as_mut() else {
             return Err("uninitialized: no lab group".into());
         };
-        match name {
+        let failures = self.entropy.failures();
+        let result = match name {
             "delegate" => world.delegate(&args),
             "admit" => world.admit(&args),
             "send" => world.send(&args),
@@ -191,6 +192,15 @@ impl Lab<'_> {
                 world.summary()
             }
             _ => Err("malformed: unknown request".into()),
+        };
+        // A step that fails while the source refuses a draw is `entropy_unavailable`
+        // (§12), also where OpenMLS reports the refusal as another error (C-40). The `os`
+        // source keeps no failure count.
+        match (result, failures, self.entropy.failures()) {
+            (Err(_), Some(before), Some(after)) if after > before => {
+                Err("entropy_unavailable".into())
+            }
+            (result, _, _) => result,
         }
     }
 
@@ -428,22 +438,48 @@ impl World {
         let checkpoint = self.adapter.checkpoint()?;
         let parent_roster = roster_of(&checkpoint)?;
         let rights = active_rights(&checkpoint, &subject)?;
-        let prepared = PreparedJoin::prepare(
+        // Until the Add is acked, a refused step leaves the subject a candidate with the
+        // identity whose key the kernel registered at `delegate` (C-40).
+        let prepared = match PreparedJoin::try_prepare(
             &self.group,
             &subject,
             &rights,
             identity,
             provider,
             &self.apf_public,
-        )?;
+        ) {
+            Ok(prepared) => prepared,
+            Err(unprepared) => {
+                self.restore_candidate(&subject, unprepared.identity, unprepared.provider);
+                return Err(unprepared.error);
+            }
+        };
         let body = json!({
             "command": "admission_certificate",
             "key_package_preimage": hex::encode(prepared.preimage())
         });
-        let response = self.request(&subject, body)?;
-        let candidate = prepared.finalize(&hex_field(&response, "certificate")?)?;
-        let staged = self.endpoint_mut(&by)?.stage_add(candidate.key_package())?;
-        let (frontier, ack) = self.submit(&by, "admit", &staged.parent, &staged.commit)?;
+        let certificate = match self
+            .request(&subject, body)
+            .and_then(|response| hex_field(&response, "certificate"))
+        {
+            Ok(certificate) => certificate,
+            Err(error) => {
+                let (identity, provider) = prepared.abandon();
+                self.restore_candidate(&subject, identity, provider);
+                return Err(error);
+            }
+        };
+        let candidate = prepared.finalize(&certificate)?;
+        let (staged, (frontier, ack)) = match self.stage_and_submit_add(&by, &candidate) {
+            Ok(acked) => acked,
+            Err(error) => {
+                // The old provider's storage holds the dropped KeyPackage's private keys.
+                let (identity, _) = candidate.abandon();
+                let provider = self.entropy.provider();
+                self.restore_candidate(&subject, identity, provider);
+                return Err(error);
+            }
+        };
         self.endpoint_mut(&by)?.apply_ack(&staged.commit, &ack)?;
         self.apply_to_members(&parent_roster, &by, &staged.commit, &ack)?;
         let joined = candidate.join(&staged.welcome, &ack)?;
@@ -454,6 +490,24 @@ impl World {
             actor.endpoint = Some(joined);
         }
         Ok(json!({ "subject": subject, "epoch": frontier.epoch, "branch": frontier.branch }))
+    }
+
+    /// `by` stages the candidate's Add and submits it; returns the staged Add and its ack.
+    fn stage_and_submit_add(
+        &mut self,
+        by: &str,
+        candidate: &JoinCandidate<Provider>,
+    ) -> Result<(StagedAdd, (Frontier, Vec<u8>)), String> {
+        let staged = self.endpoint_mut(by)?.stage_add(candidate.key_package())?;
+        let acked = self.submit(by, "admit", &staged.parent, &staged.commit)?;
+        Ok((staged, acked))
+    }
+
+    /// Gives `subject` its unused candidate identity and provider back.
+    fn restore_candidate(&mut self, subject: &str, identity: ClientIdentity, provider: Provider) {
+        if let Some(actor) = self.actors.get_mut(subject) {
+            actor.candidate = Some((identity, provider));
+        }
     }
 
     /// `send {from, op, payload}`: allocate, release with an honest cover, protect,

@@ -1,0 +1,66 @@
+# C-40 mid-session outage follow-ups: behavioral red against the unchanged binary (2026-10-24)
+# src/ is at the branch base (db2ddfa); only harness/test_entropy_lab.py has the two new tests. No stub is needed: the binary already shows both limitations.
+# Setup note: a first draft of the tests delegated carol without the admit right, which the candidate needs to request its admission certificate. That was a test setup error (it surfaced as unauthorized on the retried admit after the fix), not this red; the red below is re-recorded with the corrected tests.
+
+$ cargo build --locked
+   Compiling agent-trust v0.1.0 (<repo>)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.86s
+exit=0
+
+$ python3 -m unittest harness.test_entropy_lab -v
+test_admit_refused_by_an_outage_keeps_the_candidate_identity (harness.test_entropy_lab.EntropyLabTests.test_admit_refused_by_an_outage_keeps_the_candidate_identity) ... FAIL
+test_config_file_selects_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source) ... ok
+test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... ok
+test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) ... ok
+test_mls_draws_refused_by_an_outage_are_entropy_unavailable (harness.test_entropy_lab.EntropyLabTests.test_mls_draws_refused_by_an_outage_are_entropy_unavailable) ... FAIL
+test_mock_outage_mid_session_fails_closed_and_recovers (harness.test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers) ... ok
+test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (harness.test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace) ... ok
+test_no_selection_uses_the_os_source (harness.test_entropy_lab.EntropyLabTests.test_no_selection_uses_the_os_source) ... ok
+test_outage_control_needs_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_outage_control_needs_the_mock_source) ... ok
+
+======================================================================
+FAIL: test_admit_refused_by_an_outage_keeps_the_candidate_identity (harness.test_entropy_lab.EntropyLabTests.test_admit_refused_by_an_outage_keeps_the_candidate_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 214, in test_admit_refused_by_an_outage_keeps_the_candidate_identity
+    self.assertEqual(responses[4], {"error": "entropy_unavailable"},
+AssertionError: {'error': 'malformed: OpenMLS KeyPackageNewError(Lib[96 chars]}))'} != {'error': 'entropy_unavailable'}
++ {'error': 'entropy_unavailable'}
+- {'error': 'malformed: OpenMLS KeyPackageNewError(LibraryError(LibraryError { '
+-           'internal: InternalLibraryError { CryptoError: '
+-           'InsufficientRandomness } }))'} : the candidate's KeyPackage draw fails with the section 12 code
+
+======================================================================
+FAIL: test_mls_draws_refused_by_an_outage_are_entropy_unavailable (harness.test_entropy_lab.EntropyLabTests.test_mls_draws_refused_by_an_outage_are_entropy_unavailable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 255, in test_mls_draws_refused_by_an_outage_are_entropy_unavailable
+    self.assertEqual(responses[index], {"error": "entropy_unavailable"},
+AssertionError: {'error': 'malformed: OpenMLS LibraryError(LibraryEr[78 chars] })'} != {'error': 'entropy_unavailable'}
++ {'error': 'entropy_unavailable'}
+- {'error': 'malformed: OpenMLS LibraryError(LibraryError { internal: '
+-           'InternalLibraryError: Error description: Malformed plaintext\n'
+-           ' })'} : send: an MLS draw refused by the source is entropy_unavailable
+
+----------------------------------------------------------------------
+Ran 9 tests in 14.524s
+
+FAILED (failures=2)
+exit=1
+
+# The first new test stops at its error-code assertion, so the dropped candidate is shown directly here (the second admit).
+$ AGENT_TRUST_ENTROPY_SOURCE=mock target/debug/agent-trust lab --dir <tmp>/lab --seed 1 <<EOF
+{"op":"genesis","args":{"group":"lab-group","root":"alice"}}
+{"op":"delegate","args":{"subject":"carol","rights":["read","write","admit"]}}
+{"op":"entropy_outage","args":{"available":false}}
+{"op":"admit","args":{"subject":"carol","by":"alice"}}
+{"op":"entropy_outage","args":{"available":true}}
+{"op":"admit","args":{"subject":"carol","by":"alice"}}
+EOF
+{"ok":{"branch":"…","epoch":0,"group":"lab-group","root":"alice"}}
+{"ok":{"revision":1}}
+{"ok":{"bytes":192,"failures":0,"requests":6,"source":"mock"}}
+{"error":"malformed: OpenMLS KeyPackageNewError(LibraryError(LibraryError { internal: InternalLibraryError { CryptoError: InsufficientRandomness } }))"}
+{"ok":{"bytes":192,"failures":1,"requests":6,"source":"mock"}}
+{"error":"invalid_transition: carol has no unused candidate identity"}
+exit=0

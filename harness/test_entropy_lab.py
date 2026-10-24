@@ -195,6 +195,71 @@ class EntropyLabTests(unittest.TestCase):
             self.assertIn("ok", response, response)
         self.assertEqual(check_trace(responses[10]["ok"]["trace"]), [])
 
+    def test_admit_refused_by_an_outage_keeps_the_candidate_identity(self):
+        env = clean_env(AGENT_TRUST_ENTROPY_SOURCE="mock")
+        code, responses, stderr = self.run_lab([
+            ("genesis", {"group": GROUP, "root": "alice"}),
+            ("delegate", {"subject": "carol", "rights": ["read", "write", "admit"]}),
+            ("summary", {}),
+            ("entropy_outage", {"available": False}),
+            ("admit", {"subject": "carol", "by": "alice"}),
+            ("summary", {}),
+            ("entropy_outage", {"available": True}),
+            ("admit", {"subject": "carol", "by": "alice"}),
+            ("summary", {}),
+            ("export_trace", {}),
+        ], env)
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(len(responses), 10, stderr)
+        self.assertEqual(responses[4], {"error": "entropy_unavailable"},
+                         "the candidate's KeyPackage draw fails with the section 12 code")
+        self.assertEqual(responses[5], responses[2], "a refused admit changes no lab state")
+        self.assertIn("ok", responses[7], "the same candidate is admitted after recovery")
+        self.assertEqual(responses[8]["ok"]["members"], ["alice", "carol"])
+        trace = responses[9]["ok"]["trace"]
+        self.assertEqual(check_trace(trace), [])
+
+        # Carol is admitted with the key delegated before the outage: the same mock seed
+        # without an outage admits the same key.
+        reference = self.run_ok([
+            ("genesis", {"group": GROUP, "root": "alice"}),
+            ("delegate", {"subject": "carol", "rights": ["read", "write", "admit"]}),
+            ("admit", {"subject": "carol", "by": "alice"}),
+            ("export_trace", {}),
+        ], env)
+        self.assertEqual(self.keys_of(trace), self.keys_of(reference[-1]["trace"]))
+
+    def test_mls_draws_refused_by_an_outage_are_entropy_unavailable(self):
+        env = clean_env(AGENT_TRUST_ENTROPY_SOURCE="mock")
+        code, responses, stderr = self.run_lab([
+            ("genesis", {"group": GROUP, "root": "alice"}),
+            ("delegate", {"subject": "bob", "rights": ["read", "write", "admit"]}),
+            ("delegate", {"subject": "carol", "rights": ["read", "write", "admit"]}),
+            ("admit", {"subject": "bob", "by": "alice"}),
+            ("summary", {}),
+            ("entropy_outage", {"available": False}),
+            ("send", {"from": "alice", "op": "op-1", "payload": "a1a1"}),
+            ("admit", {"subject": "carol", "by": "alice"}),
+            ("revoke", {"subject": "bob", "right": "read"}),
+            ("repair", {"by": "alice"}),
+            ("summary", {}),
+            ("entropy_outage", {"available": True}),
+            ("repair", {"by": "alice"}),
+            ("admit", {"subject": "carol", "by": "alice"}),
+            ("send", {"from": "alice", "op": "op-2", "payload": "a2a2"}),
+            ("export_trace", {}),
+        ], env)
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(len(responses), 16, stderr)
+        for index, step in [(6, "send"), (7, "admit"), (9, "repair")]:
+            self.assertEqual(responses[index], {"error": "entropy_unavailable"},
+                             f"{step}: an MLS draw refused by the source is entropy_unavailable")
+        self.assertIn("ok", responses[8], responses[8])
+        self.assertEqual(responses[10], responses[4], "refused MLS steps change no lab state")
+        for response in responses[11:]:
+            self.assertIn("ok", response, response)
+        self.assertEqual(check_trace(responses[15]["ok"]["trace"]), [])
+
     def test_outage_control_needs_the_mock_source(self):
         code, responses, stderr = self.run_lab([("entropy_outage", {"available": False})], clean_env())
         self.assertEqual(code, 0, stderr)
