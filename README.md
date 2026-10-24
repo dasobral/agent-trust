@@ -2,155 +2,146 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Experimental laboratory for **Authorization–Capability Coherence (ACC)**:
-cryptographic agent principals, attenuated delegation, revocation, frozen
-operation release, OpenMLS authorization domains, and authenticated invocation
-provenance.
+A research laboratory for **Authorization–Capability Coherence (ACC)**: keeping
+an agent's authorization and its cryptographic capability in one consistent
+state when the agent is a member of an [OpenMLS](https://github.com/openmls/openmls)
+group.
 
-This is research software. It is not a production identity, authorization, or
-messaging system. Passing tests show that the executed gates passed; they do
-not discharge open cryptographic proof obligations.
+Authorization (who may read or write) and MLS group membership (who holds the
+keys) usually change independently, so they can drift apart: a revoked agent can
+still decrypt, or a key holder can act without permission. agent-trust binds the
+two together. Every membership change and every protected message must pass
+through one authority, and an independent oracle checks the resulting traces.
+
+This is research software, not a production identity, authorization or
+messaging system.
 
 **Owner:** [Daniel Sobral Blanco](https://github.com/dasobral)
 ([ORCID](https://orcid.org/0000-0001-9559-3651)) · **License:** [MIT](LICENSE)
 
-## What it does
+## Status
 
-The laboratory studies the failure of *independent* authorization and MLS group
-membership, then enforces a narrower contract:
-
-- A trusted-local **Authority, Permit, and Fence (APF)** kernel orders policy,
-  delegation, release, consumption, and revocation in SQLite.
-- A real **OpenMLS** adapter exercises admission binding and retained-key
-  exclusion after removal.
-- An independent **Python oracle** checks deterministic traces without importing
-  production modules.
-- **Invocation provenance** bounds usable authority by the executor *and* the
-  complete APF-issued invocation chain, so a privileged intermediary cannot
-  launder rights.
-
-The authority CLI is a trusted administrative local interface. It is not a
-network service.
-
-## Status and claim boundary
-
-| Claim | Current result |
+| Claim | Result |
 | --- | --- |
-| Public verifier fails closed | Yes, via `python3 scripts/verify.py` |
-| Confused-deputy / invocation provenance | Enforced in the APF kernel |
-| Staged OpenMLS KeyPackage admission binding | Verified against a pinned fork |
-| `full_lap_mls` | **`true`**, recorded 2026-10-24 at `50f0127`, within the boundary below |
-| `Bridge_remove^ETK` | **Open** proof obligation |
-| Live Entropy Core run | **Unmet** gate |
+| `full_lap_mls` | **`true`**, recorded 2026-10-24 ([log](evidence/verify-2026-10-24.txt)) |
+| `Bridge_remove^ETK` | **Open** cryptographic proof obligation |
+| Live Entropy Core run | **Not yet run** |
 | HPKE encapsulation randomness | **Excluded** from the entropy seam |
 
-`full_lap_mls` is `true` because one recorded `python3 scripts/verify.py` run
-passed every gate of the claim gate in
-[`docs/adapter-contract.md`](docs/adapter-contract.md) §11
-([`evidence/verify-2026-10-24.txt`](evidence/verify-2026-10-24.txt)). Those
-gates are the build, the independent Python oracle, every Rust test, every
-harness test, and the lab integration run. In that run the oracle accepted the
-exported lab traces and rejected the named broken controls.
+`full_lap_mls` is `true` because one recorded run of `python3 scripts/verify.py`
+passed every gate of the claim gate
+([`docs/adapter-contract.md`](docs/adapter-contract.md) §11): the build, every
+Rust and Python test, and the lab integration run. In that run the independent
+oracle accepted the exported lab traces and rejected the deliberately broken
+ones. The claim covers the executed schedules only; it is not a proof. Any later
+verifier run that fails a gate resets it to `false` in
+[`evidence/manifest.json`](evidence/manifest.json).
 
-The claim covers the behavior in the executed schedules only. It does not
-discharge the `Bridge_remove^ETK` cryptographic proof obligation. OpenMLS HPKE
-encapsulation draws from hpke-rs's internal randomness, not from the configured
-`OpenMlsRand`, so that randomness is outside the claim. No run against a live
-Entropy Core has been recorded. The legacy `mls-demo` lab keeps reporting
-`full_lap_mls: false`, because its claim concerns only that lab.
-
-The OpenMLS dependency is pinned at commit
-`6daabe33ddb616a6ed54b511d333e691db18a99f`. Joining members use staged
-KeyPackage construction and carry an embedded, signed APF admission certificate
-whose stripped KeyPackage preimage is independently recomputed before
-admission.
-
-## Confused-deputy property
-
-When an executor acts under an APF-issued invocation, usable authority is
-bounded by both the executor and the complete invocation chain. A privileged
-intermediary cannot strip the origin, widen rights or resources, or restore an
-attenuated capability.
+## How it works
 
 ```text
-child(read) -> parent(read,write) -> WRITE  => DENY
-parent(read,write) -> WRITE                => ALLOW
+            signed requests                          kernel commands
+ Client ─────────────────────────▶  Adapter  ─────────────────────────▶  Kernel
+ (MLS group,  ◀── acks, release ──  (APF key, sequencer =                (SQLite,
+  own keys)       certificates      OpenMLS PublicGroup)                  hash chain)
 ```
 
-See [`docs/confused-deputy.md`](docs/confused-deputy.md) for the enforcement
-design and [`docs/recovery-coverage.md`](docs/recovery-coverage.md) for
-reconstruction provenance.
+- **Kernel** ([`src/authority.rs`](src/authority.rs)): the Authority, Permit and
+  Fence (APF) kernel. It orders policy, delegation, invocation, release,
+  consumption and revocation in SQLite, with a hash-chained history. It holds no
+  keys and no MLS state.
+- **Adapter** ([`src/adapter.rs`](src/adapter.rs)): the only caller of the
+  kernel. It authenticates every request and validates every MLS commit with its
+  own OpenMLS `PublicGroup`. The kernel's epoch, roster and repair state
+  therefore come only from real commits. It signs admission and release
+  certificates and acknowledgements.
+- **Client endpoint** ([`src/client.rs`](src/client.rs)): one MLS member with its
+  own keys and storage. It encrypts only under an APF-signed release certificate.
+- **Oracle** ([`harness/oracle.py`](harness/oracle.py)): an independent Python
+  checker for exported traces. It imports no production code.
 
-## Requirements
+Properties exercised by the tests include:
 
-- Rust **1.91** or newer (`cargo`)
-- Python **3**
+- Revocation fences reads until a repair commit removes the reader. The removed
+  member's retained key state then fails on later traffic.
+- Re-granted write, admin or admit rights require fresh keys (rekey).
+- A privileged intermediary cannot widen or launder an invocation's authority
+  ([`docs/confused-deputy.md`](docs/confused-deputy.md)).
+- The adapter recovers from crashes at every recorded barrier.
 
-Network access is required on first build to fetch the pinned OpenMLS git
-dependency.
+## Quick start
 
-## Verify
-
-Run these from the repository root. The public verifier fails closed when Cargo
-is unavailable, a gate fails, or a gate executes no tests.
+You need Rust **1.91** or newer and Python **3**. The first build fetches the
+pinned OpenMLS fork and [openmls-qrand](https://github.com/dasobral/openmls-qrand)
+from GitHub.
 
 ```bash
 cargo build --locked
-cargo test --locked --all-targets
-python3 -m unittest discover -s harness -v
 python3 scripts/verify.py
 ```
 
-## Lab entropy source
+The verifier runs every gate. It fails closed when a gate fails or runs no
+tests, and it rewrites the claim in `evidence/manifest.json`.
 
-`agent-trust lab` takes every provider rand and identity key from one source,
-selected at startup ([C-40](docs/adapter-contract.md)):
+### Run the lab
+
+`agent-trust lab` reads one JSON request per line and writes one JSON response
+per line. It drives a real adapter and real OpenMLS clients through admission,
+sending, delivery, revocation, repair and rekey. `--seed` fixes the simulated
+network's reordering, loss and duplication.
+
+```bash
+lab_dir="$(mktemp -d)/lab"
+AGENT_TRUST_ENTROPY_SOURCE=mock ./target/debug/agent-trust lab --dir "$lab_dir" --seed 1 < examples/lab-session.jsonl
+./target/debug/agent-trust export-trace --dir "$lab_dir"
+```
+
+Each run needs a new `--dir`: `genesis` refuses a directory that already holds a
+lab. The request set is specified in
+[`docs/adapter-contract.md`](docs/adapter-contract.md) (C-36, C-39, C-40).
+
+### Entropy source
+
+The lab draws every key and every OpenMLS random value from one source, chosen
+at startup:
 
 | Source | Select with | Use |
 | --- | --- | --- |
-| `os` | nothing set (default) | OS-seeded RustCrypto rand |
-| `mock` | `AGENT_TRUST_ENTROPY_SOURCE=mock` (`AGENT_TRUST_MOCK_SEED=N`) | openmls-qrand `MockEntropy`: seeded and **not random**, for development and tests |
-| `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` with `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Entropy Core |
+| `os` | nothing (default) | OS-seeded RustCrypto RNG |
+| `mock` | `AGENT_TRUST_ENTROPY_SOURCE=mock`, optional `AGENT_TRUST_MOCK_SEED=N` | Seeded, **not random**. For development and tests: the same seed gives the same keys. |
+| `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` and `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Quside Entropy Core |
 
-A TOML file named by `AGENT_TRUST_ENTROPY_CONFIG` can select the source instead
-([`config/entropy.example.toml`](config/entropy.example.toml)). The lab request
-`entropy {}` reports the source and its draw counters. A source that cannot be
-selected or reached stops the lab before any request, with no fallback. A
-recorded run against a live Entropy Core is still an unmet gate.
+A TOML file named by `AGENT_TRUST_ENTROPY_CONFIG` can select the source instead;
+see [`config/entropy.example.toml`](config/entropy.example.toml). A source that
+cannot be selected or reached stops the lab before the first request, with no
+fallback to another source.
 
-## Layout
+## Repository layout
 
-| Path | Role |
+| Path | Contents |
 | --- | --- |
-| `src/authority.rs` | Durable APF kernel |
-| `src/mls.rs` | In-memory OpenMLS laboratory |
-| `src/entropy.rs` | Lab entropy source selection |
-| `src/main.rs` | Local `authority` and `mls-demo` CLI |
-| `tests/` | Rust contract and adversarial tests |
-| `harness/` | Independent Python oracle and CLI tests |
+| `src/` | Kernel, adapter, client endpoint, wire encodings, lab and CLI. `src/mls.rs` is the earlier in-memory MLS lab behind `mls-demo`. |
+| `tests/` | Rust contract, adversarial and recovery tests |
+| `harness/` | Python oracle and black-box tests of the CLI and lab |
 | `scripts/verify.py` | Fail-closed public verifier |
-| `docs/` | Specification, contracts, and design notes |
-| `evidence/` | Recorded red/green runs and manifests |
+| `docs/` | Specification and contracts |
+| `evidence/` | Recorded red/green runs, verifier logs and the claim manifest |
+| `examples/`, `config/` | A sample lab session and an entropy configuration |
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
-| [`docs/specification.md`](docs/specification.md) | Implementation specification |
-| [`docs/authority-contract.md`](docs/authority-contract.md) | APF command contract |
-| [`docs/trace-contract.md`](docs/trace-contract.md) | Independent oracle contract |
+| [`docs/adapter-contract.md`](docs/adapter-contract.md) | Adapter, client and lab contract; entropy seam; claim gate |
+| [`docs/authority-contract.md`](docs/authority-contract.md) | APF kernel commands |
+| [`docs/trace-contract.md`](docs/trace-contract.md) | Trace format the oracle checks |
 | [`docs/confused-deputy.md`](docs/confused-deputy.md) | Invocation provenance |
-| [`docs/OPENMLS-INTEGRATION-READY.md`](docs/OPENMLS-INTEGRATION-READY.md) | Staged KeyPackage milestone |
-| [`docs/openmls-compatibility.md`](docs/openmls-compatibility.md) | Adapter compatibility notes |
-| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Staged work plan |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to propose changes |
-| [`SECURITY.md`](SECURITY.md) | Vulnerability reporting |
-| [`MAINTAINERS`](MAINTAINERS) | Ownership |
+| [`docs/specification.md`](docs/specification.md) | Original specification |
+| [`docs/openmls-compatibility.md`](docs/openmls-compatibility.md) | OpenMLS API notes |
 
-## Citation
-
-If you use this laboratory, please cite it. Machine-readable metadata is in
-[`CITATION.cff`](CITATION.cff).
+[`CONTRIBUTING.md`](CONTRIBUTING.md) explains how to propose changes, and
+[`SECURITY.md`](SECURITY.md) how to report a vulnerability. If you use this
+laboratory, please cite it with [`CITATION.cff`](CITATION.cff).
 
 ## License
 

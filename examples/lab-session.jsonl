@@ -1,0 +1,7 @@
+{"op": "genesis", "args": {"group": "demo", "root": "alice"}}
+{"op": "delegate", "args": {"subject": "bob", "rights": ["read", "write", "admit"]}}
+{"op": "admit", "args": {"subject": "bob", "by": "alice"}}
+{"op": "send", "args": {"from": "alice", "op": "op-1", "payload": "68656c6c6f"}}
+{"op": "deliver", "args": {}}
+{"op": "summary", "args": {}}
+{"op": "entropy", "args": {}}
