@@ -23,3 +23,5 @@ Task 1: toolchain available; Rust 1.98.1, OpenMLS 0.9.0 fetched. Interface tests
 Task 1: oracle implemented at 4b23b52; 20 passing tests reported and independent source review dispatched.
 Ruling: complete the independently testable authority kernel and real MLS laboratory while leaving exact LAP binding visibly blocked — OpenMLS has no public two-phase KeyPackage API — costs an additional integration/API-extension phase before deployment claims.
 Ruling: distinguish external APF proposal constructors from member proposal methods — direct source inspection corrected audit citations — external-sender runtime behavior remains a separate unverified gate.
+
+2026-10-24 (testbed session): C-41 proposed and implemented test first on branch `feat/durable-lab-provider` (durable lab provider, identity restore; testbed finding F-2). Red: interface build failure only. Green: `tests/lab_durable.rs` 6 passed; `scripts/verify.py` all gates pass, `full_lap_mls` true. Waiting for Daniel's approval before merge into `main`.

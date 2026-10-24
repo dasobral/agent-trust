@@ -605,6 +605,16 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - **Claim boundary.** A `mock` run exercises the real `QrngRand` / provider wiring, not the QRNG HTTP client, transport or Open API parsing. `tests/adapter_entropy.rs` keeps covering those against its loopback mock server. `live_entropy_core` stays `unmet` until a run against a real endpoint is recorded.
   - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `a102450febaa00e8955822c72bd309df6d8f43b9`, which adds `EntropyRng` (§8) on top of the `EntropyBackend` seam and `MockEntropy` of `fe9ea13`. This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
 
+### 8.2 Durable client storage and identity restore (C-41, proposed)
+
+**Flagged to Daniel: proposed 2026-10-24, not yet approved.** It adds two interfaces and changes no existing behavior. The source is finding F-2 of agent-trust-testbed: a networked agent must survive a restart, and the lab provider has memory storage only.
+
+- **C-41, durable lab provider and identity restore.**
+  - `LabEntropy::durable_provider(path)` returns a `DurableLabProvider`: the shared lab crypto provider (§8), a rand over the selected source (C-40), and `openmls_sqlite_storage` storage in the one file at `path`. The file is created if missing and its migrations run. Opening draws nothing from the source. Reopening the same path gives the stored groups and keys back for `ClientEndpoint::load` (C-33). An unusable path is `malformed: client storage file`.
+  - `ClientIdentity::restore(key_pair)` rebuilds a stored identity. It accepts only an Ed25519 pair whose public key derives from its private seed, checked by a signature over a fixed probe verified with `verify_strict`; anything else is `binding_mismatch`. It creates no key: new keys still come only from `ClientIdentity::generate` (C-6).
+  - The stored form of an identity is the application's choice. The testbed writes the key pair's serde JSON to an owner-only file. The key is outside the APF and the kernel, as for every client key (§3).
+  - Tests: `tests/lab_durable.rs`. Evidence: `evidence/durable-provider-red.txt` (interface build failure) and `evidence/durable-provider-green.txt` (the tests and the full verifier pass; `full_lap_mls` stays `true`).
+
 ## 9. Traces and the independent oracle
 
 - The adapter exports every accepted and rejected transition as trace events.
