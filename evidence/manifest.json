@@ -18,7 +18,8 @@
     "openmls_traits": "0.6.0 fork",
     "openmls_rust_crypto": "0.6.0 fork",
     "openmls_basic_credential": "0.6.0 fork",
-    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f"
+    "openmls_git_revision": "6daabe33ddb616a6ed54b511d333e691db18a99f",
+    "openmls_qrand_git_revision": "11ee2edd042aea4803ee14086dcb8e53d709a673"
   },
   "public_gates": [
     "python3 scripts/verify.py",
@@ -26,15 +27,28 @@
     "python3 -m unittest discover -s harness -v"
   ],
   "latest_verification": {
-    "date": "2026-09-15",
-    "rust_tests": 39,
-    "python_tests": 32,
-    "oracle_tests": 21,
+    "date": "2026-10-24",
+    "commit": "50f0127",
+    "command": "python3 scripts/verify.py",
+    "python_oracle_tests": 73,
+    "rust_tests": 164,
+    "harness_tests": 106,
+    "integration_tests": 5,
+    "log": "evidence/verify-2026-10-24.txt",
     "status": "pass"
   },
   "claim_boundary": {
-    "full_lap_mls": false,
-    "staged_keypackage_binding_verified": true,
-    "reason": "embedded staged admission binding is verified; complete durable APF context, incarnation, and policy-bound repair coupling remains incomplete"
+    "full_lap_mls": true,
+    "bridge_remove_etk": "open",
+    "live_entropy_core": "unmet",
+    "hpke_randomness": "excluded",
+    "gates": {
+      "build": "pass",
+      "python-oracle": "pass",
+      "rust": "pass",
+      "harness": "pass",
+      "integration": "pass"
+    },
+    "reason": "every gate passed in this run; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is excluded"
   }
 }

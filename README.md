@@ -39,12 +39,25 @@ network service.
 | Public verifier fails closed | Yes, via `python3 scripts/verify.py` |
 | Confused-deputy / invocation provenance | Enforced in the APF kernel |
 | Staged OpenMLS KeyPackage admission binding | Verified against a pinned fork |
-| `full_lap_mls` | **`false`** |
+| `full_lap_mls` | **`true`**, recorded 2026-10-24 at `50f0127`, within the boundary below |
+| `Bridge_remove^ETK` | **Open** proof obligation |
+| Live Entropy Core run | **Unmet** gate |
+| HPKE encapsulation randomness | **Excluded** from the entropy seam |
 
-`full_lap_mls` remains `false`: this milestone does not yet couple the durable
-authority kernel to `acc_context`, `authz_incarnation`, and the complete
-qualifying policy-bound repair transition. The CLI reports the narrower
-`staged_keypackage_binding_verified` result separately.
+`full_lap_mls` is `true` because one recorded `python3 scripts/verify.py` run
+passed every gate of the claim gate in
+[`docs/adapter-contract.md`](docs/adapter-contract.md) §11
+([`evidence/verify-2026-10-24.txt`](evidence/verify-2026-10-24.txt)). Those
+gates are the build, the independent Python oracle, every Rust test, every
+harness test, and the lab integration run. In that run the oracle accepted the
+exported lab traces and rejected the named broken controls.
+
+The claim covers the behavior in the executed schedules only. It does not
+discharge the `Bridge_remove^ETK` cryptographic proof obligation. OpenMLS HPKE
+encapsulation draws from hpke-rs's internal randomness, not from the configured
+`OpenMlsRand`, so that randomness is outside the claim. No run against a live
+Entropy Core has been recorded. The legacy `mls-demo` lab keeps reporting
+`full_lap_mls: false`, because its claim concerns only that lab.
 
 The OpenMLS dependency is pinned at commit
 `6daabe33ddb616a6ed54b511d333e691db18a99f`. Joining members use staged
