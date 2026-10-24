@@ -2,6 +2,7 @@
 pub mod adapter;
 pub mod authority;
 pub mod client;
+pub mod entropy;
 pub mod lab;
 pub mod mls;
 pub mod wire;

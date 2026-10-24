@@ -1,0 +1,22 @@
+# Lab entropy source (docs/adapter-contract.md C-40). Select a file with:
+#   AGENT_TRUST_ENTROPY_CONFIG=config/entropy.example.toml agent-trust lab --dir DIR --seed N
+# Unknown fields are rejected. Never put a secret in this file: name the variable
+# that holds it with auth_secret_env.
+
+source = "mock"            # "os" | "mock" | "qrng"
+
+# MockEntropy: a seeded, deterministic stream. NOT random; development and tests only.
+[mock]
+seed = 0
+
+# A QRNG Open API endpoint, used when source = "qrng".
+[qrng]
+base_url = "http://127.0.0.1:8002"
+transport = "plain-http"   # "plain-http" | "tls" | "mtls"
+# ca_cert_pem = "certs/ca.pem"          # tls (optional) or mtls (required); relative to this file
+# client_cert_pem = "certs/client.crt"  # mtls
+# client_key_pem = "certs/client.key"   # mtls
+auth = "none"              # "none" | "bearer" | "x-api-key"
+# auth_secret_env = "QRNG_API_KEY"      # the secret itself is read from this variable
+# entropy_type = "raw"
+request_timeout_ms = 5000

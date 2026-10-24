@@ -577,6 +577,26 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 - Fail-closed behavior is tested against a loopback mock QRNG Open API server labelled as a mock.
 - A live Entropy Core run remains an unmet gate until a real endpoint is reachable. No quantum-origin claim is made for consumers marked "No".
 
+### 8.1 Lab entropy selection (C-40, D-12)
+
+- **C-40, one source per lab run.** `agent-trust lab` selects one entropy source before it reads any request (`src/entropy.rs`). Every adapter and client provider and every lab identity key, rekey keys included, draws from that source. A failure to select or reach the source exits nonzero with `entropy_unavailable: <reason>` on stderr and processes no request. Nothing falls back to another source.
+  - **Sources.**
+    - `os` (the default): the OS-seeded RustCrypto rand.
+    - `mock`: openmls-qrand `MockEntropy`, a seeded in-process SplitMix64 stream. **It is not an entropy source.** It is for development and tests only, and it carries no entropy claim.
+    - `qrng`: a QRNG Open API endpoint through openmls-qrand `QrngClient`.
+  - **Selection.**
+    - `AGENT_TRUST_ENTROPY_CONFIG` names a TOML file (`config/entropy.example.toml`). Unknown fields are rejected, and an API secret is named by variable (`auth_secret_env`), never stored in the file.
+    - Without a file, `AGENT_TRUST_ENTROPY_SOURCE` is `os`, `mock` or `qrng`. `mock` reads `AGENT_TRUST_MOCK_SEED` (u64, default 0). `qrng` reads the live gate's `AGENT_TRUST_QRNG_*` variables (`tests/adapter_entropy.rs`).
+    - Setting both variables, an unknown source or an incomplete QRNG setting is an error. With neither variable set, the source is `os`.
+  - **Lab requests (additive to C-36).**
+    - `entropy {}` returns `{source}` for `os`, and `{source, requests, bytes, failures}` for `mock` and `qrng`.
+    - `entropy_outage {available}` switches a simulated outage of the `mock` source and returns the same report. With any other source it is `unsupported`.
+    - `summary` and the exported trace are unchanged.
+  - **Errors.** Neither stderr nor a lab error names the endpoint or a secret. QRNG errors are reduced to their category.
+  - **Determinism.** With `mock` and a fixed seed, every identity key the lab exports is a function of that seed. `harness/test_entropy_lab.py` checks this, rekey included. HPKE randomness stays outside the seam (§8, D-5), so ciphertexts are not reproducible.
+  - **Claim boundary.** A `mock` run exercises the real `QrngRand` / provider wiring, not the QRNG HTTP client, transport or Open API parsing. `tests/adapter_entropy.rs` keeps covering those against its loopback mock server. `live_entropy_core` stays `unmet` until a run against a real endpoint is recorded.
+  - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `fe9ea1355aa61cc41a171ec05f56d1f15b3406c7`. That revision adds the `EntropyBackend` seam and `MockEntropy`. This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
+
 ## 9. Traces and the independent oracle
 
 - The adapter exports every accepted and rejected transition as trace events.
@@ -588,7 +608,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 
 - **C-36, lab protocol** (`agent-trust lab --dir PATH --seed N`, implemented in `src/lab.rs`).
   - The lab drives one in-process adapter and in-memory client endpoints through their public APIs only. It reads line-delimited JSON requests `{"op": …}` on standard input and writes one line per request: `{"ok": …}` or `{"error": "<code…>"}`. Processing continues after an error, and the exit status is 0 at end of input.
-  - The adapter and clients use the provider's configured randomness (RustCrypto, OS-seeded). The seed drives only the delivery schedule, through a deterministic test-only generator that is not used for cryptography. Time comes from a fixed clock.
+  - The adapter, the clients and every lab identity key use the entropy source selected at startup (C-40, §8.1). The default is RustCrypto, OS-seeded. The seed drives only the delivery schedule, through a deterministic test-only generator that is not used for cryptography. Time comes from a fixed clock.
   - Requests:
     - `genesis {group, root}`;
     - `delegate {subject, rights}`, by the root on the group resource;
@@ -718,4 +738,5 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.
   - The fix: a plan and a repair commit may now stack on a pending repair (C-27), and only the latest pending repair can be confirmed. It needs no kernel change, because `repair_stage` already stacks and `repair_open` requires the latest pending branch.
 - **D-8 (approved 2026-10-23):** R-9, with amendment A-2. The approval was relayed by the parent session, quoting Daniel: "I approve R-9 (D-8). Forward it to the adapter session to implement test-first."
+- **D-12 (approved 2026-10-24 by Daniel, in the adapter session): lab entropy selection (C-40).** Runtime selection of the lab's entropy source returns as a test-infrastructure requirement on top of the provider-generic adapter, replacing the archived 2026-10-08 `MlsLab` version (tag `archive/lap-mls-coupling-2026-10-08`). Daniel chose to build the mock into openmls-qrand as a backend (`EntropyBackend`, `MockEntropy`) rather than as a separate fake HTTP server, because no alternative entropy provider is reachable yet.
 - **D-7 (approved 2026-10-23):** R-8a–c, with amendment A-1. The approval was relayed by the parent session, quoting Daniel: "I approve R-8 (D-7). Forward it to the adapter session to implement test-first."

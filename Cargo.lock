@@ -56,6 +56,8 @@ dependencies = [
  "tempfile",
  "tiny_http",
  "tls_codec",
+ "toml",
+ "url",
 ]
 
 [[package]]
@@ -1681,7 +1683,7 @@ dependencies = [
 [[package]]
 name = "openmls_qrand"
 version = "0.1.0"
-source = "git+https://github.com/dasobral/openmls-qrand.git?rev=dc8dced82e1edbe13579cc64ad2e1fcc348d8a72#dc8dced82e1edbe13579cc64ad2e1fcc348d8a72"
+source = "git+https://github.com/dasobral/openmls-qrand.git?rev=fe9ea1355aa61cc41a171ec05f56d1f15b3406c7#fe9ea1355aa61cc41a171ec05f56d1f15b3406c7"
 dependencies = [
  "base64 0.22.1",
  "openmls_traits",

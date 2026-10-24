@@ -3,17 +3,18 @@
 //! The lab drives the adapter and client endpoints only through their public APIs;
 //! the export reads only the persisted kernel history and adapter store.
 //!
-//! Randomness: the adapter and every client use the RustCrypto provider, whose rand is
-//! seeded from the operating system. The lab seed drives only the delivery schedule
-//! (`Schedule`), a deterministic test-only generator that is never used for
-//! cryptography. Time comes from a fixed clock.
+//! Randomness: the adapter, every client and every lab identity key draw from one
+//! selected entropy source (C-40, `crate::entropy`): the OS-seeded RustCrypto rand by
+//! default, the in-process `MockEntropy` (NOT random), or a QRNG Open API endpoint. The
+//! lab seed drives only the delivery schedule (`Schedule`), a deterministic test-only
+//! generator that is never used for cryptography. Time comes from a fixed clock.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io::{BufRead, Write};
 use std::path::Path;
 
 use openmls_basic_credential::SignatureKeyPair;
-use openmls_rust_crypto::{OpenMlsRustCrypto, RustCrypto};
+use openmls_rust_crypto::RustCrypto;
 use openmls_traits::OpenMlsProvider;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::Serialize;
@@ -22,6 +23,7 @@ use sha2::{Digest, Sha256};
 
 use crate::adapter::{Adapter, ClientIdentity, Clock, SignedRequest, ADAPTER_FILE, AUTHORITY_FILE};
 use crate::client::{ClientEndpoint, PreparedJoin};
+use crate::entropy::{LabEntropy, LabProvider};
 use crate::wire::{operation_digest, Frontier, ReleaseCertificate, Right, SignedStructure};
 
 /// The lab's fixed trusted time (C-36).
@@ -44,7 +46,7 @@ const DROP_PERCENT: u64 = 20;
 /// Percent of delivery attempts that the schedule also duplicates later in the round.
 const DUPLICATE_PERCENT: u64 = 20;
 
-type Provider = OpenMlsRustCrypto;
+type Provider = LabProvider;
 type Endpoint = ClientEndpoint<Provider>;
 
 /// The fixed lab clock.
@@ -80,17 +82,29 @@ impl Schedule {
 // Lab protocol (C-36, C-39)
 // ---------------------------------------------------------------------------
 
-/// Runs the line-delimited JSON lab protocol (C-36) against a new adapter in `dir`.
-/// `seed` drives only the delivery schedule.
+/// Runs the line-delimited JSON lab protocol (C-36) against a new adapter in `dir`,
+/// with the OS entropy source. `seed` drives only the delivery schedule.
 pub fn run_lab(
     dir: &Path,
     seed: u64,
+    input: impl BufRead,
+    output: impl Write,
+) -> Result<(), String> {
+    run_lab_with(dir, seed, LabEntropy::os(), input, output)
+}
+
+/// [`run_lab`] with the selected entropy source (C-40).
+pub fn run_lab_with(
+    dir: &Path,
+    seed: u64,
+    entropy: LabEntropy,
     input: impl BufRead,
     mut output: impl Write,
 ) -> Result<(), String> {
     let mut lab = Lab {
         dir,
         schedule: Schedule(seed),
+        entropy,
         world: None,
     };
     for line in input.lines() {
@@ -116,6 +130,7 @@ pub fn run_lab(
 struct Lab<'a> {
     dir: &'a Path,
     schedule: Schedule,
+    entropy: LabEntropy,
     world: Option<World>,
 }
 
@@ -136,8 +151,22 @@ impl Lab<'_> {
             Some(Value::Object(args)) => args.clone(),
             Some(_) => return Err("malformed: args".into()),
         };
-        if name == "genesis" {
-            return self.genesis(&args);
+        match name {
+            "genesis" => return self.genesis(&args),
+            "entropy" => {
+                only(&args, &[])?;
+                return Ok(self.entropy.report());
+            }
+            "entropy_outage" => {
+                only(&args, &["available"])?;
+                let available = args
+                    .get("available")
+                    .and_then(Value::as_bool)
+                    .ok_or("malformed: available")?;
+                self.entropy.set_available(available)?;
+                return Ok(self.entropy.report());
+            }
+            _ => {}
         }
         let Some(world) = self.world.as_mut() else {
             return Err("uninitialized: no lab group".into());
@@ -176,7 +205,7 @@ impl Lab<'_> {
         let root = text(args, "root")?;
         std::fs::create_dir_all(self.dir)
             .map_err(|err| format!("malformed: lab directory: {err}"))?;
-        let root_provider = Provider::default();
+        let root_provider = self.entropy.provider();
         let identity = ClientIdentity::generate(root_provider.rand())?;
         let signer = identity.signer().clone();
         let pending = Adapter::begin_genesis(
@@ -184,7 +213,7 @@ impl Lab<'_> {
             &group,
             &root,
             identity.public_key(),
-            Provider::default(),
+            self.entropy.provider(),
             LabClock,
         )?;
         let apf_public = pending.apf_public_key().to_vec();
@@ -215,6 +244,7 @@ impl Lab<'_> {
             },
         );
         self.world = Some(World {
+            entropy: self.entropy.clone(),
             adapter,
             group: group.clone(),
             root: root.clone(),
@@ -259,11 +289,13 @@ enum Attempt {
 }
 
 struct World {
+    /// The selected entropy source for new providers and identities.
+    entropy: LabEntropy,
     adapter: Adapter<Provider, LabClock>,
     group: String,
     root: String,
     apf_public: Vec<u8>,
-    /// Verification and fresh rekey identities; OS-seeded.
+    /// Signature verification only; never used to generate keys.
     crypto: RustCrypto,
     actors: BTreeMap<String, Actor>,
     queue: Vec<Queued>,
@@ -358,7 +390,7 @@ impl World {
         only(args, &["subject", "rights"])?;
         let subject = text(args, "subject")?;
         let rights = texts(args, "rights")?;
-        let provider = Provider::default();
+        let provider = self.entropy.provider();
         let identity = ClientIdentity::generate(provider.rand())?;
         let body = json!({
             "command": "delegate", "subject": subject, "rights": rights,
@@ -684,7 +716,7 @@ impl World {
             .collect();
         rights.push((right, generation));
         rights.sort();
-        let new_identity = ClientIdentity::generate(&self.crypto)?;
+        let new_identity = ClientIdentity::generate(&self.entropy.rand())?;
         let new_signer = new_identity.signer().clone();
         let staged = self
             .endpoint_mut(&subject)?

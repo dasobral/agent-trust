@@ -1,0 +1,207 @@
+# C-40 lab entropy selection: green (2026-10-24), openmls-qrand pinned at fe9ea13
+
+## New suites
+$ cargo test --locked --test lab_entropy
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-15e90ec39fb16778)
+
+running 12 tests
+test ambiguous_or_incomplete_environments_are_rejected ... ok
+test environment_selects_the_source ... ok
+test file_paths_resolve_relative_to_the_file_and_auth_names_a_variable ... ok
+test config_file_is_loaded_from_the_environment ... ok
+test file_selects_each_source ... ok
+test invalid_files_are_rejected ... ok
+test os_source_reports_os_and_has_no_outage_control ... ok
+test mock_outage_fails_closed_and_recovers ... ok
+test mock_source_drives_every_lab_draw_from_one_seeded_stream ... ok
+test qrng_secret_is_read_only_from_the_named_variable ... ok
+test unreachable_qrng_fails_closed_without_naming_the_endpoint ... ok
+test qrng_outage_mid_session_fails_closed_without_naming_the_endpoint ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s
+
+exit=0
+
+$ python3 -m unittest harness.test_entropy_lab -v
+test_config_file_selects_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source) ... ok
+test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... ok
+test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) ... ok
+test_mock_outage_mid_session_fails_closed_and_recovers (harness.test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers) ... ok
+test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (harness.test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace) ... ok
+test_no_selection_uses_the_os_source (harness.test_entropy_lab.EntropyLabTests.test_no_selection_uses_the_os_source) ... ok
+test_outage_control_needs_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_outage_control_needs_the_mock_source) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 14.006s
+
+OK
+exit=0
+
+## Mutation check (reverted afterwards)
+# Mutation: rekey identity drawn from World.crypto (OS-seeded) instead of the selected source
+test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... FAIL
+AssertionError: Lists differ: [('al[315 chars]l', '935e552716fc5a7f7611dfaac5b393405fe8191d6[21 chars]ff')] != [('al[315 chars]l', 'b2fdbf25619b5e35bb776e9e7a68721cec018544c[21 chars]c7')]
+Ran 1 test in 4.559s
+FAILED (failures=1)
+exit=1
+
+## Standard gates after the change
+$ cargo build --locked   -> exit=0
+$ cargo test --locked --all-targets
+     Running unittests src/lib.rs (target/debug/deps/agent_trust-7bb4aebeb238f73a)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (target/debug/deps/agent_trust-3a9d2003d8ee404d)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/adapter_admission.rs (target/debug/deps/adapter_admission-c60a0a8ebcca6781)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+     Running tests/adapter_compat.rs (target/debug/deps/adapter_compat-d7b689deb1f1f6ab)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+     Running tests/adapter_entropy.rs (target/debug/deps/adapter_entropy-98d8881874ba16bb)
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.80s
+     Running tests/adapter_identity.rs (target/debug/deps/adapter_identity-a183c87c17bd2188)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running tests/adapter_recovery.rs (target/debug/deps/adapter_recovery-f0832bb030cc6e36)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.26s
+     Running tests/adapter_rekey.rs (target/debug/deps/adapter_rekey-a964a1d8fedd928b)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+     Running tests/adapter_release.rs (target/debug/deps/adapter_release-e6df42819cbd450c)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.56s
+     Running tests/adapter_repair.rs (target/debug/deps/adapter_repair-91db8b9b755e16a5)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.28s
+     Running tests/adapter_repair_stacked.rs (target/debug/deps/adapter_repair_stacked-98beeff2749b6ced)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.81s
+     Running tests/authority_adversarial.rs (target/debug/deps/authority_adversarial-41b0ea6963947435)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/authority_contract.rs (target/debug/deps/authority_contract-7d2cdc9d9a36799c)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/authority_corrections.rs (target/debug/deps/authority_corrections-a85e00fbfa623385)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+     Running tests/authority_gap_contract.rs (target/debug/deps/authority_gap_contract-bdbd0f2e628ee942)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/authority_invocation_resources.rs (target/debug/deps/authority_invocation_resources-07412d0770ba945a)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+     Running tests/authority_rekey_contract.rs (target/debug/deps/authority_rekey_contract-6b101495987fe92d)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running tests/authority_resource_contract.rs (target/debug/deps/authority_resource_contract-428145c979904105)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+     Running tests/authority_subject_status.rs (target/debug/deps/authority_subject_status-25484b75fccc2049)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests/confused_deputy_red.rs (target/debug/deps/confused_deputy_red-f5f4ed9b7e3962d6)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-15e90ec39fb16778)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s
+     Running tests/mls_contract.rs (target/debug/deps/mls_contract-938484bcd5fb6b29)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+exit=0
+
+$ python3 -m unittest discover -s harness -v
+test_invalid_args_and_store_failure_are_nonzero_with_usage (test_cli.AuthorityCliTests.test_invalid_args_and_store_failure_are_nonzero_with_usage) ... ok
+test_malformed_json_returns_error_and_processing_continues (test_cli.AuthorityCliTests.test_malformed_json_returns_error_and_processing_continues) ... ok
+test_mls_demo_reports_the_required_experiment_summary (test_cli.AuthorityCliTests.test_mls_demo_reports_the_required_experiment_summary) ... ok
+test_replay_consume_round_trip_and_checkpoint_fields (test_cli.AuthorityCliTests.test_replay_consume_round_trip_and_checkpoint_fields) ... ok
+test_state_persists_across_process_reopening (test_cli.AuthorityCliTests.test_state_persists_across_process_reopening) ... ok
+test_provenance_changes_write_decision (test_confused_deputy_cli.ConfusedDeputyCliTest.test_provenance_changes_write_decision) ... ok
+test_config_file_selects_the_mock_source (test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source) ... ok
+test_every_identity_key_is_a_function_of_the_mock_seed (test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... ok
+test_invalid_or_unreachable_sources_fail_before_any_request (test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) ... ok
+test_mock_outage_mid_session_fails_closed_and_recovers (test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers) ... ok
+test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace) ... ok
+test_no_selection_uses_the_os_source (test_entropy_lab.EntropyLabTests.test_no_selection_uses_the_os_source) ... ok
+test_outage_control_needs_the_mock_source (test_entropy_lab.EntropyLabTests.test_outage_control_needs_the_mock_source) ... ok
+test_broken_controls_are_rejected_by_oracle (test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+test_process_restart_preserves_frontier_and_fence (test_integration.LabRestartTests.test_process_restart_preserves_frontier_and_fence) ... ok
+test_seeded_schedules_reorder_drop_and_duplicate (test_integration.SeededScheduleTests.test_seeded_schedules_reorder_drop_and_duplicate) ... ok
+test_verify_runs_adapter_gates_and_fails_closed (test_integration.VerifierGateTests.test_verify_runs_adapter_gates_and_fails_closed) ... ok
+test_abandon_is_terminal_and_idempotent (test_oracle.TraceContractTests.test_abandon_is_terminal_and_idempotent) ... ok
+test_allow_requires_higher_new_generation_and_admit_reuses_active_generation (test_oracle.TraceContractTests.test_allow_requires_higher_new_generation_and_admit_reuses_active_generation) ... ok
+test_crash_requires_exact_recovery_before_consume (test_oracle.TraceContractTests.test_crash_requires_exact_recovery_before_consume) ... ok
+test_denied_extra_cover_support_is_unsound (test_oracle.TraceContractTests.test_denied_extra_cover_support_is_unsound) ... ok
+test_duplicate_event_id_is_rejected (test_oracle.TraceContractTests.test_duplicate_event_id_is_rejected) ... ok
+test_duplicate_operation_allocation_is_rejected (test_oracle.TraceContractTests.test_duplicate_operation_allocation_is_rejected) ... ok
+test_emit_on_a_superseded_branch_is_rejected (test_oracle.TraceContractTests.test_emit_on_a_superseded_branch_is_rejected) ... ok
+test_empty_malformed_and_unknown_traces_are_rejected (test_oracle.TraceContractTests.test_empty_malformed_and_unknown_traces_are_rejected) ... ok
+test_good_nonvacuous_write_trace_and_identical_repeat_emit (test_oracle.TraceContractTests.test_good_nonvacuous_write_trace_and_identical_repeat_emit) ... ok
+test_good_read_release_requires_reader_cover (test_oracle.TraceContractTests.test_good_read_release_requires_reader_cover) ... ok
+test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives (test_oracle.TraceContractTests.test_joint_support_with_denied_member_is_unsound_despite_valid_alternatives) ... ok
+test_malformed_boolean_and_numeric_frontier_are_rejected (test_oracle.TraceContractTests.test_malformed_boolean_and_numeric_frontier_are_rejected) ... ok
+test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny (test_oracle.TraceContractTests.test_pre_cut_historical_release_can_emit_but_not_deliver_after_deny) ... ok
+test_read_cover_omitting_roster_member_is_unsound (test_oracle.TraceContractTests.test_read_cover_omitting_roster_member_is_unsound) ... ok
+test_read_deny_fences_fresh_release_and_blocks_delivery (test_oracle.TraceContractTests.test_read_deny_fences_fresh_release_and_blocks_delivery) ... ok
+test_release_digest_and_persisted_bytes_are_frozen (test_oracle.TraceContractTests.test_release_digest_and_persisted_bytes_are_frozen) ... ok
+test_repair_requires_complete_removals_and_cannot_reopen_without_path (test_oracle.TraceContractTests.test_repair_requires_complete_removals_and_cannot_reopen_without_path) ... ok
+test_repair_then_recovery_reopens_for_continuing_reader (test_oracle.TraceContractTests.test_repair_then_recovery_reopens_for_continuing_reader) ... ok
+test_replay_of_consumed_cell_is_rejected (test_oracle.TraceContractTests.test_replay_of_consumed_cell_is_rejected) ... ok
+test_stale_recovery_is_rejected (test_oracle.TraceContractTests.test_stale_recovery_is_rejected) ... ok
+test_repair_cannot_remove_reallowed_pending_reader (test_oracle_repair.RepairValidationTests.test_repair_cannot_remove_reallowed_pending_reader) ... ok
+test_admission_by_non_admin_is_unauthorized (test_oracle_v2.BrokenControlV2Tests.test_admission_by_non_admin_is_unauthorized) ... ok
+test_admission_on_a_superseded_parent_is_stale_frontier (test_oracle_v2.BrokenControlV2Tests.test_admission_on_a_superseded_parent_is_stale_frontier) ... ok
+test_admission_reusing_a_key_package_is_stale_key (test_oracle_v2.BrokenControlV2Tests.test_admission_reusing_a_key_package_is_stale_key) ... ok
+test_admission_reusing_a_seen_branch_is_invalid_transition (test_oracle_v2.BrokenControlV2Tests.test_admission_reusing_a_seen_branch_is_invalid_transition) ... ok
+test_admission_while_fenced_is_read_fenced (test_oracle_v2.BrokenControlV2Tests.test_admission_while_fenced_is_read_fenced) ... ok
+test_admission_with_another_subjects_key_is_stale_key (test_oracle_v2.BrokenControlV2Tests.test_admission_with_another_subjects_key_is_stale_key) ... ok
+test_admission_with_stale_read_generation_is_invalid_generation (test_oracle_v2.BrokenControlV2Tests.test_admission_with_stale_read_generation_is_invalid_generation) ... ok
+test_admission_without_epoch_advance_is_stale_frontier (test_oracle_v2.BrokenControlV2Tests.test_admission_without_epoch_advance_is_stale_frontier) ... ok
+test_api_only_removal_repair_open_without_staged_repair_is_rejected (test_oracle_v2.BrokenControlV2Tests.test_api_only_removal_repair_open_without_staged_repair_is_rejected) ... ok
+test_confirming_or_opening_a_superseded_branch_is_invalid_repair (test_oracle_v2.BrokenControlV2Tests.test_confirming_or_opening_a_superseded_branch_is_invalid_repair) ... ok
+test_consume_of_release_from_before_rekey_frontier_is_stale (test_oracle_v2.BrokenControlV2Tests.test_consume_of_release_from_before_rekey_frontier_is_stale) ... ok
+test_fresh_release_after_actor_write_denial_is_unauthorized (test_oracle_v2.BrokenControlV2Tests.test_fresh_release_after_actor_write_denial_is_unauthorized) ... ok
+test_fresh_release_after_read_denial_is_read_fenced (test_oracle_v2.BrokenControlV2Tests.test_fresh_release_after_read_denial_is_read_fenced) ... ok
+test_mismatched_confirmation_hash_is_binding_mismatch (test_oracle_v2.BrokenControlV2Tests.test_mismatched_confirmation_hash_is_binding_mismatch) ... ok
+test_opening_on_superseded_branch_confirmations_is_unconfirmed (test_oracle_v2.BrokenControlV2Tests.test_opening_on_superseded_branch_confirmations_is_unconfirmed) ... ok
+test_re_encryption_under_one_operation_is_binding_mismatch (test_oracle_v2.BrokenControlV2Tests.test_re_encryption_under_one_operation_is_binding_mismatch) ... ok
+test_rekey_reusing_a_retired_key_is_stale_key (test_oracle_v2.BrokenControlV2Tests.test_rekey_reusing_a_retired_key_is_stale_key) ... ok
+test_rekey_reusing_another_subjects_key_is_stale_key (test_oracle_v2.BrokenControlV2Tests.test_rekey_reusing_another_subjects_key_is_stale_key) ... ok
+test_rekey_reusing_the_subjects_current_key_is_stale_key (test_oracle_v2.BrokenControlV2Tests.test_rekey_reusing_the_subjects_current_key_is_stale_key) ... ok
+test_rekey_while_fenced_or_repair_pending_is_read_fenced (test_oracle_v2.BrokenControlV2Tests.test_rekey_while_fenced_or_repair_pending_is_read_fenced) ... ok
+test_rekey_with_wrong_generation_or_read_right_is_rejected (test_oracle_v2.BrokenControlV2Tests.test_rekey_with_wrong_generation_or_read_right_is_rejected) ... ok
+test_release_and_consume_during_pending_repair_are_read_fenced (test_oracle_v2.BrokenControlV2Tests.test_release_and_consume_during_pending_repair_are_read_fenced) ... ok
+test_release_at_policy_revision_before_denial_is_stale (test_oracle_v2.BrokenControlV2Tests.test_release_at_policy_revision_before_denial_is_stale) ... ok
+test_reopening_with_committer_confirmation_only_is_unconfirmed (test_oracle_v2.BrokenControlV2Tests.test_reopening_with_committer_confirmation_only_is_unconfirmed) ... ok
+test_reopening_with_non_committer_confirmation_only_is_unconfirmed (test_oracle_v2.BrokenControlV2Tests.test_reopening_with_non_committer_confirmation_only_is_unconfirmed) ... ok
+test_reopening_without_any_confirmation_is_unconfirmed (test_oracle_v2.BrokenControlV2Tests.test_reopening_without_any_confirmation_is_unconfirmed) ... ok
+test_repair_omitting_a_revoked_reader_is_rejected (test_oracle_v2.BrokenControlV2Tests.test_repair_omitting_a_revoked_reader_is_rejected) ... ok
+test_repair_removing_a_continuing_reader_is_rejected (test_oracle_v2.BrokenControlV2Tests.test_repair_removing_a_continuing_reader_is_rejected) ... ok
+test_single_evidence_with_two_continuing_members_is_unconfirmed (test_oracle_v2.BrokenControlV2Tests.test_single_evidence_with_two_continuing_members_is_unconfirmed) ... ok
+test_spent_cell_replay_is_rejected (test_oracle_v2.BrokenControlV2Tests.test_spent_cell_replay_is_rejected) ... ok
+test_stacked_repair_without_new_removals_is_invalid_repair (test_oracle_v2.BrokenControlV2Tests.test_stacked_repair_without_new_removals_is_invalid_repair) ... ok
+test_v2_release_requires_writer_and_every_reader_singleton (test_oracle_v2.BrokenControlV2Tests.test_v2_release_requires_writer_and_every_reader_singleton) ... ok
+test_end_to_end_admit_release_repair_confirm_open_rekey_is_clean (test_oracle_v2.GoodV2TraceTests.test_end_to_end_admit_release_repair_confirm_open_rekey_is_clean) ... ok
+test_identical_confirmation_resend_is_idempotent (test_oracle_v2.GoodV2TraceTests.test_identical_confirmation_resend_is_idempotent) ... ok
+test_removed_reader_rejoins_with_new_generation_same_key_and_fresh_key_package (test_oracle_v2.GoodV2TraceTests.test_removed_reader_rejoins_with_new_generation_same_key_and_fresh_key_package) ... ok
+test_single_continuing_member_opens_with_single_evidence (test_oracle_v2.GoodV2TraceTests.test_single_continuing_member_opens_with_single_evidence) ... ok
+test_stacked_repair_confirms_only_latest_branch_and_reopens (test_oracle_v2.GoodV2TraceTests.test_stacked_repair_confirms_only_latest_branch_and_reopens) ... ok
+test_v2_init_alone_is_clean (test_oracle_v2.GoodV2TraceTests.test_v2_init_alone_is_clean) ... ok
+test_allow_to_current_member_is_invalid_transition (test_oracle_v2.SchemaV2Tests.test_allow_to_current_member_is_invalid_transition) ... ok
+test_evidence_booleans_and_legacy_fields_are_malformed_in_v2 (test_oracle_v2.SchemaV2Tests.test_evidence_booleans_and_legacy_fields_are_malformed_in_v2) ... ok
+test_invalid_version_values_are_malformed (test_oracle_v2.SchemaV2Tests.test_invalid_version_values_are_malformed) ... ok
+test_unknown_evidence_label_is_malformed (test_oracle_v2.SchemaV2Tests.test_unknown_evidence_label_is_malformed) ... ok
+test_v1_boolean_repair_is_malformed_in_v2 (test_oracle_v2.SchemaV2Tests.test_v1_boolean_repair_is_malformed_in_v2) ... ok
+test_v2_init_requires_keys_for_exactly_the_roster (test_oracle_v2.SchemaV2Tests.test_v2_init_requires_keys_for_exactly_the_roster) ... ok
+test_v2_init_with_v1_revision_field_is_malformed (test_oracle_v2.SchemaV2Tests.test_v2_init_with_v1_revision_field_is_malformed) ... ok
+test_empty_trace_is_still_not_initialized (test_oracle_v2.VersionOneRegressionTests.test_empty_trace_is_still_not_initialized) ... ok
+test_v1_boolean_repair_and_abstract_admit_stay_valid (test_oracle_v2.VersionOneRegressionTests.test_v1_boolean_repair_and_abstract_admit_stay_valid) ... ok
+test_v1_good_write_trace_stays_clean (test_oracle_v2.VersionOneRegressionTests.test_v1_good_write_trace_stays_clean) ... ok
+test_v1_read_deny_fence_results_are_unchanged (test_oracle_v2.VersionOneRegressionTests.test_v1_read_deny_fence_results_are_unchanged) ... ok
+test_v1_repair_then_recovery_reopens (test_oracle_v2.VersionOneRegressionTests.test_v1_repair_then_recovery_reopens) ... ok
+test_v1_replay_and_rebinding_results_are_unchanged (test_oracle_v2.VersionOneRegressionTests.test_v1_replay_and_rebinding_results_are_unchanged) ... ok
+test_v1_trace_rejects_v2_only_events (test_oracle_v2.VersionOneRegressionTests.test_v1_trace_rejects_v2_only_events) ... ok
+test_adapter_never_calls_hidden_randomness_constructors (test_rand_inventory.RandInventoryTests.test_adapter_never_calls_hidden_randomness_constructors) ... ok
+test_each_forbidden_constructor_is_flagged_alone (test_rand_inventory.RandInventoryTests.test_each_forbidden_constructor_is_flagged_alone) ... ok
+test_legacy_lab_is_excluded_explicitly (test_rand_inventory.RandInventoryTests.test_legacy_lab_is_excluded_explicitly) ... ok
+test_scanner_flags_offending_lines_and_ignores_comments (test_rand_inventory.RandInventoryTests.test_scanner_flags_offending_lines_and_ignores_comments) ... ok
+test_cargo_gate_is_locked_and_covers_all_targets (test_verify.ClaimGateTests.test_cargo_gate_is_locked_and_covers_all_targets) ... ok
+test_every_harness_module_and_the_integration_harness_are_collected (test_verify.ClaimGateTests.test_every_harness_module_and_the_integration_harness_are_collected) ... ok
+test_full_lap_mls_is_true_only_when_every_gate_passes (test_verify.ClaimGateTests.test_full_lap_mls_is_true_only_when_every_gate_passes) ... ok
+test_skipped_or_absent_integration_controls_do_not_count (test_verify.ClaimGateTests.test_skipped_or_absent_integration_controls_do_not_count) ... ok
+test_both_nonempty_public_gates_pass (test_verify.VerificationEntrypointTests.test_both_nonempty_public_gates_pass) ... ok
+test_missing_cargo_is_an_explicit_unmet_gate (test_verify.VerificationEntrypointTests.test_missing_cargo_is_an_explicit_unmet_gate) ... ok
+test_python_gate_failure_stops_before_rust (test_verify.VerificationEntrypointTests.test_python_gate_failure_stops_before_rust) ... ok
+test_rust_gate_failure_is_not_reported_as_success (test_verify.VerificationEntrypointTests.test_rust_gate_failure_is_not_reported_as_success) ... ok
+test_zero_test_success_codes_fail_closed (test_verify.VerificationEntrypointTests.test_zero_test_success_codes_fail_closed) ... ok
+Ran 104 tests in 88.426s
+OK
+exit=0
+
+Note: scripts/verify.py was not run, so evidence/manifest.json is unchanged.

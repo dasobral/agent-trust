@@ -1,0 +1,533 @@
+# openmls-qrand fe9ea13 (branch feat/mock-entropy-backend): EntropyBackend seam and MockEntropy
+# Red: tests/mock_backend.rs against a MockEntropy stub (zeros, no outage, no metrics).
+$ cargo test --features mock --test mock_backend
+    Updating crates.io index
+     Locking 305 packages to latest compatible versions
+      Adding base64 v0.22.1 (available: v0.23.1)
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding reqwest v0.12.28 (available: v0.13.5)
+ Downloading crates ...
+  Downloaded cfg-if v1.0.5
+  Downloaded asn1-rs-impl v0.2.0
+  Downloaded asn1-rs-derive v0.6.0
+  Downloaded either v1.19.0
+  Downloaded data-encoding v2.11.1
+  Downloaded find-msvc-tools v0.1.15
+  Downloaded lazy_static v1.5.1
+  Downloaded deranged v0.5.9
+  Downloaded bit-vec v0.9.1
+  Downloaded ctutils v0.4.5
+  Downloaded der-parser v10.0.0
+  Downloaded asn1-rs v0.7.2
+  Downloaded icu_provider v2.4.0
+  Downloaded openmls_memory_storage v0.6.0
+  Downloaded openmls_serialization_helpers v0.1.0
+  Downloaded rusticata-macros v4.1.0
+  Downloaded icu_normalizer_data v2.4.0
+  Downloaded oid-registry v0.8.1
+  Downloaded num-integer v0.1.47
+  Downloaded openmls_rust_crypto v0.6.0
+  Downloaded pem v4.0.0
+  Downloaded openmls_basic_credential v0.6.0
+  Downloaded openmls_traits v0.6.0
+  Downloaded sha2 v0.11.1
+  Downloaded thiserror-impl v2.0.21
+  Downloaded icu_locale_core v2.4.0
+  Downloaded thiserror v2.0.21
+  Downloaded synstructure v0.13.2
+  Downloaded tinystr v0.8.5
+  Downloaded ml-kem v0.3.3
+  Downloaded zeroize v1.9.1
+  Downloaded x-wing v0.1.1
+  Downloaded icu_collections v2.4.0
+  Downloaded smallvec v1.16.4
+  Downloaded spki v0.8.1
+  Downloaded zerovec-derive v0.11.7
+  Downloaded yoke v0.8.4
+  Downloaded yasna v0.6.0
+  Downloaded minimal-lexical v0.2.1
+  Downloaded rcgen v0.14.10
+  Downloaded cc v1.10.0
+  Downloaded unicode-ident v1.0.27
+  Downloaded rustls-webpki v0.103.16
+  Downloaded nom v7.1.3
+  Downloaded num-bigint v0.4.8
+  Downloaded rand v0.10.3
+  Downloaded icu_properties v2.4.0
+  Downloaded x509-parser v0.18.1
+  Downloaded zerovec v0.11.9
+  Downloaded icu_properties_data v2.4.0
+  Downloaded serde_json v1.0.154
+  Downloaded webpki-roots v1.0.11
+  Downloaded syn v3.0.9
+  Downloaded zerocopy v0.8.63
+  Downloaded rustls v0.23.46
+  Downloaded icu_normalizer v2.4.0
+  Downloaded openmls v0.9.2
+  Downloaded libc v0.2.191
+  Downloaded tokio v1.54.1
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling version_check v0.9.5
+   Compiling rand_core v0.10.1
+   Compiling const-oid v0.9.6
+   Compiling getrandom v0.4.3
+   Compiling cmov v0.5.4
+   Compiling const-oid v0.10.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling cpufeatures v0.2.17
+   Compiling serde_core v1.0.229
+   Compiling base64ct v1.8.3
+   Compiling semver v1.0.28
+   Compiling itoa v1.0.18
+   Compiling serde v1.0.229
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling futures-core v0.3.34
+   Compiling memchr v2.8.3
+   Compiling base16ct v0.2.0
+   Compiling autocfg v1.5.1
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling smallvec v1.16.4
+   Compiling icu_normalizer_data v2.4.0
+   Compiling ctutils v0.4.5
+   Compiling utf8_iter v1.0.4
+   Compiling icu_properties_data v2.4.0
+   Compiling generic-array v0.14.7
+   Compiling rustc_version v0.4.1
+   Compiling pem-rfc7468 v0.7.0
+   Compiling cc v1.10.0
+   Compiling keccak v0.2.2
+   Compiling untrusted v0.9.0
+   Compiling once_cell v1.21.4
+   Compiling futures-sink v0.3.34
+   Compiling hax-lib v0.3.7
+   Compiling sponge-cursor v0.1.0
+   Compiling percent-encoding v2.3.2
+   Compiling futures-io v0.3.34
+   Compiling log v0.4.34
+   Compiling slab v0.4.12
+   Compiling opaque-debug v0.3.1
+   Compiling zmij v1.0.23
+   Compiling thiserror v2.0.21
+   Compiling zerocopy v0.8.63
+   Compiling crossbeam-utils v0.8.23
+   Compiling httparse v1.10.1
+   Compiling num-traits v0.2.19
+   Compiling futures-task v0.3.34
+   Compiling curve25519-dalek v4.1.3
+   Compiling curve25519-dalek v5.0.0
+   Compiling serde_json v1.0.154
+   Compiling crossbeam-epoch v0.9.21
+   Compiling base64 v0.23.1
+   Compiling tower-service v0.3.3
+   Compiling try-lock v0.2.5
+   Compiling rustls v0.23.46
+   Compiling futures-util v0.3.34
+   Compiling cpufeatures v0.3.1
+   Compiling tracing-core v0.1.36
+   Compiling http v1.5.0
+   Compiling want v0.3.2
+   Compiling form_urlencoded v1.2.2
+   Compiling libcrux-intrinsics v0.0.8
+   Compiling atomic-waker v1.1.2
+   Compiling crossbeam-deque v0.8.8
+   Compiling futures-channel v0.3.34
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling ipnet v2.12.2
+   Compiling rayon-core v1.13.0
+   Compiling libcrux-sha3 v0.0.10
+   Compiling powerfmt v0.2.1
+   Compiling num-conv v0.2.2
+   Compiling deranged v0.5.9
+   Compiling time-core v0.1.9
+   Compiling ryu v1.0.23
+   Compiling bitflags v2.13.2
+   Compiling base64 v0.22.1
+   Compiling either v1.19.0
+   Compiling tracing v0.1.44
+   Compiling pem v4.0.0
+   Compiling hybrid-array v0.4.15
+   Compiling chunked_transfer v1.5.0
+   Compiling ascii v1.1.0
+   Compiling syn v2.0.119
+   Compiling syn v3.0.9
+   Compiling httpdate v1.0.3
+   Compiling tiny_http v0.12.0
+   Compiling ring v0.17.14
+   Compiling http-body v1.1.0
+   Compiling getrandom v0.2.17
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.4
+   Compiling libcrux-platform v0.0.3
+   Compiling http-body-util v0.1.5
+   Compiling rand_core v0.6.4
+   Compiling rand v0.10.3
+   Compiling ff v0.13.1
+   Compiling tokio v1.54.1
+   Compiling group v0.13.0
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling module-lattice v0.2.3
+   Compiling rayon v1.12.0
+   Compiling time v0.3.55
+   Compiling serde_bytes v0.11.19
+   Compiling digest v0.11.3
+   Compiling kem v0.3.0
+   Compiling shake v0.1.0
+   Compiling sha3 v0.12.0
+   Compiling signature v3.0.0
+   Compiling hmac v0.13.0
+   Compiling sha2 v0.11.1
+   Compiling yasna v0.6.0
+   Compiling hkdf v0.13.0
+   Compiling ml-kem v0.3.3
+   Compiling synstructure v0.14.0
+   Compiling zerovec-derive v0.11.7
+   Compiling displaydoc v0.2.7
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.4
+   Compiling zerotrie v0.2.5
+   Compiling zerovec v0.11.9
+   Compiling ppv-lite86 v0.2.21
+   Compiling tinystr v0.8.5
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.4.0
+   Compiling icu_locale_core v2.4.0
+   Compiling rand_chacha v0.10.0
+   Compiling rand_chacha v0.3.1
+   Compiling zeroize_derive v1.5.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling tls_codec_derive v0.5.0
+   Compiling hax-lib-macros v0.3.7
+   Compiling openmls_serialization_helpers v0.1.0
+   Compiling zeroize v1.9.1
+   Compiling libcrux-secrets v0.0.6
+   Compiling der v0.7.10
+   Compiling rustls-pki-types v1.15.1
+   Compiling der v0.8.2
+   Compiling hpke-rs-crypto v0.7.0
+   Compiling libcrux-traits v0.0.8
+   Compiling hyper v1.12.0
+   Compiling tower v0.5.3
+   Compiling icu_provider v2.4.0
+   Compiling rustls-webpki v0.103.16
+   Compiling webpki-roots v1.0.11
+   Compiling rcgen v0.14.10
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling crypto-bigint v0.5.5
+   Compiling inout v0.1.4
+   Compiling x25519-dalek v3.0.0
+   Compiling icu_normalizer v2.4.0
+   Compiling icu_properties v2.4.0
+   Compiling universal-hash v0.5.1
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling aead v0.5.2
+   Compiling x-wing v0.1.1
+   Compiling polyval v0.6.2
+   Compiling poly1305 v0.8.0
+   Compiling tls_codec v0.5.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling hmac v0.12.1
+   Compiling signature v2.2.0
+   Compiling sha2 v0.10.9
+   Compiling ghash v0.5.1
+   Compiling aes v0.8.4
+   Compiling ctr v0.9.2
+   Compiling chacha20 v0.9.1
+   Compiling ed25519 v2.2.3
+   Compiling hkdf v0.12.4
+   Compiling rfc6979 v0.4.0
+   Compiling hyper-util v0.1.21
+   Compiling chacha20poly1305 v0.10.1
+   Compiling spki v0.7.3
+   Compiling spki v0.8.1
+   Compiling pkcs8 v0.10.2
+   Compiling pkcs8 v0.11.0
+   Compiling aes-gcm v0.10.3
+   Compiling sec1 v0.7.3
+   Compiling ml-dsa v0.1.1
+   Compiling openmls_traits v0.6.0
+   Compiling hpke-rs v0.7.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling x25519-dalek v2.0.1
+   Compiling elliptic-curve v0.13.8
+   Compiling idna_adapter v1.2.2
+   Compiling openmls_memory_storage v0.6.0
+   Compiling openmls v0.9.2
+   Compiling idna v1.1.0
+   Compiling primeorder v0.13.6
+   Compiling ecdsa v0.16.9
+   Compiling k256 v0.13.4
+   Compiling url v2.5.8
+   Compiling p384 v0.13.1
+   Compiling p256 v0.13.2
+   Compiling tower-http v0.6.11
+   Compiling hpke-rs-rust-crypto v0.7.0
+   Compiling openmls_basic_credential v0.6.0
+   Compiling openmls_rust_crypto v0.6.0
+   Compiling tokio-rustls v0.26.6
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.12.28
+   Compiling openmls_qrand v0.1.0 (<openmls-qrand>)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.45s
+     Running tests/mock_backend.rs (target/debug/deps/mock_backend-e963dcc380522c1d)
+
+running 5 tests
+test dyn_backend_selects_mock_or_client_at_run_time ... FAILED
+test mock_outage_fails_closed_without_substitute_bytes_and_recovers ... FAILED
+test mock_metrics_count_requests_and_bytes_like_the_client ... FAILED
+test mock_stream_is_deterministic_per_seed_and_does_not_repeat ... FAILED
+test mls_group_new_draws_from_the_mock_backend_and_fails_closed_without_it ... FAILED
+
+failures:
+
+---- dyn_backend_selects_mock_or_client_at_run_time stdout ----
+
+thread 'dyn_backend_selects_mock_or_client_at_run_time' (51132) panicked at tests/mock_backend.rs:105:5:
+assertion `left == right` failed
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- mock_outage_fails_closed_without_substitute_bytes_and_recovers stdout ----
+
+thread 'mock_outage_fails_closed_without_substitute_bytes_and_recovers' (51135) panicked at tests/mock_backend.rs:56:5:
+assertion failed: matches!(rand.random_array::<32>(), Err(QrngError::EntropyUnavailable))
+
+---- mock_metrics_count_requests_and_bytes_like_the_client stdout ----
+
+thread 'mock_metrics_count_requests_and_bytes_like_the_client' (51134) panicked at tests/mock_backend.rs:85:5:
+assertion `left == right` failed: an empty draw is not a request
+  left: 0
+ right: 2
+
+---- mock_stream_is_deterministic_per_seed_and_does_not_repeat stdout ----
+
+thread 'mock_stream_is_deterministic_per_seed_and_does_not_repeat' (51136) panicked at tests/mock_backend.rs:39:5:
+assertion `left != right` failed: different seeds must give different streams
+  left: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ right: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+---- mls_group_new_draws_from_the_mock_backend_and_fails_closed_without_it stdout ----
+
+thread 'mls_group_new_draws_from_the_mock_backend_and_fails_closed_without_it' (51133) panicked at tests/mock_backend.rs:140:5:
+MlsGroup::new must draw through the mock backend
+
+
+failures:
+    dyn_backend_selects_mock_or_client_at_run_time
+    mls_group_new_draws_from_the_mock_backend_and_fails_closed_without_it
+    mock_metrics_count_requests_and_bytes_like_the_client
+    mock_outage_fails_closed_without_substitute_bytes_and_recovers
+    mock_stream_is_deterministic_per_seed_and_does_not_repeat
+
+test result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test mock_backend`
+exit=101
+
+# Correction before green: OpenMLS 0.9.2 panics in GroupId::random ('Not enough randomness') when rand fails.
+# The fail-closed group assertion now accepts Err or that panic, never a group; it also requires a counted failure.
+
+$ cargo test --features mock   (all suites)
+   Compiling openmls_qrand v0.1.0 (<openmls-qrand>)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+     Running unittests src/lib.rs (target/debug/deps/openmls_qrand-c01f3b0e045dce5d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/config.rs (target/debug/deps/config-d8d4f2fedf16f514)
+
+running 14 tests
+test accepts_disabled_health_poll_interval ... ok
+test rejects_url_with_fragment ... ok
+test plain_http_accepts_http_url ... ok
+test plain_http_rejects_https_url ... ok
+test rejects_url_with_query_string ... ok
+test rejects_zero_request_timeout ... ok
+test rejects_zero_health_poll_interval ... ok
+test tls_accepts_https_url_without_custom_ca ... ok
+test tls_rejects_http_url ... ok
+test tls_rejects_missing_ca_cert_file ... ok
+test tls_rejects_non_pem_ca_cert_file ... ok
+test mutual_tls_rejects_missing_client_key_file ... ok
+test mutual_tls_rejects_http_url ... ok
+test mutual_tls_accepts_https_url_with_readable_pem_files ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/health_monitor.rs (target/debug/deps/health_monitor-8a0c43be93dbb775)
+
+running 15 tests
+test unsupported_health_capability_returns_health_unsupported ... ok
+test failed_entropy_increments_failure_counter ... ok
+test zero_interval_rejected_as_invalid_config ... ok
+test successful_entropy_increments_request_and_byte_counters ... ok
+test successful_health_response_stored_in_snapshot ... ok
+test drop_shuts_thread_down_promptly ... ok
+test immediate_first_poll_populates_snapshot_without_waiting_full_interval ... ok
+test unknown_extension_preserved_in_snapshot ... ok
+test health_poll_increments_health_polls_total ... ok
+test test_result_supports_numeric_and_string_json ... ok
+test failed_poll_increments_consecutive_failures ... ok
+test failed_health_poll_increments_health_poll_failures_total ... ok
+test failed_poll_retains_last_successful_report ... ok
+test repeated_poll_happens_after_interval ... ok
+test later_success_resets_consecutive_failures ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/live_ec_mls.rs (target/debug/deps/live_ec_mls-0279aca5af51348d)
+
+running 3 tests
+test live_connect_and_fetch_entropy ... ignored, requires a live Entropy Core (QRNG_LIVE_BASE_URL)
+test live_mls_single_member_group ... ignored, requires a live Entropy Core (QRNG_LIVE_BASE_URL)
+test live_mls_two_party_group_and_message ... ignored, requires a live Entropy Core (QRNG_LIVE_BASE_URL)
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mock_backend.rs (target/debug/deps/mock_backend-e963dcc380522c1d)
+
+running 5 tests
+test dyn_backend_selects_mock_or_client_at_run_time ... ok
+test mock_outage_fails_closed_without_substitute_bytes_and_recovers ... ok
+test mock_metrics_count_requests_and_bytes_like_the_client ... ok
+test mock_stream_is_deterministic_per_seed_and_does_not_repeat ... ok
+test mls_group_new_draws_from_the_mock_backend_and_fails_closed_without_it ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/openmls_integration.rs (target/debug/deps/openmls_integration-88e3684c2aed2a85)
+
+running 1 test
+test mls_group_new_invokes_qrng_entropy ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/qrng_api.rs (target/debug/deps/qrng_api-99a72823f95423dc)
+
+running 47 tests
+test api_auth_bearer_debug_does_not_contain_token ... ok
+test api_auth_x_api_key_debug_does_not_contain_key ... ok
+test connect_accepts_configured_supported_entropy_type ... ok
+test connect_defaults_missing_min_block_size_to_one ... ok
+test connect_defaults_missing_min_block_count_to_one ... ok
+test connect_accepts_valid_capabilities ... ok
+test connect_maps_http_500_to_http_status ... ok
+test connect_rejects_impossible_min_max_block_size ... ok
+test connect_rejects_missing_max_block_count ... ok
+test connect_accepts_entropy_core_capabilities ... ok
+test connect_joins_base_url_path_prefix_to_capabilities_path ... ok
+test connect_rejects_missing_max_block_size ... ok
+test connect_ignores_unknown_json_fields ... ok
+test connect_rejects_impossible_min_max_block_count ... ok
+test fetch_entropy_decoded_block_shorter_than_requested_rejected ... ok
+test connect_rejects_malformed_json_as_protocol ... ok
+test fetch_entropy_includes_entropy_type_when_configured ... ok
+test fetch_entropy_http_500_maps_to_http_status ... ok
+test fetch_health_parses_entropy_core_response ... ok
+test fetch_health_parses_successful_response ... ok
+test fetch_health_preserves_unknown_extensions ... ok
+test fetch_health_sends_get_to_healthtest_path ... ok
+test fetch_health_test_result_supports_numeric_and_string_json ... ok
+test fetch_health_with_api_auth_bearer_sets_authorization_header ... ok
+test fetch_entropy_decoded_block_longer_than_requested_rejected ... ok
+test connect_rejects_unsupported_advertised_entropy_type ... ok
+test connect_sends_exactly_one_get_to_capabilities_path ... ok
+test connect_with_api_auth_bearer_sets_authorization_header ... ok
+test connect_with_api_auth_x_api_key_sets_x_api_key_header ... ok
+test fetch_entropy_http_422_maps_to_invalid_request ... ok
+test fetch_entropy_remainder_smaller_than_min_fetches_min_and_discards_tail ... ok
+test fetch_entropy_empty_entropy_array_rejected ... ok
+test fetch_entropy_exact_single_block ... ok
+test fetch_entropy_invalid_base64_rejected ... ok
+test fetch_entropy_malformed_json_rejected_as_protocol ... ok
+test fetch_entropy_parses_entropy_core_open_api_response ... ok
+test fetch_entropy_bytes_never_appear_in_error_text ... ok
+test fetch_entropy_http_503_maps_to_entropy_unavailable ... ok
+test connect_with_api_auth_none_sends_no_authorization_or_x_api_key_header ... ok
+test fetch_entropy_multiple_entropy_blocks_rejected ... ok
+test fetch_health_accepts_timestamp_alias_on_result ... ok
+test fetch_entropy_omits_entropy_type_when_not_configured ... ok
+test fetch_health_joins_base_url_path_prefix_to_healthtest_path ... ok
+test fetch_entropy_larger_than_max_block_size_sends_multiple_posts ... ok
+test fetch_entropy_zero_performs_no_request ... ok
+test fetch_health_http_503_maps_to_health_unavailable ... ok
+test fetch_health_malformed_json_rejected_as_protocol ... ok
+
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/rand_contract.rs (target/debug/deps/rand_contract-a8581496e9a6a0c3)
+
+running 8 tests
+test qrng_openmls_provider_constructs_with_rustcrypto_and_memory_storage ... ok
+test qrng_http_503_propagates_as_qrng_error ... ok
+test random_vec_64_returns_mock_qrng_bytes ... ok
+test provider_rand_random_array_32_returns_mock_qrng_bytes ... ok
+test qrng_failure_does_not_fall_back_to_os_rng ... ok
+test random_array_32_returns_mock_qrng_bytes ... ok
+test concurrent_random_vec_callers_receive_expected_pattern_bytes ... ok
+test provider_crypto_and_storage_return_injected_instances ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/transport.rs (target/debug/deps/transport-9b60af6d1c54fbbc)
+
+running 8 tests
+test generated_client_identity_pem_is_readable ... ok
+test plain_http_connect_succeeds ... ok
+test tls_with_trusted_test_ca_succeeds ... ok
+test https_certificate_hostname_mismatch_fails ... ok
+test mtls_with_trusted_client_certificate_succeeds ... ok
+test mtls_without_client_identity_fails ... ok
+test tls_with_untrusted_ca_fails ... ok
+test mtls_with_client_certificate_from_wrong_ca_fails ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests openmls_qrand
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit=0
+
+$ cargo test   (default features, mock not compiled) -> exit=0
+     Running unittests src/lib.rs (target/debug/deps/openmls_qrand-acf1d3a111686c3b)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/config.rs (target/debug/deps/config-feddfb3e0cca2cf6)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/health_monitor.rs (target/debug/deps/health_monitor-9ce7bbd7b6186574)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+     Running tests/live_ec_mls.rs (target/debug/deps/live_ec_mls-a2de7f0dd53598c5)
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/mock_backend.rs (target/debug/deps/mock_backend-c4f401234422a8ad)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/openmls_integration.rs (target/debug/deps/openmls_integration-123126612867e33e)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/qrng_api.rs (target/debug/deps/qrng_api-97791255fcb46fa4)
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/rand_contract.rs (target/debug/deps/rand_contract-74a06f69618a02e0)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/transport.rs (target/debug/deps/transport-cc2640f470db961d)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

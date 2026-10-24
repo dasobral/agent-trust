@@ -1,0 +1,222 @@
+# C-40 lab entropy selection: behavioral red against the src/entropy.rs stub (2026-10-24)
+# Guards that pass on the stub: os_source_reports_os_and_has_no_outage_control (Rust), test_no_selection_uses_the_os_source and test_outage_control_needs_the_mock_source (Python).
+# Setup note: the first Rust run failed to compile (expect_err needs ClientIdentity: Debug); the test was changed to .err().expect(..) with the same assertions. That was a build failure, not this red.
+
+$ cargo test --locked --test lab_entropy
+   Compiling agent-trust v0.1.0 (<repo>)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-7dc62857c00f53fd)
+
+running 12 tests
+test ambiguous_or_incomplete_environments_are_rejected ... FAILED
+test environment_selects_the_source ... FAILED
+test file_paths_resolve_relative_to_the_file_and_auth_names_a_variable ... FAILED
+test config_file_is_loaded_from_the_environment ... FAILED
+test file_selects_each_source ... FAILED
+test invalid_files_are_rejected ... FAILED
+test mock_source_drives_every_lab_draw_from_one_seeded_stream ... FAILED
+test mock_outage_fails_closed_and_recovers ... FAILED
+test unreachable_qrng_fails_closed_without_naming_the_endpoint ... FAILED
+test qrng_secret_is_read_only_from_the_named_variable ... FAILED
+test qrng_outage_mid_session_fails_closed_without_naming_the_endpoint ... FAILED
+test os_source_reports_os_and_has_no_outage_control ... ok
+
+failures:
+
+---- ambiguous_or_incomplete_environments_are_rejected stdout ----
+
+thread 'ambiguous_or_incomplete_environments_are_rejected' (73537) panicked at tests/lab_entropy.rs:272:9:
+accepted an invalid environment: [("AGENT_TRUST_ENTROPY_SOURCE", "urandom")]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- environment_selects_the_source stdout ----
+
+thread 'environment_selects_the_source' (73539) panicked at tests/lab_entropy.rs:192:5:
+assertion `left == right` failed
+  left: Ok(Os)
+ right: Ok(Mock { seed: 0 })
+
+---- file_paths_resolve_relative_to_the_file_and_auth_names_a_variable stdout ----
+
+thread 'file_paths_resolve_relative_to_the_file_and_auth_names_a_variable' (73540) panicked at tests/lab_entropy.rs:120:5:
+assertion `left == right` failed
+  left: Ok(Os)
+ right: Ok(Qrng(QrngSettings { base_url: "https://entropy.example.net", transport: MutualTls { ca_cert_pem: "base/certs/ca.pem", client_cert_pem: "base/certs/client.crt", client_key_pem: "base/certs/client.key" }, auth: XApiKey { secret_env: "QRNG_API_KEY" }, entropy_type: Some("raw"), request_timeout: 2.5s }))
+
+---- config_file_is_loaded_from_the_environment stdout ----
+
+thread 'config_file_is_loaded_from_the_environment' (73538) panicked at tests/lab_entropy.rs:171:5:
+assertion `left == right` failed
+  left: Ok(Os)
+ right: Ok(Mock { seed: 7 })
+
+---- file_selects_each_source stdout ----
+
+thread 'file_selects_each_source' (73541) panicked at tests/lab_entropy.rs:60:5:
+assertion `left == right` failed
+  left: Ok(Os)
+ right: Ok(Mock { seed: 42 })
+
+---- invalid_files_are_rejected stdout ----
+
+thread 'invalid_files_are_rejected' (73542) panicked at tests/lab_entropy.rs:161:9:
+accepted an invalid file:
+source = "qrng"
+[qrng]
+base_url = "http://127.0.0.1:8002"
+transport = "plain-http"
+token = "s3cret"
+
+---- mock_source_drives_every_lab_draw_from_one_seeded_stream stdout ----
+
+thread 'mock_source_drives_every_lab_draw_from_one_seeded_stream' (73544) panicked at tests/lab_entropy.rs:295:5:
+assertion `left == right` failed
+  left: "os"
+ right: "mock"
+
+---- mock_outage_fails_closed_and_recovers stdout ----
+
+thread 'mock_outage_fails_closed_and_recovers' (73543) panicked at tests/lab_entropy.rs:340:30:
+mock outage control: "unsupported: stub"
+
+---- unreachable_qrng_fails_closed_without_naming_the_endpoint stdout ----
+
+thread 'unreachable_qrng_fails_closed_without_naming_the_endpoint' (73548) panicked at tests/lab_entropy.rs:365:10:
+an unreachable QRNG must not connect
+
+---- qrng_secret_is_read_only_from_the_named_variable stdout ----
+
+thread 'qrng_secret_is_read_only_from_the_named_variable' (73547) panicked at tests/lab_entropy.rs:385:10:
+a missing secret must not connect
+
+---- qrng_outage_mid_session_fails_closed_without_naming_the_endpoint stdout ----
+
+thread 'qrng_outage_mid_session_fails_closed_without_naming_the_endpoint' (73546) panicked at tests/lab_entropy.rs:417:5:
+assertion `left == right` failed
+  left: "os"
+ right: "qrng"
+
+
+failures:
+    ambiguous_or_incomplete_environments_are_rejected
+    config_file_is_loaded_from_the_environment
+    environment_selects_the_source
+    file_paths_resolve_relative_to_the_file_and_auth_names_a_variable
+    file_selects_each_source
+    invalid_files_are_rejected
+    mock_outage_fails_closed_and_recovers
+    mock_source_drives_every_lab_draw_from_one_seeded_stream
+    qrng_outage_mid_session_fails_closed_without_naming_the_endpoint
+    qrng_secret_is_read_only_from_the_named_variable
+    unreachable_qrng_fails_closed_without_naming_the_endpoint
+
+test result: FAILED. 1 passed; 11 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test lab_entropy`
+exit=101
+
+$ python3 -m unittest harness.test_entropy_lab -v
+test_config_file_selects_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source) ... FAIL
+test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed) ... FAIL
+test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) ... 
+  test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [unknown source] ... FAIL
+  test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [invalid file] ... FAIL
+  test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [file and source] ... FAIL
+  test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [qrng without URL] ... FAIL
+  test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [unreachable qrng] ... FAIL
+test_mock_outage_mid_session_fails_closed_and_recovers (harness.test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers) ... FAIL
+test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (harness.test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace) ... FAIL
+test_no_selection_uses_the_os_source (harness.test_entropy_lab.EntropyLabTests.test_no_selection_uses_the_os_source) ... ok
+test_outage_control_needs_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_outage_control_needs_the_mock_source) ... ok
+
+======================================================================
+FAIL: test_config_file_selects_the_mock_source (harness.test_entropy_lab.EntropyLabTests.test_config_file_selects_the_mock_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 169, in test_config_file_selects_the_mock_source
+    self.assertEqual(from_file, from_env)
+AssertionError: Lists differ: [('alice', 'ec157cfcbcf26ff3c7826feb5be31eb4575ce2938[334 chars]0f')] != [('alice', '2463ea809dcb099b82fa5af26ec739c5392b96e68[334 chars]b4')]
+
+First differing element 0:
+('alice', 'ec157cfcbcf26ff3c7826feb5be31eb4575ce29386cae1ae72f00c6f4e69df72')
+('alice', '2463ea809dcb099b82fa5af26ec739c5392b96e68173777729724b0b3ac95889')
+
+Diff is 814 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_every_identity_key_is_a_function_of_the_mock_seed (harness.test_entropy_lab.EntropyLabTests.test_every_identity_key_is_a_function_of_the_mock_seed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 154, in test_every_identity_key_is_a_function_of_the_mock_seed
+    self.assertEqual(first, again, "the same mock seed must give the same keys, rekey included")
+AssertionError: Lists differ: [('alice', '0e886fe3fe6003dcc8878b7a90150bd31ac5a5e92[334 chars]fd')] != [('alice', 'b498b4f65f83181bd71fa98b3dbfe97432ad766f6[334 chars]6b')]
+
+First differing element 0:
+('alice', '0e886fe3fe6003dcc8878b7a90150bd31ac5a5e9210baaf039e957772ae2e64e')
+('alice', 'b498b4f65f83181bd71fa98b3dbfe97432ad766f617f4a92cdbc2e3c95db5bc4')
+
+Diff is 814 characters long. Set self.maxDiff to None to see it. : the same mock seed must give the same keys, rekey included
+
+======================================================================
+FAIL: test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [unknown source]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 220, in test_invalid_or_unreachable_sources_fail_before_any_request
+    self.assertNotEqual(code, 0, f"{label}: the lab must not start")
+AssertionError: 0 == 0 : unknown source: the lab must not start
+
+======================================================================
+FAIL: test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [invalid file]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 220, in test_invalid_or_unreachable_sources_fail_before_any_request
+    self.assertNotEqual(code, 0, f"{label}: the lab must not start")
+AssertionError: 0 == 0 : invalid file: the lab must not start
+
+======================================================================
+FAIL: test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [file and source]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 220, in test_invalid_or_unreachable_sources_fail_before_any_request
+    self.assertNotEqual(code, 0, f"{label}: the lab must not start")
+AssertionError: 0 == 0 : file and source: the lab must not start
+
+======================================================================
+FAIL: test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [qrng without URL]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 220, in test_invalid_or_unreachable_sources_fail_before_any_request
+    self.assertNotEqual(code, 0, f"{label}: the lab must not start")
+AssertionError: 0 == 0 : qrng without URL: the lab must not start
+
+======================================================================
+FAIL: test_invalid_or_unreachable_sources_fail_before_any_request (harness.test_entropy_lab.EntropyLabTests.test_invalid_or_unreachable_sources_fail_before_any_request) [unreachable qrng]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 220, in test_invalid_or_unreachable_sources_fail_before_any_request
+    self.assertNotEqual(code, 0, f"{label}: the lab must not start")
+AssertionError: 0 == 0 : unreachable qrng: the lab must not start
+
+======================================================================
+FAIL: test_mock_outage_mid_session_fails_closed_and_recovers (harness.test_entropy_lab.EntropyLabTests.test_mock_outage_mid_session_fails_closed_and_recovers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 188, in test_mock_outage_mid_session_fails_closed_and_recovers
+    self.assertIn("ok", responses[2], responses[2])
+AssertionError: 'ok' not found in {'error': 'unsupported: stub'} : {'error': 'unsupported: stub'}
+
+======================================================================
+FAIL: test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace (harness.test_entropy_lab.EntropyLabTests.test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<repo>/harness/test_entropy_lab.py", line 131, in test_mock_source_draws_at_every_step_and_the_oracle_accepts_the_trace
+    self.assertEqual(reports[0], {"source": "mock", "requests": 0, "bytes": 0, "failures": 0})
+AssertionError: {'source': 'os'} != {'source': 'mock', 'requests': 0, 'bytes': 0, 'failures': 0}
+- {'source': 'os'}
++ {'bytes': 0, 'failures': 0, 'requests': 0, 'source': 'mock'}
+
+----------------------------------------------------------------------
+Ran 7 tests in 11.178s
+
+FAILED (failures=9)
+exit=1

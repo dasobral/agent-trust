@@ -88,12 +88,30 @@ python3 -m unittest discover -s harness -v
 python3 scripts/verify.py
 ```
 
+## Lab entropy source
+
+`agent-trust lab` takes every provider rand and identity key from one source,
+selected at startup ([C-40](docs/adapter-contract.md)):
+
+| Source | Select with | Use |
+| --- | --- | --- |
+| `os` | nothing set (default) | OS-seeded RustCrypto rand |
+| `mock` | `AGENT_TRUST_ENTROPY_SOURCE=mock` (`AGENT_TRUST_MOCK_SEED=N`) | openmls-qrand `MockEntropy`: seeded and **not random**, for development and tests |
+| `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` with `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Entropy Core |
+
+A TOML file named by `AGENT_TRUST_ENTROPY_CONFIG` can select the source instead
+([`config/entropy.example.toml`](config/entropy.example.toml)). The lab request
+`entropy {}` reports the source and its draw counters. A source that cannot be
+selected or reached stops the lab before any request, with no fallback. A
+recorded run against a live Entropy Core is still an unmet gate.
+
 ## Layout
 
 | Path | Role |
 | --- | --- |
 | `src/authority.rs` | Durable APF kernel |
 | `src/mls.rs` | In-memory OpenMLS laboratory |
+| `src/entropy.rs` | Lab entropy source selection |
 | `src/main.rs` | Local `authority` and `mls-demo` CLI |
 | `tests/` | Rust contract and adversarial tests |
 | `harness/` | Independent Python oracle and CLI tests |
