@@ -3,8 +3,8 @@
  "title": "Revocation fence, repair and rekey across a faulty network",
  "hypothesis": "With the APF, the agents and the relay as separate network services, and the relay dropping, duplicating and reordering traffic: (H1) every authorized message reaches each current reader exactly once and only after an APF consumption; (H2) a read revocation stops new releases and in-flight deliveries until a repair commit removes the reader; (H3) a removed member that keeps its keys can neither decrypt nor consume later traffic; (H4) a re-granted write right needs fresh keys; (H5) the independent oracle accepts the exported trace and rejects every broken control.",
  "result": "pass",
- "started": 1792860218.524108,
- "seconds": 7.502,
+ "started": 1792864008.6255953,
+ "seconds": 7.36,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group with the APF",
    "status": "pass",
    "detail": {
-    "branch": "90c5b504f79b4aafc6c34a615cee1f5cc293fbda95b6518fa7106d60cd5a0a12",
+    "branch": "4ea462bcb84d2ecd18dba615996e21400eb116a22f3434be314fa4145727b3e4",
     "epoch": 0
    },
-   "seconds": 0.062
+   "seconds": 0.056
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.019
+   "seconds": 0.018
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.025
+   "seconds": 0.019
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 bob joins through a certified KeyPackage",
    "status": "pass",
    "detail": {
-    "branch": "6661c468a2dd5217b67779b58ba35d9ae8ea178a92deda806e46961c0e56c6e6",
+    "branch": "f5fab2e77263b6f859b52303633c20f9e70f45b080f5d8fe509279e1598acc65",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.211
+   "seconds": 0.213
   },
   {
    "index": 4,
@@ -56,12 +56,12 @@
    "name": "A5 carol joins through a certified KeyPackage",
    "status": "pass",
    "detail": {
-    "branch": "620436b41cdf3af21ef0547e7867ea3b98c15844ce95282361cd91f20b7f0176",
+    "branch": "749ebe8feea7c31775c0f9b0dd680714c5556529464df370a9d4e5f58da463a6",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.204
+   "seconds": 0.138
   },
   {
    "index": 5,
@@ -94,7 +94,7 @@
      "carol"
     ]
    },
-   "seconds": 0.021
+   "seconds": 0.024
   },
   {
    "index": 7,
@@ -107,7 +107,7 @@
     "reorder": true,
     "seed": 11
    },
-   "seconds": 0.005
+   "seconds": 0.008
   },
   {
    "index": 8,
@@ -121,9 +121,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860219109
+    "sent_ms": 1792864009144
    },
-   "seconds": 0.032
+   "seconds": 0.038
   },
   {
    "index": 9,
@@ -137,9 +137,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792860219154
+    "sent_ms": 1792864009179
    },
-   "seconds": 0.045
+   "seconds": 0.034
   },
   {
    "index": 10,
@@ -153,9 +153,9 @@
      "alice",
      "bob"
     ],
-    "sent_ms": 1792860219218
+    "sent_ms": 1792864009242
    },
-   "seconds": 0.065
+   "seconds": 0.063
   },
   {
    "index": 11,
@@ -164,10 +164,10 @@
    "status": "pass",
    "detail": {
     "sent": 12,
-    "seconds": 1.527,
-    "sends_per_second": 7.9
+    "seconds": 1.553,
+    "sends_per_second": 7.7
    },
-   "seconds": 1.527
+   "seconds": 1.553
   },
   {
    "index": 12,
@@ -176,14 +176,14 @@
    "status": "pass",
    "detail": {
     "posted": 30,
-    "fetched": 36,
-    "dropped": 8,
-    "duplicated": 6,
+    "fetched": 37,
+    "dropped": 9,
+    "duplicated": 7,
     "tapped": 0,
     "queued": {},
     "held": []
    },
-   "seconds": 0.505
+   "seconds": 0.495
   },
   {
    "index": 13,
@@ -197,7 +197,7 @@
      "carol-000001"
     ]
    },
-   "seconds": 0.013
+   "seconds": 0.006
   },
   {
    "index": 14,
@@ -211,7 +211,7 @@
      "carol-000001"
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.009
   },
   {
    "index": 15,
@@ -225,7 +225,7 @@
      "bob-000001"
     ]
    },
-   "seconds": 0.009
+   "seconds": 0.006
   },
   {
    "index": 16,
@@ -237,7 +237,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.033
+   "seconds": 0.017
   },
   {
    "index": 17,
@@ -246,7 +246,7 @@
    "status": "pass",
    "detail": {
     "alice": {
-     "undecryptable": 3
+     "undecryptable": 4
     },
     "bob": {
      "undecryptable": 2
@@ -267,7 +267,7 @@
     "consumed": 30,
     "lost_after_consume": 0
    },
-   "seconds": 0.07
+   "seconds": 0.065
   },
   {
    "index": 19,
@@ -278,7 +278,7 @@
     "held": true,
     "mailbox": "carol"
    },
-   "seconds": 0.009
+   "seconds": 0.007
   },
   {
    "index": 20,
@@ -292,9 +292,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860221575
+    "sent_ms": 1792864011588
    },
-   "seconds": 0.149
+   "seconds": 0.156
   },
   {
    "index": 21,
@@ -303,9 +303,9 @@
    "status": "pass",
    "detail": {
     "posted": 32,
-    "fetched": 37,
-    "dropped": 8,
-    "duplicated": 6,
+    "fetched": 38,
+    "dropped": 9,
+    "duplicated": 7,
     "tapped": 0,
     "queued": {
      "carol": 1
@@ -314,7 +314,7 @@
      "carol"
     ]
    },
-   "seconds": 0.39
+   "seconds": 0.397
   },
   {
    "index": 22,
@@ -325,7 +325,7 @@
     "read_fenced": true,
     "revision": 84
    },
-   "seconds": 0.054
+   "seconds": 0.057
   },
   {
    "index": 23,
@@ -354,7 +354,7 @@
     "refused": "read_fenced",
     "error": "read_fenced"
    },
-   "seconds": 0.091
+   "seconds": 0.105
   },
   {
    "index": 25,
@@ -365,7 +365,7 @@
     "refused": "read_fenced",
     "error": "read_fenced"
    },
-   "seconds": 0.103
+   "seconds": 0.108
   },
   {
    "index": 26,
@@ -376,7 +376,7 @@
     "held": false,
     "mailbox": "carol"
    },
-   "seconds": 0.008
+   "seconds": 0.014
   },
   {
    "index": 27,
@@ -385,14 +385,14 @@
    "status": "pass",
    "detail": {
     "posted": 32,
-    "fetched": 38,
-    "dropped": 8,
-    "duplicated": 6,
+    "fetched": 39,
+    "dropped": 9,
+    "duplicated": 7,
     "tapped": 0,
     "queued": {},
     "held": []
    },
-   "seconds": 0.406
+   "seconds": 0.395
   },
   {
    "index": 28,
@@ -405,7 +405,7 @@
     "first": "read_fenced",
     "duplicates": []
    },
-   "seconds": 0.008
+   "seconds": 0.006
   },
   {
    "index": 29,
@@ -418,7 +418,7 @@
      "alice-000006"
     ]
    },
-   "seconds": 0.005
+   "seconds": 0.008
   },
   {
    "index": 30,
@@ -431,7 +431,7 @@
      "alice-000006"
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.005
   },
   {
    "index": 31,
@@ -441,7 +441,7 @@
    "detail": {
     "retain": true
    },
-   "seconds": 0.007
+   "seconds": 0.008
   },
   {
    "index": 32,
@@ -449,7 +449,7 @@
    "name": "D2 alice commits the repair; bob confirms; the fence reopens",
    "status": "pass",
    "detail": {
-    "branch": "e2b515e948f2a39d925888108683980a9792cb927e3dbcd9ca70f2aa0a145c18",
+    "branch": "556ac7729be0f574754127e8e8c309f3f66251a1bf1350f0cb067cb7d5cb3882",
     "epoch": 3,
     "evidence": "pair",
     "index": 2,
@@ -459,7 +459,7 @@
     ],
     "read_fenced_after": false
    },
-   "seconds": 0.327
+   "seconds": 0.336
   },
   {
    "index": 33,
@@ -476,7 +476,7 @@
     "read_fenced": false,
     "repair_pending": null
    },
-   "seconds": 0.008
+   "seconds": 0.006
   },
   {
    "index": 34,
@@ -488,7 +488,7 @@
     "observer": "carol",
     "victim": "bob"
    },
-   "seconds": 0.005
+   "seconds": 0.007
   },
   {
    "index": 35,
@@ -501,9 +501,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792860223194
+    "sent_ms": 1792864013252
    },
-   "seconds": 0.191
+   "seconds": 0.203
   },
   {
    "index": 36,
@@ -512,14 +512,14 @@
    "status": "pass",
    "detail": {
     "posted": 33,
-    "fetched": 40,
-    "dropped": 9,
-    "duplicated": 6,
+    "fetched": 41,
+    "dropped": 10,
+    "duplicated": 7,
     "tapped": 1,
     "queued": {},
     "held": []
    },
-   "seconds": 0.503
+   "seconds": 0.496
   },
   {
    "index": 37,
@@ -552,7 +552,7 @@
      }
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.005
   },
   {
    "index": 39,
@@ -563,7 +563,7 @@
     "read_fenced": false,
     "revision": 93
    },
-   "seconds": 0.066
+   "seconds": 0.061
   },
   {
    "index": 40,
@@ -584,7 +584,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.063
+   "seconds": 0.077
   },
   {
    "index": 42,
@@ -595,7 +595,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.126
+   "seconds": 0.141
   },
   {
    "index": 43,
@@ -603,13 +603,13 @@
    "name": "E5 bob commits a new signature key and incarnation",
    "status": "pass",
    "detail": {
-    "branch": "d87de7112e85fffa9badc0b7e38a42f926e9f0f904dbc24905ba9c409f44badc",
+    "branch": "a03f36dc0f4e6b38de53d1bd6e1105c4f3e743ded91d0ba002cf56ca49adc659",
     "epoch": 4,
     "generation": 1,
-    "public_key": "3c67f136fb80d607a04596d96e69b109dad6dea0ed04c4d947cae65aa6b4b775",
+    "public_key": "d6b0e88044df1d1a3ba8bee1f58f2adc701cdf373373ad6a549b56da352a9228",
     "right": "write"
    },
-   "seconds": 0.178
+   "seconds": 0.195
   },
   {
    "index": 44,
@@ -622,9 +622,9 @@
     "recipients": [
      "alice"
     ],
-    "sent_ms": 1792860224454
+    "sent_ms": 1792864014528
    },
-   "seconds": 0.199
+   "seconds": 0.182
   },
   {
    "index": 45,
@@ -633,14 +633,14 @@
    "status": "pass",
    "detail": {
     "posted": 34,
-    "fetched": 42,
-    "dropped": 9,
-    "duplicated": 7,
+    "fetched": 43,
+    "dropped": 10,
+    "duplicated": 8,
     "tapped": 1,
     "queued": {},
     "held": []
    },
-   "seconds": 0.506
+   "seconds": 0.497
   },
   {
    "index": 46,
@@ -653,7 +653,7 @@
      "bob-000009"
     ]
    },
-   "seconds": 0.007
+   "seconds": 0.006
   },
   {
    "index": 47,
@@ -667,7 +667,7 @@
      "bob"
     ]
    },
-   "seconds": 0.019
+   "seconds": 0.018
   },
   {
    "index": 48,
@@ -681,7 +681,7 @@
     ],
     "optional": 0
    },
-   "seconds": 0.018
+   "seconds": 0.016
   },
   {
    "index": 49,
@@ -690,7 +690,7 @@
    "status": "pass",
    "detail": {
     "alice": {
-     "undecryptable": 4
+     "undecryptable": 5
     },
     "bob": {
      "undecryptable": 2
@@ -708,7 +708,7 @@
     "consumed": 33,
     "lost_after_consume": 0
    },
-   "seconds": 0.096
+   "seconds": 0.098
   },
   {
    "index": 51,
@@ -735,7 +735,7 @@
      "repair_stage": 1
     }
    },
-   "seconds": 0.402
+   "seconds": 0.332
   },
   {
    "index": 52,
@@ -755,7 +755,7 @@
     },
     "skipped": []
    },
-   "seconds": 0.453
+   "seconds": 0.419
   },
   {
    "index": 53,
@@ -793,17 +793,17 @@
      "available": true,
      "bytes": 968,
      "clients": {
-      "10.42.0.96": 96,
-      "10.42.0.97": 280,
-      "10.42.0.98": 180,
-      "10.42.0.99": 412
+      "10.42.0.205": 96,
+      "10.42.0.206": 412,
+      "10.42.0.207": 280,
+      "10.42.0.208": 180
      },
      "mock": true,
      "refused": 0,
      "requests": 46
     }
    },
-   "seconds": 0.033
+   "seconds": 0.035
   },
   {
    "index": 54,
@@ -816,7 +816,7 @@
      "bob"
     ]
    },
-   "seconds": 0.013
+   "seconds": 0.012
   }
  ],
  "skipped_steps": 0,
@@ -830,11 +830,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "6c0331a8a2f9e4ec0c8f52acca8c4f43612b2ddd"
  },
  "observations": {
   "apf_state": {
-   "branch": "d87de7112e85fffa9badc0b7e38a42f926e9f0f904dbc24905ba9c409f44badc",
+   "branch": "a03f36dc0f4e6b38de53d1bd6e1105c4f3e743ded91d0ba002cf56ca49adc659",
    "epoch": 4,
    "grants": [
     {
@@ -908,15 +908,15 @@
    ]
   },
   "relay_stats": {
-   "dropped": 9,
-   "duplicated": 7,
+   "dropped": 10,
+   "duplicated": 8,
    "expired": 0,
    "faults": {
     "drop": 25,
     "duplicate": 25,
     "reorder": true
    },
-   "fetched": 42,
+   "fetched": 43,
    "handshake": {
     "lab": 4
    },
@@ -936,7 +936,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "d87de7112e85fffa9badc0b7e38a42f926e9f0f904dbc24905ba9c409f44badc",
+    "branch": "a03f36dc0f4e6b38de53d1bd6e1105c4f3e743ded91d0ba002cf56ca49adc659",
     "confirmations": [
      {
       "outcome": "ok",
@@ -960,14 +960,20 @@
     "inbox": 11,
     "membership": "member",
     "name": "alice",
-    "polls": 88,
-    "public_key": "ff577f475d89ef535a7d4577f4d765fc80bf5b087d476319ddd14b5479dfd4d3",
+    "polls": 107,
+    "public_key": "ded08da685254872663930e36bb6454f5d34fead69620022c221f358eb26184d",
     "rejections": [
      {
       "code": "undecryptable",
       "error": "undecryptable: MLS processing",
       "from": "carol",
       "op": "carol-000001"
+     },
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "carol",
+      "op": "carol-000002"
      },
      {
       "code": "undecryptable",
@@ -996,7 +1002,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "d87de7112e85fffa9badc0b7e38a42f926e9f0f904dbc24905ba9c409f44badc",
+    "branch": "a03f36dc0f4e6b38de53d1bd6e1105c4f3e743ded91d0ba002cf56ca49adc659",
     "confirmations": [
      {
       "outcome": "ok",
@@ -1020,8 +1026,8 @@
     "inbox": 12,
     "membership": "member",
     "name": "bob",
-    "polls": 88,
-    "public_key": "3c67f136fb80d607a04596d96e69b109dad6dea0ed04c4d947cae65aa6b4b775",
+    "polls": 107,
+    "public_key": "d6b0e88044df1d1a3ba8bee1f58f2adc701cdf373373ad6a549b56da352a9228",
     "rejections": [
      {
       "code": "undecryptable",
@@ -1053,7 +1059,7 @@
       "tapped_from": "bob"
      }
     ],
-    "branch": "620436b41cdf3af21ef0547e7867ea3b98c15844ce95282361cd91f20b7f0176",
+    "branch": "749ebe8feea7c31775c0f9b0dd680714c5556529464df370a9d4e5f58da463a6",
     "confirmations": [],
     "cursor": 2,
     "entropy": {
@@ -1069,14 +1075,14 @@
     "inbox": 10,
     "membership": "member",
     "name": "carol",
-    "polls": 95,
-    "public_key": "9e6c130316c9af8f5d6a9c962971c24a5931cd533c11833d7f350c9c739d5b39",
+    "polls": 100,
+    "public_key": "6266f78fae815aaef3735e46238d8348c3819afb2b058ec60686c43d7b8e8c06",
     "rejections": [
      {
       "code": "undecryptable",
       "error": "undecryptable: MLS processing",
-      "from": "bob",
-      "op": "bob-000002"
+      "from": "alice",
+      "op": "alice-000002"
      },
      {
       "code": "read_fenced",
@@ -1096,10 +1102,10 @@
    "available": true,
    "bytes": 968,
    "clients": {
-    "10.42.0.96": 96,
-    "10.42.0.97": 280,
-    "10.42.0.98": 180,
-    "10.42.0.99": 412
+    "10.42.0.205": 96,
+    "10.42.0.206": 412,
+    "10.42.0.207": 280,
+    "10.42.0.208": 180
    },
    "mock": true,
    "refused": 0,
@@ -1203,6 +1209,12 @@
     "sequence": 2
    },
    {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
@@ -1236,12 +1248,6 @@
     "actor": "alice",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 9
-   },
-   {
-    "actor": "alice",
-    "command": "consume",
-    "outcome": "ok",
     "sequence": 10
    },
    {
@@ -1312,27 +1318,15 @@
    },
    {
     "actor": "carol",
-    "command": "allocate",
+    "command": "consume",
     "outcome": "ok",
     "sequence": 9
    },
    {
     "actor": "carol",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
     "sequence": 10
-   },
-   {
-    "actor": "carol",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 11
-   },
-   {
-    "actor": "carol",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 12
    },
    {
     "actor": "alice",
@@ -1341,14 +1335,20 @@
     "sequence": 15
    },
    {
-    "actor": "alice",
-    "command": "consume",
+    "actor": "carol",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 16
+    "sequence": 11
    },
    {
     "actor": "carol",
-    "command": "consume",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "carol",
+    "command": "emit",
     "outcome": "ok",
     "sequence": 13
    },
@@ -1356,29 +1356,29 @@
     "actor": "alice",
     "command": "allocate",
     "outcome": "ok",
-    "sequence": 17
+    "sequence": 16
    },
    {
     "actor": "alice",
     "command": "release",
     "outcome": "ok",
-    "sequence": 18
-   },
-   {
-    "actor": "bob",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 13
+    "sequence": 17
    },
    {
     "actor": "alice",
     "command": "persist",
     "outcome": "ok",
-    "sequence": 19
+    "sequence": 18
    },
    {
     "actor": "alice",
     "command": "emit",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
     "outcome": "ok",
     "sequence": 20
    },
@@ -1386,6 +1386,18 @@
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
     "sequence": 14
    },
    {
@@ -1399,12 +1411,6 @@
     "command": "release",
     "outcome": "ok",
     "sequence": 16
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 14
    },
    {
     "actor": "bob",
@@ -1445,6 +1451,12 @@
    {
     "actor": "carol",
     "command": "emit",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
     "outcome": "ok",
     "sequence": 19
    },
@@ -1453,12 +1465,6 @@
     "command": "consume",
     "outcome": "ok",
     "sequence": 21
-   },
-   {
-    "actor": "bob",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
    },
    {
     "actor": "alice",
@@ -1521,16 +1527,16 @@
     "sequence": 23
    },
    {
-    "actor": "alice",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 27
-   },
-   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 24
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 27
    },
    {
     "actor": "carol",
@@ -1647,16 +1653,16 @@
     "sequence": 28
    },
    {
-    "actor": "carol",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 29
-   },
-   {
     "actor": "alice",
     "command": "consume",
     "outcome": "ok",
     "sequence": 33
+   },
+   {
+    "actor": "carol",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 29
    },
    {
     "actor": "carol",

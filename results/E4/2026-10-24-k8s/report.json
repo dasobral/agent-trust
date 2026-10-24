@@ -3,8 +3,8 @@
  "title": "Hostile commit distribution: forged, replayed, spliced, hidden and reordered commits",
  "hypothesis": "(H1) A member never merges a commit without a valid APF ack whose parent is its own frontier: replayed, garbage and spliced handshake entries are skipped and change nothing. (H2) A member from which the relay hides a commit stays at its old epoch: it cannot release, and envelopes of the newer epoch wait instead of being decrypted or lost; once the commit appears it catches up and delivers them. (H3) Entries served out of order are applied in parent order. (H4) The trace stays acceptable to the oracle.",
  "result": "pass",
- "started": 1792860966.3891342,
- "seconds": 3.681,
+ "started": 1792865638.1731837,
+ "seconds": 3.565,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "8686668a3ed4b2e09881e75bd62d83f78c851dbef92bdaf49a04093cee6d0cf6",
+    "branch": "98b5e937dd6f48190ea9ef9f31b7314392ab7aeed1fd9e091dd73dea8bedfc47",
     "epoch": 0
    },
-   "seconds": 0.055
+   "seconds": 0.062
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.02
+   "seconds": 0.017
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.016
+   "seconds": 0.02
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 admit bob (log index 0)",
    "status": "pass",
    "detail": {
-    "branch": "936a73c42d6ea45a7be2cbbe3107e60b8269473bab18115cd2cba5037210a37f",
+    "branch": "6b184f3f90476cc4edf2428b282ebfe58758992fffacfb404f46f308b7d5107b",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.131
+   "seconds": 0.208
   },
   {
    "index": 4,
@@ -56,12 +56,12 @@
    "name": "A5 admit carol (log index 1)",
    "status": "pass",
    "detail": {
-    "branch": "f3c17ac825d425f762c8d2d2f09add656a901f5a2d0b89716e2182245ffed6b6",
+    "branch": "ed722f5c3b17ca0518f47a7d646f87af264d8c4cdf046cd7686ebdabc9d5ab63",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.22
+   "seconds": 0.147
   },
   {
    "index": 5,
@@ -72,7 +72,7 @@
     "action": "replay",
     "index": 2
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 6,
@@ -83,7 +83,7 @@
     "action": "inject",
     "index": 3
    },
-   "seconds": 0.007
+   "seconds": 0.008
   },
   {
    "index": 7,
@@ -94,7 +94,7 @@
     "action": "splice",
     "index": 4
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 8,
@@ -108,7 +108,7 @@
      "carol"
     ]
    },
-   "seconds": 0.06
+   "seconds": 0.076
   },
   {
    "index": 9,
@@ -123,7 +123,7 @@
      "carol"
     ]
    },
-   "seconds": 0.022
+   "seconds": 0.024
   },
   {
    "index": 10,
@@ -138,7 +138,7 @@
     "future": 0,
     "waiting": []
    },
-   "seconds": 0.005
+   "seconds": 0.006
   },
   {
    "index": 11,
@@ -152,9 +152,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860966973
+    "sent_ms": 1792865638795
    },
-   "seconds": 0.038
+   "seconds": 0.042
   },
   {
    "index": 12,
@@ -170,7 +170,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.395
+   "seconds": 0.323
   },
   {
    "index": 13,
@@ -184,7 +184,7 @@
     ],
     "reader": "bob"
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 14,
@@ -195,7 +195,7 @@
     "read_fenced": false,
     "revision": 10
    },
-   "seconds": 0.014
+   "seconds": 0.019
   },
   {
    "index": 15,
@@ -213,13 +213,13 @@
    "name": "C4 carol commits its rekey (log index 5, hidden from bob)",
    "status": "pass",
    "detail": {
-    "branch": "5d543b59c97ce0df541b899a0d69e4436da5847d6d68c4d6a210959ead4506be",
+    "branch": "18d719b72771ea4e855aaf3041cb7586592341d710e41ce25720652392a85907",
     "epoch": 3,
     "generation": 1,
-    "public_key": "e70b58c343b7d667dc62a23b9c95e01431feb0c16d9e8bfecd2c1524dafe79a7",
+    "public_key": "8df426dc7cb525437daff6f31176f3ed180896702e3eb1dd7e61e7de027d38d7",
     "right": "write"
    },
-   "seconds": 0.102
+   "seconds": 0.112
   },
   {
    "index": 17,
@@ -244,7 +244,7 @@
      "carol"
     ]
    },
-   "seconds": 0.058
+   "seconds": 0.061
   },
   {
    "index": 19,
@@ -259,7 +259,7 @@
     "future": 0,
     "waiting": []
    },
-   "seconds": 0.013
+   "seconds": 0.015
   },
   {
    "index": 20,
@@ -270,7 +270,7 @@
     "refused": "not_ready",
     "error": "not_ready: the local frontier differs from the APF frontier"
    },
-   "seconds": 0.018
+   "seconds": 0.024
   },
   {
    "index": 21,
@@ -284,9 +284,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860967641
+    "sent_ms": 1792865639423
    },
-   "seconds": 0.046
+   "seconds": 0.049
   },
   {
    "index": 22,
@@ -302,7 +302,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.421
+   "seconds": 0.325
   },
   {
    "index": 23,
@@ -326,7 +326,7 @@
     "hidden_from": null,
     "reader": "bob"
    },
-   "seconds": 0.01
+   "seconds": 0.006
   },
   {
    "index": 25,
@@ -342,7 +342,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.297
+   "seconds": 0.301
   },
   {
    "index": 26,
@@ -382,7 +382,7 @@
     "indices": [],
     "reader": "carol"
    },
-   "seconds": 0.007
+   "seconds": 0.006
   },
   {
    "index": 29,
@@ -393,7 +393,7 @@
     "read_fenced": false,
     "revision": 18
    },
-   "seconds": 0.014
+   "seconds": 0.015
   },
   {
    "index": 30,
@@ -403,7 +403,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.013
+   "seconds": 0.015
   },
   {
    "index": 31,
@@ -411,13 +411,13 @@
    "name": "D4 bob rekeys write (log index 7)",
    "status": "pass",
    "detail": {
-    "branch": "a129a10c0d3f69bbec08880df4f2bd0085bdc31987ebb664f7afdda9ab8b94e7",
+    "branch": "dbef4a43cacbf17bef5235347134ddba65e2acbeb108be1d5c44c83095cd68b6",
     "epoch": 4,
     "generation": 1,
-    "public_key": "697f9983193d744dd26d88118b071794c5d75ce7fe818790f2e7718942854934",
+    "public_key": "b54462f30ddc9719c8e53d16c365d8b0091633545588eba1c50ddd4be04f5a0c",
     "right": "write"
    },
-   "seconds": 0.125
+   "seconds": 0.101
   },
   {
    "index": 32,
@@ -428,7 +428,7 @@
     "read_fenced": false,
     "revision": 20
    },
-   "seconds": 0.016
+   "seconds": 0.017
   },
   {
    "index": 33,
@@ -438,7 +438,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.014
+   "seconds": 0.016
   },
   {
    "index": 34,
@@ -446,13 +446,13 @@
    "name": "D7 bob rekeys admit (log index 8)",
    "status": "pass",
    "detail": {
-    "branch": "78c442c2815aadc0c2da1985e195c8cfe932887d701c9fcbc9c6395283fb6ef1",
+    "branch": "b49d24e56d3fe7241835848947da3240e045ff9f4bc4222b67133f2f7f17573c",
     "epoch": 5,
     "generation": 1,
-    "public_key": "56360fc36b2e3d0c53644fdfa07e49bae6b64e32f7ec5fb74bb67a79fd1f1f2f",
+    "public_key": "e59561801bcc29cdc8159c8edddb6feb47128586e1221968dd394a9af2afa566",
     "right": "admit"
    },
-   "seconds": 0.135
+   "seconds": 0.107
   },
   {
    "index": 35,
@@ -463,7 +463,7 @@
     "reader": "carol",
     "reversed": true
    },
-   "seconds": 0.006
+   "seconds": 0.008
   },
   {
    "index": 36,
@@ -474,7 +474,7 @@
     "hidden_from": null,
     "reader": "carol"
    },
-   "seconds": 0.006
+   "seconds": 0.005
   },
   {
    "index": 37,
@@ -488,7 +488,7 @@
      "carol"
     ]
    },
-   "seconds": 0.107
+   "seconds": 0.101
   },
   {
    "index": 38,
@@ -503,7 +503,7 @@
      "carol"
     ]
    },
-   "seconds": 0.027
+   "seconds": 0.024
   },
   {
    "index": 39,
@@ -517,9 +517,9 @@
      "alice",
      "bob"
     ],
-    "sent_ms": 1792860968931
+    "sent_ms": 1792865640542
    },
-   "seconds": 0.068
+   "seconds": 0.049
   },
   {
    "index": 40,
@@ -533,9 +533,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792860969004
+    "sent_ms": 1792865640609
    },
-   "seconds": 0.073
+   "seconds": 0.066
   },
   {
    "index": 41,
@@ -551,7 +551,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.389
+   "seconds": 0.401
   },
   {
    "index": 42,
@@ -581,7 +581,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.017
+   "seconds": 0.02
   },
   {
    "index": 44,
@@ -593,7 +593,7 @@
     "consumed": 8,
     "lost_after_consume": 0
    },
-   "seconds": 0.031
+   "seconds": 0.03
   },
   {
    "index": 45,
@@ -617,7 +617,7 @@
      "release": 4
     }
    },
-   "seconds": 0.322
+   "seconds": 0.371
   },
   {
    "index": 46,
@@ -638,7 +638,7 @@
      "repair that keeps the revoked reader"
     ]
    },
-   "seconds": 0.269
+   "seconds": 0.281
   },
   {
    "index": 47,
@@ -659,7 +659,7 @@
      ]
     }
    },
-   "seconds": 0.028
+   "seconds": 0.019
   }
  ],
  "skipped_steps": 0,
@@ -673,11 +673,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "86fd2e7784960223915ec4246acd8e9dac532041"
  },
  "observations": {
   "apf_state": {
-   "branch": "78c442c2815aadc0c2da1985e195c8cfe932887d701c9fcbc9c6395283fb6ef1",
+   "branch": "b49d24e56d3fe7241835848947da3240e045ff9f4bc4222b67133f2f7f17573c",
    "epoch": 5,
    "grants": [
     {
@@ -782,7 +782,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "78c442c2815aadc0c2da1985e195c8cfe932887d701c9fcbc9c6395283fb6ef1",
+    "branch": "b49d24e56d3fe7241835848947da3240e045ff9f4bc4222b67133f2f7f17573c",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -804,8 +804,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 73,
-    "public_key": "1df7816f5221683b43c59a322ee0c08d97dc0830ebc8933988cdbc32a4f7e3e2",
+    "polls": 72,
+    "public_key": "f3bc6bb67b3e31f046f4f84a16abaa0edd111914f8c24410b3e760aee8a4550f",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -815,7 +815,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "78c442c2815aadc0c2da1985e195c8cfe932887d701c9fcbc9c6395283fb6ef1",
+    "branch": "b49d24e56d3fe7241835848947da3240e045ff9f4bc4222b67133f2f7f17573c",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -842,8 +842,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "bob",
-    "polls": 73,
-    "public_key": "56360fc36b2e3d0c53644fdfa07e49bae6b64e32f7ec5fb74bb67a79fd1f1f2f",
+    "polls": 71,
+    "public_key": "e59561801bcc29cdc8159c8edddb6feb47128586e1221968dd394a9af2afa566",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -853,7 +853,7 @@
    },
    "carol": {
     "adversary": [],
-    "branch": "78c442c2815aadc0c2da1985e195c8cfe932887d701c9fcbc9c6395283fb6ef1",
+    "branch": "b49d24e56d3fe7241835848947da3240e045ff9f4bc4222b67133f2f7f17573c",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -875,8 +875,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "carol",
-    "polls": 74,
-    "public_key": "e70b58c343b7d667dc62a23b9c95e01431feb0c16d9e8bfecd2c1524dafe79a7",
+    "polls": 71,
+    "public_key": "8df426dc7cb525437daff6f31176f3ed180896702e3eb1dd7e61e7de027d38d7",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -889,10 +889,10 @@
    "available": true,
    "bytes": 1040,
    "clients": {
-    "10.42.0.160": 328,
-    "10.42.0.161": 356,
-    "10.42.0.162": 96,
-    "10.42.0.163": 260
+    "10.42.0.100": 356,
+    "10.42.0.101": 260,
+    "10.42.0.102": 96,
+    "10.42.0.99": 328
    },
    "mock": true,
    "refused": 0,
@@ -1098,12 +1098,6 @@
     "sequence": 7
    },
    {
-    "actor": "alice",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
     "actor": "bob",
     "command": "allocate",
     "outcome": "ok",
@@ -1128,16 +1122,22 @@
     "sequence": 11
    },
    {
-    "actor": "carol",
+    "actor": "alice",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 9
+    "sequence": 19
    },
    {
     "actor": "alice",
     "command": "consume",
     "outcome": "ok",
     "sequence": 20
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
    }
   ]
  }

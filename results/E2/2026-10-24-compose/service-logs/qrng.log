@@ -1,3 +1,3 @@
-{"event":"listening","listen":"0.0.0.0:7200","mock":true,"role":"qrng-mock","ts":1792861603}
-{"available":false,"event":"outage","role":"qrng-mock","ts":1792861605}
-{"available":true,"event":"outage","role":"qrng-mock","ts":1792861614}
+{"event":"listening","listen":"0.0.0.0:7200","mock":true,"role":"qrng-mock","ts":1792863715}
+{"available":false,"event":"outage","role":"qrng-mock","ts":1792863716}
+{"available":true,"event":"outage","role":"qrng-mock","ts":1792863725}

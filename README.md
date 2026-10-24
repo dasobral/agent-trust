@@ -32,14 +32,19 @@ This is research software, not a production system.
 | [K8S](deploy/k3s/README.md) | NetworkPolicy isolation of the services | | | PASS |
 
 Evidence (reports, traces, service logs) is in [`results/`](results/); the dates and
-exact revisions are in each `report.json`. Stability: 60 of 60 runs pass (10 each of
+exact revisions are in each `report.json`. Every recorded run names a clean testbed
+commit (`6c0331a` or `86fd2e7`, which differ only in documentation); a run from a
+tree with uncommitted changes would be marked `-dirty`. GitHub CI run
+`40115418056` on `d2ab776` passed the local job (every experiment, E5 included), the
+compose job and the k3s job (a fresh k3s with containerd). Stability: 60 of 60 runs pass (10 each of
 E1, E1-mtls, E2, E3, E4 and E7, local backend,
 [`results/stability-2026-10-24.txt`](results/stability-2026-10-24.txt)). E6 (a live Entropy Core) is the one planned
 experiment not run: it needs a reachable endpoint. In every run here the QRNG service
 is a **mock** (OS RNG bytes): no quantum origin is claimed.
 
 Stack under test: agent-trust `5cf724e` (branch `feat/durable-lab-provider`: `main`
-`9af877c` plus the durable provider this testbed needed, finding F-2), OpenMLS fork
+`9af877c` plus the durable provider this testbed needed, finding F-2; the branch head
+`43750a8` adds only its contract text, C-41, flagged for approval and not yet merged), OpenMLS fork
 `dd33278`, openmls-qrand `a102450`.
 
 Findings on the stack, with proposals: [`docs/findings.md`](docs/findings.md). The

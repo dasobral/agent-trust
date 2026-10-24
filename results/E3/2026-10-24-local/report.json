@@ -3,8 +3,8 @@
  "title": "APF and agent restarts, outages and offline members",
  "hypothesis": "(H1) An APF restart keeps the policy state, the frontier and every registered key; members continue without any change. (H2) While the APF is down no release happens and no message is delivered; a message decrypted during the outage is delivered once the APF returns (delay, not loss). (H3) A restarted agent resumes as the same member with the same key, frontier and request sequence, and receives the traffic sent while it was down. (H4) An offline member does not block a revocation and repair; when it returns it applies its own removal and receives nothing sent after it. (H5) The oracle accepts the trace and rejects the broken controls.",
  "result": "pass",
- "started": 1792861275.503815,
- "seconds": 7.139,
+ "started": 1792863370.0426204,
+ "seconds": 6.681,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "17b17219119f898005be40c9a293ec13820a75b68528df0fdf23102faa5c5b8c",
+    "branch": "4dbf104446a8d39fc87bc4a614f2732f98c66853f06ad88640924114ce91dbd3",
     "epoch": 0
    },
-   "seconds": 0.057
+   "seconds": 0.053
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.005
+   "seconds": 0.006
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 admit bob",
    "status": "pass",
    "detail": {
-    "branch": "109288bcb72f2f7aa710fa3664c6d02ff2ce438ca1dd527ae7c2cb0022dc6041",
+    "branch": "cea7062f4ff74a326e14c06a718a5d6d1c65ea18f19d483feba2e1f2cd1048b0",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.139
+   "seconds": 0.058
   },
   {
    "index": 4,
@@ -56,12 +56,12 @@
    "name": "A5 admit carol",
    "status": "pass",
    "detail": {
-    "branch": "c97732ff83cfbc967ed7d65b1d056f519c4f1c285dba8d094df7206a5b286261",
+    "branch": "41e2d669a305a4879a8bd7a3e9a86400c0642c492c53b202e78babc2885ff195",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.145
+   "seconds": 0.141
   },
   {
    "index": 5,
@@ -75,9 +75,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861275876
+    "sent_ms": 1792863370331
    },
-   "seconds": 0.022
+   "seconds": 0.024
   },
   {
    "index": 6,
@@ -93,7 +93,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.423
+   "seconds": 0.321
   },
   {
    "index": 7,
@@ -105,7 +105,7 @@
     "service": "apf",
     "started": true
    },
-   "seconds": 0.155
+   "seconds": 0.156
   },
   {
    "index": 8,
@@ -137,9 +137,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792861276487
+    "sent_ms": 1792863370839
    },
-   "seconds": 0.033
+   "seconds": 0.03
   },
   {
    "index": 10,
@@ -155,7 +155,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.369
+   "seconds": 0.322
   },
   {
    "index": 11,
@@ -179,7 +179,7 @@
     "held": true,
     "mailbox": "carol"
    },
-   "seconds": 0.001
+   "seconds": 0.0
   },
   {
    "index": 13,
@@ -193,9 +193,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861276891
+    "sent_ms": 1792863371196
    },
-   "seconds": 0.033
+   "seconds": 0.035
   },
   {
    "index": 14,
@@ -215,7 +215,7 @@
      "carol"
     ]
    },
-   "seconds": 0.267
+   "seconds": 0.277
   },
   {
    "index": 15,
@@ -225,7 +225,7 @@
    "detail": {
     "stopped": "apf"
    },
-   "seconds": 0.053
+   "seconds": 0.052
   },
   {
    "index": 16,
@@ -236,7 +236,7 @@
     "refused": "transport",
     "error": "transport: Connection Failed"
    },
-   "seconds": 0.004
+   "seconds": 0.007
   },
   {
    "index": 17,
@@ -247,7 +247,7 @@
     "held": false,
     "mailbox": "carol"
    },
-   "seconds": 0.002
+   "seconds": 0.001
   },
   {
    "index": 18,
@@ -263,7 +263,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.32
+   "seconds": 0.319
   },
   {
    "index": 19,
@@ -303,7 +303,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.221
+   "seconds": 0.22
   },
   {
    "index": 22,
@@ -328,7 +328,7 @@
     "service": "bob",
     "started": true
    },
-   "seconds": 0.156
+   "seconds": 0.155
   },
   {
    "index": 24,
@@ -357,9 +357,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861278059
+    "sent_ms": 1792863372369
    },
-   "seconds": 0.038
+   "seconds": 0.036
   },
   {
    "index": 26,
@@ -373,9 +373,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792861278117
+    "sent_ms": 1792863372423
    },
-   "seconds": 0.058
+   "seconds": 0.054
   },
   {
    "index": 27,
@@ -415,9 +415,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861278496
+    "sent_ms": 1792863372797
    },
-   "seconds": 0.058
+   "seconds": 0.052
   },
   {
    "index": 30,
@@ -444,7 +444,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.22
+   "seconds": 0.219
   },
   {
    "index": 32,
@@ -480,10 +480,10 @@
    "status": "pass",
    "detail": {
     "sent": 10,
-    "seconds": 1.533,
-    "sends_per_second": 6.5
+    "seconds": 1.495,
+    "sends_per_second": 6.7
    },
-   "seconds": 1.533
+   "seconds": 1.495
   },
   {
    "index": 35,
@@ -511,7 +511,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.324
+   "seconds": 0.234
   },
   {
    "index": 37,
@@ -556,7 +556,7 @@
    "detail": {
     "stopped": "carol"
    },
-   "seconds": 0.053
+   "seconds": 0.052
   },
   {
    "index": 40,
@@ -567,7 +567,7 @@
     "read_fenced": true,
     "revision": 85
    },
-   "seconds": 0.044
+   "seconds": 0.05
   },
   {
    "index": 41,
@@ -575,7 +575,7 @@
    "name": "E3 the repair completes without carol (bob confirms)",
    "status": "pass",
    "detail": {
-    "branch": "39cba8cdfcc3dfe9d5bebbaec1cd3bfbaf0aa6962a764ce173406d95b751e6d2",
+    "branch": "7062bda863d23eed215a0a3a8df78395f84026680906ea5d9667124d8a8f04dc",
     "epoch": 3,
     "evidence": "pair",
     "index": 2,
@@ -585,7 +585,7 @@
     ],
     "read_fenced_after": false
    },
-   "seconds": 0.261
+   "seconds": 0.305
   },
   {
    "index": 42,
@@ -598,9 +598,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792861281396
+    "sent_ms": 1792863375603
    },
-   "seconds": 0.203
+   "seconds": 0.19
   },
   {
    "index": 43,
@@ -611,7 +611,7 @@
     "service": "carol",
     "started": true
    },
-   "seconds": 0.103
+   "seconds": 0.105
   },
   {
    "index": 44,
@@ -627,7 +627,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.327
+   "seconds": 0.224
   },
   {
    "index": 45,
@@ -693,7 +693,7 @@
     "consumed": 33,
     "lost_after_consume": 0
    },
-   "seconds": 0.059
+   "seconds": 0.054
   },
   {
    "index": 50,
@@ -719,7 +719,7 @@
      "repair_stage": 1
     }
    },
-   "seconds": 0.344
+   "seconds": 0.368
   },
   {
    "index": 51,
@@ -740,7 +740,7 @@
      "rekey that reuses another member's key"
     ]
    },
-   "seconds": 0.4
+   "seconds": 0.357
   },
   {
    "index": 52,
@@ -798,7 +798,7 @@
      "bob"
     ]
    },
-   "seconds": 0.002
+   "seconds": 0.001
   }
  ],
  "skipped_steps": 0,
@@ -812,11 +812,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "6c0331a8a2f9e4ec0c8f52acca8c4f43612b2ddd"
  },
  "observations": {
   "apf_state": {
-   "branch": "39cba8cdfcc3dfe9d5bebbaec1cd3bfbaf0aa6962a764ce173406d95b751e6d2",
+   "branch": "7062bda863d23eed215a0a3a8df78395f84026680906ea5d9667124d8a8f04dc",
    "epoch": 3,
    "grants": [
     {
@@ -918,7 +918,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "39cba8cdfcc3dfe9d5bebbaec1cd3bfbaf0aa6962a764ce173406d95b751e6d2",
+    "branch": "7062bda863d23eed215a0a3a8df78395f84026680906ea5d9667124d8a8f04dc",
     "confirmations": [
      {
       "outcome": "ok",
@@ -942,8 +942,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 61,
-    "public_key": "c29c63cedbd43a9476b01e6c56a538d701b96b46e6f54ef94dc991bfbb09e256",
+    "polls": 58,
+    "public_key": "6567f6d7a4126c12f5fefc6eeaeecc29270cef042b5c41c867d563bf3bc82841",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -953,7 +953,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "39cba8cdfcc3dfe9d5bebbaec1cd3bfbaf0aa6962a764ce173406d95b751e6d2",
+    "branch": "7062bda863d23eed215a0a3a8df78395f84026680906ea5d9667124d8a8f04dc",
     "confirmations": [
      {
       "outcome": "ok",
@@ -977,8 +977,8 @@
     "inbox": 15,
     "membership": "member",
     "name": "bob",
-    "polls": 20,
-    "public_key": "1a8934bec3fd3ceed39e4a4236537645e0563df67b234fca1fdb4961a49ed70e",
+    "polls": 19,
+    "public_key": "22df3f160efa4cc62e6d16788fa56af945476b1d0476fdccc293fc7da9af2806",
     "rejections": [],
     "restarts": 3,
     "retain": false,
@@ -1004,8 +1004,8 @@
     "inbox": 16,
     "membership": "removed",
     "name": "carol",
-    "polls": 13,
-    "public_key": "586c4c412f58bd3bf81b6cb7e01a93a9b6530e66b1b60cb4de40c4b44cd7e1bc",
+    "polls": 11,
+    "public_key": "1fda55102adbe865fad31a837ad267c76a3de1c0c7e9fb9a71e61a511ace606b",
     "rejections": [],
     "restarts": 1,
     "retain": false,
@@ -1086,13 +1086,13 @@
     "sequence": 8
    },
    {
-    "actor": "bob",
+    "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
    },
    {
-    "actor": "carol",
+    "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
@@ -1224,16 +1224,16 @@
     "sequence": 12
    },
    {
-    "actor": "alice",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 8
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
    },
    {
     "actor": "carol",
@@ -1350,12 +1350,6 @@
     "sequence": 33
    },
    {
-    "actor": "alice",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 34
-   },
-   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
@@ -1363,15 +1357,21 @@
    },
    {
     "actor": "alice",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 35
+    "sequence": 34
    },
    {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 15
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 35
    },
    {
     "actor": "alice",
@@ -1392,6 +1392,12 @@
     "sequence": 38
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
     "actor": "alice",
     "command": "emit",
     "outcome": "ok",
@@ -1402,12 +1408,6 @@
     "command": "allocate",
     "outcome": "ok",
     "sequence": 40
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 13
    },
    {
     "actor": "bob",
@@ -1422,12 +1422,6 @@
     "sequence": 41
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 14
-   },
-   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
@@ -1440,6 +1434,12 @@
     "sequence": 42
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
     "actor": "alice",
     "command": "emit",
     "outcome": "ok",
@@ -1450,6 +1450,12 @@
     "command": "allocate",
     "outcome": "ok",
     "sequence": 44
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
    },
    {
     "actor": "alice",
@@ -1470,28 +1476,22 @@
     "sequence": 46
    },
    {
-    "actor": "bob",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
     "actor": "alice",
     "command": "emit",
     "outcome": "ok",
     "sequence": 47
    },
    {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
     "actor": "alice",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 48
-   },
-   {
-    "actor": "alice",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 49
    },
    {
     "actor": "carol",
@@ -1501,15 +1501,15 @@
    },
    {
     "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "alice",
     "command": "persist",
     "outcome": "ok",
     "sequence": 50
-   },
-   {
-    "actor": "bob",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
    },
    {
     "actor": "alice",
@@ -1530,16 +1530,16 @@
     "sequence": 17
    },
    {
-    "actor": "alice",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 53
-   },
-   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 20
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 53
    },
    {
     "actor": "alice",
@@ -1566,16 +1566,16 @@
     "sequence": 21
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
     "actor": "alice",
     "command": "release",
     "outcome": "ok",
     "sequence": 57
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
    },
    {
     "actor": "alice",
@@ -1602,6 +1602,12 @@
     "sequence": 61
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
@@ -1614,28 +1620,22 @@
     "sequence": 62
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
     "actor": "alice",
     "command": "emit",
     "outcome": "ok",
     "sequence": 63
    },
    {
-    "actor": "bob",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 23
-   },
-   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 20
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
    },
    {
     "actor": "alice",

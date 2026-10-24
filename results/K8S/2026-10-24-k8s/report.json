@@ -3,8 +3,8 @@
  "title": "Kubernetes network isolation of the testbed services",
  "hypothesis": "(H1) Agents reach the APF, the relay and the QRNG service, and nothing else reaches an agent: not another agent, not the relay, not the APF. (H2) The relay cannot reach the APF. (H3) With these policies the group works end to end.",
  "result": "pass",
- "started": 1792860110.0975661,
- "seconds": 2.832,
+ "started": 1792865012.606751,
+ "seconds": 2.544,
  "steps": [
   {
    "index": 0,
@@ -23,7 +23,7 @@
     "relay->apf": "blocked",
     "qrng->apf": "blocked"
    },
-   "seconds": 1.843
+   "seconds": 1.556
   },
   {
    "index": 1,
@@ -31,10 +31,10 @@
    "name": "I2 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "39d2458e281d340e5119ff57562313858bb1bc7b230a8ae9e3c36f0516745aaf",
+    "branch": "b72b892921beb63b2154b5707027c7f7dd7ad16e577b4e7457023a8bbb174126",
     "epoch": 0
    },
-   "seconds": 0.063
+   "seconds": 0.062
   },
   {
    "index": 2,
@@ -44,7 +44,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.02
+   "seconds": 0.017
   },
   {
    "index": 3,
@@ -52,12 +52,12 @@
    "name": "I4 admit bob",
    "status": "pass",
    "detail": {
-    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "branch": "3f5ff2d32e13bf67cc1c01324947646ae615f9982364fa3fce4b23753e4c1af0",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.222
+   "seconds": 0.2
   },
   {
    "index": 4,
@@ -70,9 +70,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792860112283
+    "sent_ms": 1792865014475
    },
-   "seconds": 0.039
+   "seconds": 0.035
   },
   {
    "index": 5,
@@ -88,7 +88,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.32
+   "seconds": 0.386
   },
   {
    "index": 6,
@@ -123,7 +123,7 @@
      "release": 1
     }
    },
-   "seconds": 0.319
+   "seconds": 0.283
   }
  ],
  "skipped_steps": 0,
@@ -137,11 +137,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "86fd2e7784960223915ec4246acd8e9dac532041"
  },
  "observations": {
   "apf_state": {
-   "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+   "branch": "3f5ff2d32e13bf67cc1c01324947646ae615f9982364fa3fce4b23753e4c1af0",
    "epoch": 1,
    "grants": [
     {
@@ -224,7 +224,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "branch": "3f5ff2d32e13bf67cc1c01324947646ae615f9982364fa3fce4b23753e4c1af0",
     "confirmations": [],
     "cursor": 1,
     "entropy": {
@@ -240,8 +240,8 @@
     "inbox": 0,
     "membership": "member",
     "name": "alice",
-    "polls": 74,
-    "public_key": "7fff68d4434126bf431bfa916f449aa2991d0048190f739442d877e8a1769899",
+    "polls": 69,
+    "public_key": "a1e67337f07651b6568bf676d441641dfc5bec76a11c8053fd13788f8dc21af9",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -251,7 +251,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "a444b15778b0529bd3dfb1e8ea96e3e70adda7110e8fa97071bd5193ec5c720e",
+    "branch": "3f5ff2d32e13bf67cc1c01324947646ae615f9982364fa3fce4b23753e4c1af0",
     "confirmations": [],
     "cursor": 1,
     "entropy": {
@@ -267,8 +267,8 @@
     "inbox": 1,
     "membership": "member",
     "name": "bob",
-    "polls": 75,
-    "public_key": "36ad9cb6cb9e81ab045339995902b547489ce6b4082e4573c6f571014ccacd0f",
+    "polls": 68,
+    "public_key": "5b911c4a5605c2da156fb353a1281521e7364a1c05d021e09391314811774412",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -294,8 +294,8 @@
     "inbox": 0,
     "membership": "candidate",
     "name": "carol",
-    "polls": 76,
-    "public_key": "ec5804b47cc3d950627ade80c4bedef2784927c4c007f6975216fe42655f8b28",
+    "polls": 57,
+    "public_key": "4269b64679d401bbc7af6d23551ef2f598c6a5ba383e3ac33976422481bb1f08",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -308,10 +308,10 @@
    "available": true,
    "bytes": 612,
    "clients": {
-    "10.42.0.82": 260,
-    "10.42.0.83": 96,
-    "10.42.0.84": 160,
-    "10.42.0.85": 96
+    "10.42.0.47": 96,
+    "10.42.0.48": 160,
+    "10.42.0.49": 260,
+    "10.42.0.50": 96
    },
    "mock": true,
    "refused": 0,

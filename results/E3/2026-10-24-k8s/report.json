@@ -3,8 +3,8 @@
  "title": "APF and agent restarts, outages and offline members",
  "hypothesis": "(H1) An APF restart keeps the policy state, the frontier and every registered key; members continue without any change. (H2) While the APF is down no release happens and no message is delivered; a message decrypted during the outage is delivered once the APF returns (delay, not loss). (H3) A restarted agent resumes as the same member with the same key, frontier and request sequence, and receives the traffic sent while it was down. (H4) An offline member does not block a revocation and repair; when it returns it applies its own removal and receives nothing sent after it. (H5) The oracle accepts the trace and rejects the broken controls.",
  "result": "pass",
- "started": 1792860646.8048024,
- "seconds": 213.734,
+ "started": 1792865317.817756,
+ "seconds": 214.544,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "890ddd6b411b455bc704b1543aeb1990bc173881723888475b8efdc2afb9b677",
+    "branch": "323770cb4dcdb432b2f933832754f9ee383f39c42e6182df935e0b5d8b6375aa",
     "epoch": 0
    },
-   "seconds": 0.058
+   "seconds": 0.069
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.016
+   "seconds": 0.019
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.017
+   "seconds": 0.019
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 admit bob",
    "status": "pass",
    "detail": {
-    "branch": "b6e524ce0d24344ae91603b160075573c4d8f046e93ff6f55c593991835c2050",
+    "branch": "bb892910f9659cdb4da7fde9bea7360d2b433007160143c959dd2f26b5f455d0",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.2
+   "seconds": 0.219
   },
   {
    "index": 4,
@@ -56,12 +56,12 @@
    "name": "A5 admit carol",
    "status": "pass",
    "detail": {
-    "branch": "30b9f07dd599ce50fe4c56e9765948a4dbcf9ba7c026d6e008349b0b2f905a45",
+    "branch": "96930d173df0c59bdba5cd88b4aa1f89abc03be53803e81608588f709dd4fdeb",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.219
+   "seconds": 0.226
   },
   {
    "index": 5,
@@ -75,9 +75,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860647347
+    "sent_ms": 1792865318405
    },
-   "seconds": 0.033
+   "seconds": 0.035
   },
   {
    "index": 6,
@@ -93,7 +93,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.39
+   "seconds": 0.381
   },
   {
    "index": 7,
@@ -105,7 +105,7 @@
     "service": "apf",
     "started": true
    },
-   "seconds": 33.803
+   "seconds": 33.347
   },
   {
    "index": 8,
@@ -123,7 +123,7 @@
     "read_fenced": false,
     "repair_pending": null
    },
-   "seconds": 0.007
+   "seconds": 0.008
   },
   {
    "index": 9,
@@ -137,9 +137,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792860681592
+    "sent_ms": 1792865352184
    },
-   "seconds": 0.045
+   "seconds": 0.043
   },
   {
    "index": 10,
@@ -155,7 +155,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.394
+   "seconds": 0.401
   },
   {
    "index": 11,
@@ -168,7 +168,7 @@
      "bob-000001"
     ]
    },
-   "seconds": 0.011
+   "seconds": 0.009
   },
   {
    "index": 12,
@@ -179,7 +179,7 @@
     "held": true,
     "mailbox": "carol"
    },
-   "seconds": 0.007
+   "seconds": 0.006
   },
   {
    "index": 13,
@@ -193,9 +193,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860682042
+    "sent_ms": 1792865352663
    },
-   "seconds": 0.039
+   "seconds": 0.063
   },
   {
    "index": 14,
@@ -215,7 +215,7 @@
      "carol"
     ]
    },
-   "seconds": 0.338
+   "seconds": 0.399
   },
   {
    "index": 15,
@@ -225,7 +225,7 @@
    "detail": {
     "stopped": "apf"
    },
-   "seconds": 32.652
+   "seconds": 32.708
   },
   {
    "index": 16,
@@ -236,7 +236,7 @@
     "refused": "transport",
     "error": "transport: Connection Failed"
    },
-   "seconds": 0.012
+   "seconds": 0.017
   },
   {
    "index": 17,
@@ -247,7 +247,7 @@
     "held": false,
     "mailbox": "carol"
    },
-   "seconds": 0.01
+   "seconds": 0.009
   },
   {
    "index": 18,
@@ -263,7 +263,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.323
+   "seconds": 0.393
   },
   {
    "index": 19,
@@ -276,7 +276,7 @@
      "alice-000002"
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.005
   },
   {
    "index": 20,
@@ -287,7 +287,7 @@
     "service": "apf",
     "started": true
    },
-   "seconds": 3.091
+   "seconds": 3.1
   },
   {
    "index": 21,
@@ -303,7 +303,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.788
+   "seconds": 0.778
   },
   {
    "index": 22,
@@ -316,7 +316,7 @@
      "alice-000002"
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 23,
@@ -328,7 +328,7 @@
     "service": "bob",
     "started": true
    },
-   "seconds": 33.035
+   "seconds": 33.138
   },
   {
    "index": 24,
@@ -343,7 +343,7 @@
     "future": 0,
     "waiting": []
    },
-   "seconds": 0.012
+   "seconds": 0.015
   },
   {
    "index": 25,
@@ -357,9 +357,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860752365
+    "sent_ms": 1792865423280
    },
-   "seconds": 0.049
+   "seconds": 0.047
   },
   {
    "index": 26,
@@ -373,9 +373,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792860752437
+    "sent_ms": 1792865423356
    },
-   "seconds": 0.072
+   "seconds": 0.076
   },
   {
    "index": 27,
@@ -391,7 +391,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.401
+   "seconds": 0.405
   },
   {
    "index": 28,
@@ -401,7 +401,7 @@
    "detail": {
     "stopped": "bob"
    },
-   "seconds": 32.182
+   "seconds": 32.018
   },
   {
    "index": 29,
@@ -415,9 +415,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792860785092
+    "sent_ms": 1792865455847
    },
-   "seconds": 0.072
+   "seconds": 0.069
   },
   {
    "index": 30,
@@ -428,7 +428,7 @@
     "service": "bob",
     "started": true
    },
-   "seconds": 3.367
+   "seconds": 3.391
   },
   {
    "index": 31,
@@ -444,7 +444,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.281
+   "seconds": 0.263
   },
   {
    "index": 32,
@@ -458,7 +458,7 @@
      "alice-000005"
     ]
    },
-   "seconds": 0.006
+   "seconds": 0.005
   },
   {
    "index": 33,
@@ -480,10 +480,10 @@
    "status": "pass",
    "detail": {
     "sent": 10,
-    "seconds": 1.523,
+    "seconds": 1.512,
     "sends_per_second": 6.6
    },
-   "seconds": 1.523
+   "seconds": 1.512
   },
   {
    "index": 35,
@@ -495,7 +495,7 @@
     "service": "bob",
     "started": true
    },
-   "seconds": 34.183
+   "seconds": 35.215
   },
   {
    "index": 36,
@@ -511,7 +511,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.286
+   "seconds": 0.219
   },
   {
    "index": 37,
@@ -524,7 +524,7 @@
     "delivered": 10,
     "lost": 0
    },
-   "seconds": 0.007
+   "seconds": 0.006
   },
   {
    "index": 38,
@@ -546,7 +546,7 @@
      "alice-000015"
     ]
    },
-   "seconds": 0.009
+   "seconds": 0.006
   },
   {
    "index": 39,
@@ -556,7 +556,7 @@
    "detail": {
     "stopped": "carol"
    },
-   "seconds": 31.197
+   "seconds": 31.337
   },
   {
    "index": 40,
@@ -567,7 +567,7 @@
     "read_fenced": true,
     "revision": 85
    },
-   "seconds": 0.072
+   "seconds": 0.066
   },
   {
    "index": 41,
@@ -575,7 +575,7 @@
    "name": "E3 the repair completes without carol (bob confirms)",
    "status": "pass",
    "detail": {
-    "branch": "73adc5047c6ab17adc6ab3bf8a4ac1211a538a0576058d80d2c7c36bb616c787",
+    "branch": "b8d68591e6a7cc103784f292f828290cc79e729246356534f28c3022b685cd09",
     "epoch": 3,
     "evidence": "pair",
     "index": 2,
@@ -585,7 +585,7 @@
     ],
     "read_fenced_after": false
    },
-   "seconds": 0.362
+   "seconds": 0.306
   },
   {
    "index": 42,
@@ -598,9 +598,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792860856625
+    "sent_ms": 1792865528392
    },
-   "seconds": 0.233
+   "seconds": 0.211
   },
   {
    "index": 43,
@@ -611,7 +611,7 @@
     "service": "carol",
     "started": true
    },
-   "seconds": 2.71
+   "seconds": 2.794
   },
   {
    "index": 44,
@@ -627,7 +627,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.224
+   "seconds": 0.276
   },
   {
    "index": 45,
@@ -642,7 +642,7 @@
     "future": 0,
     "waiting": []
    },
-   "seconds": 0.008
+   "seconds": 0.006
   },
   {
    "index": 46,
@@ -655,7 +655,7 @@
      "alice-000016"
     ]
    },
-   "seconds": 0.007
+   "seconds": 0.006
   },
   {
    "index": 47,
@@ -681,7 +681,7 @@
     "excluded": [],
     "optional": 10
    },
-   "seconds": 0.017
+   "seconds": 0.02
   },
   {
    "index": 49,
@@ -693,7 +693,7 @@
     "consumed": 33,
     "lost_after_consume": 0
    },
-   "seconds": 0.096
+   "seconds": 0.084
   },
   {
    "index": 50,
@@ -719,7 +719,7 @@
      "repair_stage": 1
     }
    },
-   "seconds": 0.382
+   "seconds": 0.326
   },
   {
    "index": 51,
@@ -740,7 +740,7 @@
      "rekey that reuses another member's key"
     ]
    },
-   "seconds": 0.4
+   "seconds": 0.393
   },
   {
    "index": 52,
@@ -778,23 +778,23 @@
      "available": true,
      "bytes": 1252,
      "clients": {
-      "10.42.0.140": 444,
-      "10.42.0.141": 96,
-      "10.42.0.142": 164,
-      "10.42.0.143": 160,
-      "10.42.0.144": 64,
-      "10.42.0.145": 64,
-      "10.42.0.146": 68,
-      "10.42.0.147": 64,
-      "10.42.0.148": 64,
-      "10.42.0.149": 64
+      "10.42.0.78": 96,
+      "10.42.0.80": 444,
+      "10.42.0.81": 164,
+      "10.42.0.82": 160,
+      "10.42.0.83": 64,
+      "10.42.0.84": 64,
+      "10.42.0.85": 68,
+      "10.42.0.86": 64,
+      "10.42.0.87": 64,
+      "10.42.0.88": 64
      },
      "mock": true,
      "refused": 0,
      "requests": 54
     }
    },
-   "seconds": 0.036
+   "seconds": 0.032
   },
   {
    "index": 53,
@@ -807,7 +807,7 @@
      "bob"
     ]
    },
-   "seconds": 0.013
+   "seconds": 0.011
   }
  ],
  "skipped_steps": 0,
@@ -821,11 +821,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "86fd2e7784960223915ec4246acd8e9dac532041"
  },
  "observations": {
   "apf_state": {
-   "branch": "73adc5047c6ab17adc6ab3bf8a4ac1211a538a0576058d80d2c7c36bb616c787",
+   "branch": "b8d68591e6a7cc103784f292f828290cc79e729246356534f28c3022b685cd09",
    "epoch": 3,
    "grants": [
     {
@@ -927,7 +927,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "73adc5047c6ab17adc6ab3bf8a4ac1211a538a0576058d80d2c7c36bb616c787",
+    "branch": "b8d68591e6a7cc103784f292f828290cc79e729246356534f28c3022b685cd09",
     "confirmations": [
      {
       "outcome": "ok",
@@ -951,8 +951,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 2110,
-    "public_key": "f88e06437c5eb4a91d37d08e9023e59f0aed90ec3f28ee8086af5f4f34fa354d",
+    "polls": 2109,
+    "public_key": "12765f92ea40cde52d4bc3f726ead7aa45cbcff99a62f884bf25a0bd9357081d",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -962,7 +962,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "73adc5047c6ab17adc6ab3bf8a4ac1211a538a0576058d80d2c7c36bb616c787",
+    "branch": "b8d68591e6a7cc103784f292f828290cc79e729246356534f28c3022b685cd09",
     "confirmations": [
      {
       "outcome": "ok",
@@ -986,8 +986,8 @@
     "inbox": 15,
     "membership": "member",
     "name": "bob",
-    "polls": 361,
-    "public_key": "dcc4de229b6d088b4da3c8d80b48e7f74e05779d3c71c92e6510c47edb7e4d61",
+    "polls": 362,
+    "public_key": "2700ae2ea148eb3c796bbd63ffe2e857268d80f0bb10f916530e59d2638c8c8d",
     "rejections": [],
     "restarts": 3,
     "retain": false,
@@ -1014,7 +1014,7 @@
     "membership": "removed",
     "name": "carol",
     "polls": 23,
-    "public_key": "e7b99b719218d406f283795af2d1f6a0ab82b569f1674a1756372bc73edf71d5",
+    "public_key": "0fd0cf6a4401f4c375e2b6bf229a1eafddb77733c765a283932ef08a8d59022e",
     "rejections": [],
     "restarts": 1,
     "retain": false,
@@ -1027,16 +1027,16 @@
    "available": true,
    "bytes": 1252,
    "clients": {
-    "10.42.0.140": 444,
-    "10.42.0.141": 96,
-    "10.42.0.142": 164,
-    "10.42.0.143": 160,
-    "10.42.0.144": 64,
-    "10.42.0.145": 64,
-    "10.42.0.146": 68,
-    "10.42.0.147": 64,
-    "10.42.0.148": 64,
-    "10.42.0.149": 64
+    "10.42.0.78": 96,
+    "10.42.0.80": 444,
+    "10.42.0.81": 164,
+    "10.42.0.82": 160,
+    "10.42.0.83": 64,
+    "10.42.0.84": 64,
+    "10.42.0.85": 68,
+    "10.42.0.86": 64,
+    "10.42.0.87": 64,
+    "10.42.0.88": 64
    },
    "mock": true,
    "refused": 0,
@@ -1104,13 +1104,13 @@
     "sequence": 8
    },
    {
-    "actor": "carol",
+    "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
    },
    {
-    "actor": "bob",
+    "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
@@ -1332,28 +1332,28 @@
     "sequence": 29
    },
    {
-    "actor": "alice",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 30
-   },
-   {
-    "actor": "alice",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 31
-   },
-   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 16
    },
    {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 14
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 31
    },
    {
     "actor": "alice",
@@ -1374,22 +1374,16 @@
     "sequence": 34
    },
    {
-    "actor": "alice",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 35
-   },
-   {
-    "actor": "alice",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 36
-   },
-   {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 17
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 35
    },
    {
     "actor": "bob",
@@ -1399,15 +1393,9 @@
    },
    {
     "actor": "alice",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 37
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
+    "sequence": 36
    },
    {
     "actor": "bob",
@@ -1417,9 +1405,21 @@
    },
    {
     "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "alice",
     "command": "persist",
     "outcome": "ok",
     "sequence": 38
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
    },
    {
     "actor": "alice",
@@ -1434,10 +1434,22 @@
     "sequence": 40
    },
    {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
     "actor": "alice",
     "command": "release",
     "outcome": "ok",
     "sequence": 41
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 42
    },
    {
     "actor": "carol",
@@ -1447,21 +1459,15 @@
    },
    {
     "actor": "alice",
-    "command": "persist",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 42
+    "sequence": 43
    },
    {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 17
-   },
-   {
-    "actor": "alice",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 43
+    "sequence": 18
    },
    {
     "actor": "alice",
@@ -1476,22 +1482,16 @@
     "sequence": 45
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
-   },
-   {
     "actor": "alice",
     "command": "persist",
     "outcome": "ok",
     "sequence": 46
    },
    {
-    "actor": "bob",
+    "actor": "carol",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 18
+    "sequence": 20
    },
    {
     "actor": "alice",
@@ -1512,12 +1512,6 @@
     "sequence": 49
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
     "actor": "alice",
     "command": "persist",
     "outcome": "ok",
@@ -1536,16 +1530,16 @@
     "sequence": 51
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
     "actor": "alice",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 52
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
    },
    {
     "actor": "alice",
@@ -1566,6 +1560,12 @@
     "sequence": 54
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
     "actor": "alice",
     "command": "emit",
     "outcome": "ok",
@@ -1578,12 +1578,6 @@
     "sequence": 56
    },
    {
-    "actor": "alice",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 57
-   },
-   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
@@ -1591,15 +1585,21 @@
    },
    {
     "actor": "alice",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 58
+    "sequence": 57
    },
    {
     "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 23
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 58
    },
    {
     "actor": "alice",
@@ -1614,6 +1614,12 @@
     "sequence": 60
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
     "actor": "bob",
     "command": "consume",
     "outcome": "ok",
@@ -1624,12 +1630,6 @@
     "command": "release",
     "outcome": "ok",
     "sequence": 61
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 24
    },
    {
     "actor": "alice",

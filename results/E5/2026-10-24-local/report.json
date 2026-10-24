@@ -3,8 +3,8 @@
  "title": "Eight agents in parallel: latency, APF cost growth and safety at scale",
  "hypothesis": "(H1) Admission, release and delivery keep working as the group grows to eight members; their cost is measured, not assumed. (H2) With all eight agents sending in parallel, with and without relay faults, every message reaches every reader exactly once and only after an APF consumption. (H3) A revocation and repair with seven continuing members completes and excludes the revoked member. (H4) The APF's time per request grows with its kernel history, because the kernel validates its whole hash chain of full snapshots on every request; E5 measures the growth. (H5) The oracle accepts the full trace.",
  "result": "pass",
- "started": 1792861290.1765735,
- "seconds": 222.689,
+ "started": 1792863384.6034086,
+ "seconds": 239.264,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 agent01 founds the group",
    "status": "pass",
    "detail": {
-    "branch": "6ec9a7bde5aa3b83d1f1934cea7bd39e388fea85b2b85c58e4c3896ebfc06da7",
+    "branch": "9c986c896cee84196a6b7709951c1f8a568d535799ecdba095a137bb031d2d64",
     "epoch": 0
    },
-   "seconds": 0.058
+   "seconds": 0.054
   },
   {
    "index": 1,
@@ -28,41 +28,41 @@
      {
       "member": "agent02",
       "group_size": 2,
-      "ms": 148.9
+      "ms": 175.6
      },
      {
       "member": "agent03",
       "group_size": 3,
-      "ms": 147.1
+      "ms": 153.3
      },
      {
       "member": "agent04",
       "group_size": 4,
-      "ms": 161.7
+      "ms": 181.8
      },
      {
       "member": "agent05",
       "group_size": 5,
-      "ms": 168.6
+      "ms": 156.8
      },
      {
       "member": "agent06",
       "group_size": 6,
-      "ms": 161.8
+      "ms": 184.4
      },
      {
       "member": "agent07",
       "group_size": 7,
-      "ms": 166.4
+      "ms": 231.3
      },
      {
       "member": "agent08",
       "group_size": 8,
-      "ms": 157.2
+      "ms": 197.5
      }
     ]
    },
-   "seconds": 1.173
+   "seconds": 1.333
   },
   {
    "index": 2,
@@ -105,7 +105,7 @@
      "agent08"
     ]
    },
-   "seconds": 0.012
+   "seconds": 0.014
   },
   {
    "index": 4,
@@ -116,40 +116,40 @@
     "rounds": [
      {
       "round": 1,
-      "seconds": 2.89,
+      "seconds": 3.14,
       "apf_requests": 88,
       "history_from": 15,
       "history_to": 94,
-      "apf_p50_ms": 26.5
+      "apf_p50_ms": 32.0
      },
      {
       "round": 2,
-      "seconds": 10.26,
+      "seconds": 10.62,
       "apf_requests": 88,
       "history_from": 95,
       "history_to": 174,
-      "apf_p50_ms": 115.9
+      "apf_p50_ms": 115.0
      },
      {
       "round": 3,
-      "seconds": 22.21,
+      "seconds": 24.29,
       "apf_requests": 88,
       "history_from": 175,
       "history_to": 254,
-      "apf_p50_ms": 247.3
+      "apf_p50_ms": 272.1
      },
      {
       "round": 4,
-      "seconds": 41.95,
+      "seconds": 43.1,
       "apf_requests": 88,
       "history_from": 255,
       "history_to": 334,
-      "apf_p50_ms": 477.8
+      "apf_p50_ms": 503.8
      }
     ],
-    "apf_p50_growth": 18.0
+    "apf_p50_growth": 15.7
    },
-   "seconds": 77.328
+   "seconds": 81.157
   },
   {
    "index": 5,
@@ -173,7 +173,7 @@
     "consumed": 224,
     "lost_after_consume": 0
    },
-   "seconds": 1.261
+   "seconds": 0.727
   },
   {
    "index": 7,
@@ -183,76 +183,76 @@
    "detail": {
     "send_ms": {
      "n": 32,
-     "p50": 3719.7,
-     "p95": 11934.6,
-     "max": 12139.7
+     "p50": 3833.4,
+     "p95": 11603.2,
+     "max": 11787.7
     },
     "delivery_ms": {
      "n": 224,
-     "p50": 4223.0,
-     "p95": 22389,
-     "max": 29588
+     "p50": 4692.5,
+     "p95": 24389,
+     "max": 31098
     },
     "admit_ms": {
      "n": 7,
-     "p50": 161.7,
-     "p95": 166.4,
-     "max": 168.6
+     "p50": 181.8,
+     "p95": 197.5,
+     "max": 231.3
     },
     "apf_ms_by_history": [
      {
       "history_up_to": 33,
       "requests": 40,
-      "p50": 5.87
+      "p50": 5.98
      },
      {
       "history_up_to": 67,
       "requests": 41,
-      "p50": 25.06
+      "p50": 26.44
      },
      {
       "history_up_to": 100,
       "requests": 34,
-      "p50": 53.94
+      "p50": 59.02
      },
      {
       "history_up_to": 134,
       "requests": 41,
-      "p50": 83.73
+      "p50": 95.37
      },
      {
       "history_up_to": 167,
       "requests": 34,
-      "p50": 139.26
+      "p50": 144.58
      },
      {
       "history_up_to": 201,
-      "requests": 41,
-      "p50": 194.66
+      "requests": 40,
+      "p50": 201.59
      },
      {
       "history_up_to": 234,
-      "requests": 34,
-      "p50": 259.17
+      "requests": 35,
+      "p50": 282.21
      },
      {
       "history_up_to": 268,
       "requests": 33,
-      "p50": 353.28
+      "p50": 356.17
      },
      {
       "history_up_to": 301,
       "requests": 42,
-      "p50": 448.98
+      "p50": 490.21
      },
      {
       "history_up_to": 335,
       "requests": 33,
-      "p50": 521.8
+      "p50": 540.32
      }
     ]
    },
-   "seconds": 0.009
+   "seconds": 0.01
   },
   {
    "index": 8,
@@ -276,16 +276,16 @@
     "rounds": [
      {
       "round": 1,
-      "seconds": 61.32,
+      "seconds": 68.66,
       "apf_requests": 88,
       "history_from": 335,
       "history_to": 414,
-      "apf_p50_ms": 699.5
+      "apf_p50_ms": 777.8
      }
     ],
     "apf_p50_growth": 1.0
    },
-   "seconds": 61.32
+   "seconds": 68.665
   },
   {
    "index": 10,
@@ -297,7 +297,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.014
+   "seconds": 0.009
   },
   {
    "index": 11,
@@ -312,19 +312,19 @@
     "agent03": {
      "undecryptable": 1
     },
-    "agent04": {
-     "undecryptable": 1
-    },
-    "agent05": {
-     "undecryptable": 1
-    },
+    "agent04": {},
+    "agent05": {},
     "agent06": {
      "undecryptable": 1
     },
-    "agent07": {},
-    "agent08": {}
+    "agent07": {
+     "undecryptable": 1
+    },
+    "agent08": {
+     "undecryptable": 1
+    }
    },
-   "seconds": 0.018
+   "seconds": 0.012
   },
   {
    "index": 12,
@@ -335,7 +335,7 @@
     "read_fenced": true,
     "revision": 415
    },
-   "seconds": 0.846
+   "seconds": 0.799
   },
   {
    "index": 13,
@@ -343,7 +343,7 @@
    "name": "D2 repair with seven continuing members",
    "status": "pass",
    "detail": {
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
     "epoch": 8,
     "evidence": "pair",
     "index": 7,
@@ -353,7 +353,7 @@
     ],
     "read_fenced_after": false
    },
-   "seconds": 8.007
+   "seconds": 9.302
   },
   {
    "index": 14,
@@ -364,16 +364,16 @@
     "rounds": [
      {
       "round": 1,
-      "seconds": 69.12,
+      "seconds": 72.97,
       "apf_requests": 70,
       "history_from": 418,
       "history_to": 480,
-      "apf_p50_ms": 987.9
+      "apf_p50_ms": 1042.9
      }
     ],
     "apf_p50_growth": 1.0
    },
-   "seconds": 69.123
+   "seconds": 72.97
   },
   {
    "index": 15,
@@ -400,7 +400,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.008
+   "seconds": 0.009
   },
   {
    "index": 17,
@@ -412,7 +412,7 @@
     "consumed": 322,
     "lost_after_consume": 0
    },
-   "seconds": 1.04
+   "seconds": 1.504
   },
   {
    "index": 18,
@@ -438,7 +438,7 @@
      "repair_stage": 1
     }
    },
-   "seconds": 1.007
+   "seconds": 1.08
   },
   {
    "index": 19,
@@ -459,7 +459,7 @@
      "rekey that reuses another member's key"
     ]
    },
-   "seconds": 1.435
+   "seconds": 1.589
   },
   {
    "index": 20,
@@ -534,7 +534,7 @@
      "requests": 107
     }
    },
-   "seconds": 0.009
+   "seconds": 0.008
   },
   {
    "index": 21,
@@ -544,76 +544,76 @@
    "detail": {
     "send_ms": {
      "n": 47,
-     "p50": 5516.3,
-     "p95": 19885.2,
-     "max": 25607.8
+     "p50": 6647.0,
+     "p95": 22717.8,
+     "max": 23472.1
     },
     "delivery_ms": {
      "n": 322,
-     "p50": 7011.5,
-     "p95": 36338,
-     "max": 49466
+     "p50": 7648.0,
+     "p95": 40553,
+     "max": 49852
     },
     "admit_ms": {
      "n": 7,
-     "p50": 161.7,
-     "p95": 166.4,
-     "max": 168.6
+     "p50": 181.8,
+     "p95": 197.5,
+     "max": 231.3
     },
     "apf_ms_by_history": [
      {
       "history_up_to": 48,
       "requests": 63,
-      "p50": 6.66
+      "p50": 6.99
      },
      {
       "history_up_to": 96,
       "requests": 48,
-      "p50": 44.58
+      "p50": 42.92
      },
      {
       "history_up_to": 144,
       "requests": 56,
-      "p50": 92.62
+      "p50": 99.01
      },
      {
       "history_up_to": 192,
       "requests": 48,
-      "p50": 173.74
+      "p50": 183.39
      },
      {
       "history_up_to": 240,
       "requests": 56,
-      "p50": 251.19
+      "p50": 272.08
      },
      {
       "history_up_to": 288,
       "requests": 56,
-      "p50": 390.34
+      "p50": 406.16
      },
      {
       "history_up_to": 336,
       "requests": 48,
-      "p50": 512.68
+      "p50": 537.51
      },
      {
       "history_up_to": 384,
       "requests": 56,
-      "p50": 642.25
+      "p50": 679.01
      },
      {
       "history_up_to": 432,
       "requests": 55,
-      "p50": 801.98
+      "p50": 895.42
      },
      {
       "history_up_to": 481,
       "requests": 55,
-      "p50": 1006.43
+      "p50": 1057.72
      }
     ]
    },
-   "seconds": 0.011
+   "seconds": 0.01
   }
  ],
  "skipped_steps": 0,
@@ -627,11 +627,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "6c0331a8a2f9e4ec0c8f52acca8c4f43612b2ddd"
  },
  "observations": {
   "apf_state": {
-   "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+   "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
    "epoch": 8,
    "grants": [
     {
@@ -800,15 +800,15 @@
    ]
   },
   "relay_stats": {
-   "dropped": 12,
-   "duplicated": 8,
+   "dropped": 13,
+   "duplicated": 6,
    "expired": 0,
    "faults": {
     "drop": 10,
     "duplicate": 10,
     "reorder": true
    },
-   "fetched": 330,
+   "fetched": 328,
    "handshake": {
     "scale": 8
    },
@@ -833,7 +833,7 @@
   "agents": {
    "agent01": {
     "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
     "confirmations": [
      {
       "outcome": "ok",
@@ -857,22 +857,9 @@
     "inbox": 41,
     "membership": "member",
     "name": "agent01",
-    "polls": 247,
-    "public_key": "5cc404cce51160c765a3f3ba9cc234b25e3bd1e5f6c7411b8a07e1a125f06fe3",
-    "rejections": [
-     {
-      "code": "undecryptable",
-      "error": "undecryptable: MLS processing",
-      "from": "agent07",
-      "op": "agent07-000006"
-     },
-     {
-      "code": "undecryptable",
-      "error": "undecryptable: MLS processing",
-      "from": "agent06",
-      "op": "agent06-000006"
-     }
-    ],
+    "polls": 347,
+    "public_key": "d76c7934bd23c2ebf59966f249fd7ab61713362b2971983956f278aedce4e6f3",
+    "rejections": [],
     "restarts": 0,
     "retain": false,
     "sequence": 83,
@@ -881,7 +868,7 @@
    },
    "agent02": {
     "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
     "confirmations": [
      {
       "outcome": "invalid_repair"
@@ -901,8 +888,8 @@
     "inbox": 41,
     "membership": "member",
     "name": "agent02",
-    "polls": 288,
-    "public_key": "92cce5bf6f6b0c8a18ec0502dffdefba4cd15b7f5619cb7aa6292308e98a6d0c",
+    "polls": 269,
+    "public_key": "7a8bfe650f1540f595b117e9254a5a353bb6ce24b6354084235b7acb7c588021",
     "rejections": [
      {
       "code": "undecryptable",
@@ -919,7 +906,7 @@
    },
    "agent03": {
     "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
     "confirmations": [
      {
       "outcome": "invalid_repair"
@@ -939,8 +926,8 @@
     "inbox": 41,
     "membership": "member",
     "name": "agent03",
-    "polls": 296,
-    "public_key": "5410296478254da5c085f64df1494c95d81951c8c7c01082fb1d83136eaa40d1",
+    "polls": 326,
+    "public_key": "e0e2e1c28a08fc0d41d611247291a05cf9da163a5b257d3ae5e1c263ecaddc2a",
     "rejections": [
      {
       "code": "undecryptable",
@@ -957,7 +944,114 @@
    },
    "agent04": {
     "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent04",
+    "polls": 239,
+    "public_key": "3a9e417189c0bfde0194471d5d47eaf6c073f3a870a83c2252e221eb1bb4b63e",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 2,
+    "waiting": []
+   },
+   "agent05": {
+    "adversary": [],
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent05",
+    "polls": 227,
+    "public_key": "5714e9086b1da8bdc118278dfce528016e836ea1209ae304575c146cf6781c8b",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent06",
+      "op": "agent06-000006"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 3,
+    "waiting": []
+   },
+   "agent06": {
+    "adversary": [],
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent06",
+    "polls": 256,
+    "public_key": "d3293f0878212c07b981702e5b83fb2baee6320e993f1cb14266a1e2a45512b1",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent07",
+      "op": "agent07-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 4,
+    "waiting": []
+   },
+   "agent07": {
+    "adversary": [],
+    "branch": "6b05391f0fcb0b3b5963b7af722fc1d38e2144493882f43487bc33c3e45b4951",
     "confirmations": [
      {
       "outcome": "ok",
@@ -980,91 +1074,9 @@
     "group": "scale",
     "inbox": 41,
     "membership": "member",
-    "name": "agent04",
-    "polls": 247,
-    "public_key": "b238049f5738288bf62bc58625852bf01f1ee18e80c4a8dc1ed4ecec0030d6fa",
-    "rejections": [
-     {
-      "code": "undecryptable",
-      "error": "undecryptable: MLS processing",
-      "from": "agent01",
-      "op": "agent01-000005"
-     }
-    ],
-    "restarts": 0,
-    "retain": false,
-    "sequence": 67,
-    "skipped_entries": 2,
-    "waiting": []
-   },
-   "agent05": {
-    "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
-    "confirmations": [
-     {
-      "outcome": "invalid_repair"
-     }
-    ],
-    "cursor": 8,
-    "entropy": {
-     "bytes": 184,
-     "failures": 0,
-     "requests": 11,
-     "source": "qrng"
-    },
-    "epoch": 8,
-    "errors": [],
-    "future": 0,
-    "group": "scale",
-    "inbox": 41,
-    "membership": "member",
-    "name": "agent05",
-    "polls": 264,
-    "public_key": "4f95bf6c84ff95cd54229bbe0e467b0337edd3524ad23cb46754c69a320d7e83",
-    "rejections": [
-     {
-      "code": "undecryptable",
-      "error": "undecryptable: MLS processing",
-      "from": "agent07",
-      "op": "agent07-000005"
-     },
-     {
-      "code": "undecryptable",
-      "error": "undecryptable: MLS processing",
-      "from": "agent03",
-      "op": "agent03-000006"
-     }
-    ],
-    "restarts": 0,
-    "retain": false,
-    "sequence": 67,
-    "skipped_entries": 3,
-    "waiting": []
-   },
-   "agent06": {
-    "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
-    "confirmations": [
-     {
-      "outcome": "invalid_repair"
-     }
-    ],
-    "cursor": 8,
-    "entropy": {
-     "bytes": 184,
-     "failures": 0,
-     "requests": 11,
-     "source": "qrng"
-    },
-    "epoch": 8,
-    "errors": [],
-    "future": 0,
-    "group": "scale",
-    "inbox": 41,
-    "membership": "member",
-    "name": "agent06",
-    "polls": 265,
-    "public_key": "f302639a17852f4bd5fcb6ad7ccfb810c6382e4c998d3e7569db6545421607f4",
+    "name": "agent07",
+    "polls": 246,
+    "public_key": "6cce51d58728579142568d0c722ca56f222bcac6c612b9763ceeaaf5dc286439",
     "rejections": [
      {
       "code": "undecryptable",
@@ -1073,37 +1085,6 @@
       "op": "agent05-000005"
      }
     ],
-    "restarts": 0,
-    "retain": false,
-    "sequence": 67,
-    "skipped_entries": 4,
-    "waiting": []
-   },
-   "agent07": {
-    "adversary": [],
-    "branch": "3c7f0530796f93600c58e4668cfe58a803f2f4fe7bf8b86cbc30025b630508c6",
-    "confirmations": [
-     {
-      "outcome": "invalid_repair"
-     }
-    ],
-    "cursor": 8,
-    "entropy": {
-     "bytes": 184,
-     "failures": 0,
-     "requests": 11,
-     "source": "qrng"
-    },
-    "epoch": 8,
-    "errors": [],
-    "future": 0,
-    "group": "scale",
-    "inbox": 41,
-    "membership": "member",
-    "name": "agent07",
-    "polls": 255,
-    "public_key": "aa855e2997ba8e4e49cfc7cb56f77352a7869dd9ef3380b8ae15fe454676c1a3",
-    "rejections": [],
     "restarts": 0,
     "retain": false,
     "sequence": 67,
@@ -1128,9 +1109,16 @@
     "inbox": 35,
     "membership": "removed",
     "name": "agent08",
-    "polls": 899,
-    "public_key": "5477858b186f69a6fa27dc5bc00fa133b467802ca409aad12c8ba16a2bc3e327",
-    "rejections": [],
+    "polls": 926,
+    "public_key": "f991e8616793de16c5a2be29ec5bea615d6835c7798a45834d3a0ff2adc2950c",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent01",
+      "op": "agent01-000005"
+     }
+    ],
     "restarts": 0,
     "retain": false,
     "sequence": 56,
@@ -1282,25 +1270,7 @@
     "sequence": 15
    },
    {
-    "actor": "agent03",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 2
-   },
-   {
     "actor": "agent02",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 2
-   },
-   {
-    "actor": "agent05",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 2
-   },
-   {
-    "actor": "agent07",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 2
@@ -1312,7 +1282,13 @@
     "sequence": 2
    },
    {
-    "actor": "agent06",
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent07",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 2
@@ -1324,10 +1300,16 @@
     "sequence": 2
    },
    {
-    "actor": "agent03",
-    "command": "release",
+    "actor": "agent05",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 3
+    "sequence": 2
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
    },
    {
     "actor": "agent01",
@@ -1342,13 +1324,13 @@
     "sequence": 3
    },
    {
-    "actor": "agent07",
+    "actor": "agent04",
     "command": "release",
     "outcome": "ok",
     "sequence": 3
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "release",
     "outcome": "ok",
     "sequence": 3
@@ -1360,19 +1342,19 @@
     "sequence": 3
    },
    {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
     "actor": "agent06",
     "command": "release",
     "outcome": "ok",
     "sequence": 3
    },
    {
-    "actor": "agent03",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 4
-   },
-   {
-    "actor": "agent08",
+    "actor": "agent07",
     "command": "release",
     "outcome": "ok",
     "sequence": 3
@@ -1390,13 +1372,13 @@
     "sequence": 4
    },
    {
-    "actor": "agent07",
+    "actor": "agent04",
     "command": "persist",
     "outcome": "ok",
     "sequence": 4
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "persist",
     "outcome": "ok",
     "sequence": 4
@@ -1408,19 +1390,19 @@
     "sequence": 4
    },
    {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
     "actor": "agent06",
     "command": "persist",
     "outcome": "ok",
     "sequence": 4
    },
    {
-    "actor": "agent03",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 5
-   },
-   {
-    "actor": "agent08",
+    "actor": "agent07",
     "command": "persist",
     "outcome": "ok",
     "sequence": 4
@@ -1438,13 +1420,13 @@
     "sequence": 5
    },
    {
-    "actor": "agent07",
+    "actor": "agent04",
     "command": "emit",
     "outcome": "ok",
     "sequence": 5
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "emit",
     "outcome": "ok",
     "sequence": 5
@@ -1456,16 +1438,76 @@
     "sequence": 5
    },
    {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
     "actor": "agent06",
     "command": "emit",
     "outcome": "ok",
     "sequence": 5
    },
    {
-    "actor": "agent08",
+    "actor": "agent07",
     "command": "emit",
     "outcome": "ok",
     "sequence": 5
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
    },
    {
     "actor": "agent01",
@@ -1474,43 +1516,31 @@
     "sequence": 19
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 6
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 6
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 6
-   },
-   {
     "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 6
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 6
+    "sequence": 7
    },
    {
     "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 6
+    "sequence": 7
    },
    {
     "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 7
@@ -1519,25 +1549,7 @@
     "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 6
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
+    "sequence": 8
    },
    {
     "actor": "agent01",
@@ -1546,25 +1558,7 @@
     "sequence": 20
    },
    {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 7
-   },
-   {
-    "actor": "agent07",
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 8
@@ -1576,13 +1570,25 @@
     "sequence": 8
    },
    {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 8
    },
    {
-    "actor": "agent05",
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 8
@@ -1594,25 +1600,25 @@
     "sequence": 21
    },
    {
-    "actor": "agent06",
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 8
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 8
+    "sequence": 9
    },
    {
     "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 8
+    "sequence": 9
    },
    {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 9
@@ -1624,7 +1630,7 @@
     "sequence": 9
    },
    {
-    "actor": "agent05",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 9
@@ -1642,25 +1648,13 @@
     "sequence": 22
    },
    {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 9
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 9
-   },
-   {
     "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 9
+    "sequence": 10
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 10
@@ -1672,7 +1666,19 @@
     "sequence": 10
    },
    {
-    "actor": "agent04",
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 10
@@ -1690,25 +1696,7 @@
     "sequence": 23
    },
    {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 10
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 10
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 10
-   },
-   {
-    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 11
@@ -1720,13 +1708,31 @@
     "sequence": 11
    },
    {
-    "actor": "agent07",
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 11
    },
    {
-    "actor": "agent05",
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 11
@@ -1738,25 +1744,7 @@
     "sequence": 24
    },
    {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 11
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 11
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 11
-   },
-   {
-    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 12
@@ -1768,13 +1756,31 @@
     "sequence": 12
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
     "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 12
    },
    {
-    "actor": "agent05",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 12
@@ -1786,52 +1792,10 @@
     "sequence": 25
    },
    {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 12
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 12
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 12
-   },
-   {
-    "actor": "agent02",
+    "actor": "agent01",
     "command": "allocate",
     "outcome": "ok",
-    "sequence": 13
-   },
-   {
-    "actor": "agent07",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 13
-   },
-   {
-    "actor": "agent03",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 13
-   },
-   {
-    "actor": "agent06",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 13
-   },
-   {
-    "actor": "agent05",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 13
+    "sequence": 26
    },
    {
     "actor": "agent04",
@@ -1840,46 +1804,40 @@
     "sequence": 13
    },
    {
-    "actor": "agent08",
+    "actor": "agent03",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 13
    },
    {
-    "actor": "agent01",
+    "actor": "agent02",
     "command": "allocate",
     "outcome": "ok",
-    "sequence": 26
-   },
-   {
-    "actor": "agent03",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 14
-   },
-   {
-    "actor": "agent02",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 14
+    "sequence": 13
    },
    {
     "actor": "agent07",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 14
+    "sequence": 13
    },
    {
     "actor": "agent06",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 14
+    "sequence": 13
    },
    {
     "actor": "agent05",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 14
+    "sequence": 13
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
    },
    {
     "actor": "agent04",
@@ -1895,39 +1853,39 @@
    },
    {
     "actor": "agent03",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 15
+    "sequence": 14
    },
    {
     "actor": "agent02",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 15
-   },
-   {
-    "actor": "agent08",
     "command": "release",
     "outcome": "ok",
     "sequence": 14
    },
    {
     "actor": "agent07",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 15
+    "sequence": 14
    },
    {
     "actor": "agent06",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 15
+    "sequence": 14
    },
    {
     "actor": "agent05",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 15
+    "sequence": 14
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
    },
    {
     "actor": "agent04",
@@ -1943,39 +1901,39 @@
    },
    {
     "actor": "agent03",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 16
+    "sequence": 15
    },
    {
     "actor": "agent02",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 16
-   },
-   {
-    "actor": "agent08",
     "command": "persist",
     "outcome": "ok",
     "sequence": 15
    },
    {
     "actor": "agent07",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 16
+    "sequence": 15
    },
    {
     "actor": "agent06",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 16
+    "sequence": 15
    },
    {
     "actor": "agent05",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 16
+    "sequence": 15
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
    },
    {
     "actor": "agent04",
@@ -1990,16 +1948,34 @@
     "sequence": 29
    },
    {
-    "actor": "agent02",
-    "command": "consume",
+    "actor": "agent03",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 17
+    "sequence": 16
    },
    {
-    "actor": "agent03",
-    "command": "consume",
+    "actor": "agent02",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 17
+    "sequence": 16
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
    },
    {
     "actor": "agent08",
@@ -2008,76 +1984,52 @@
     "sequence": 16
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 17
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 17
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 17
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 17
-   },
-   {
     "actor": "agent01",
     "command": "consume",
     "outcome": "ok",
     "sequence": 30
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 18
+    "sequence": 17
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
    },
    {
     "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 17
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 18
    },
    {
     "actor": "agent01",
@@ -2086,10 +2038,40 @@
     "sequence": 31
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 19
+    "sequence": 18
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
    },
    {
     "actor": "agent08",
@@ -2098,82 +2080,52 @@
     "sequence": 18
    },
    {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
-   },
-   {
     "actor": "agent01",
     "command": "consume",
     "outcome": "ok",
     "sequence": 32
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 20
+    "sequence": 19
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
    },
    {
     "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 19
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 20
    },
    {
     "actor": "agent01",
@@ -2182,10 +2134,40 @@
     "sequence": 33
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 21
+    "sequence": 20
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
    },
    {
     "actor": "agent08",
@@ -2194,82 +2176,52 @@
     "sequence": 20
    },
    {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 21
-   },
-   {
     "actor": "agent01",
     "command": "consume",
     "outcome": "ok",
     "sequence": 34
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 22
+    "sequence": 21
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
    },
    {
     "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 21
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
-   },
-   {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 22
    },
    {
     "actor": "agent01",
@@ -2278,10 +2230,40 @@
     "sequence": 35
    },
    {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 23
+    "sequence": 22
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
    },
    {
     "actor": "agent08",
@@ -2290,7 +2272,25 @@
     "sequence": 22
    },
    {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
     "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 23
@@ -2312,18 +2312,6 @@
     "command": "consume",
     "outcome": "ok",
     "sequence": 23
-   },
-   {
-    "actor": "agent04",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 23
-   },
-   {
-    "actor": "agent01",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 36
    },
    {
     "actor": "agent08",
@@ -2344,64 +2332,40 @@
     "sequence": 24
    },
    {
-    "actor": "agent06",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 24
-   },
-   {
-    "actor": "agent03",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 24
-   },
-   {
-    "actor": "agent08",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 24
-   },
-   {
-    "actor": "agent05",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 24
-   },
-   {
-    "actor": "agent07",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 24
-   },
-   {
     "actor": "agent04",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 24
    },
    {
-    "actor": "agent07",
-    "command": "release",
+    "actor": "agent03",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 25
-   },
-   {
-    "actor": "agent02",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 25
+    "sequence": 24
    },
    {
     "actor": "agent06",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 25
+    "sequence": 24
    },
    {
     "actor": "agent08",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 25
+    "sequence": 24
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
    },
    {
     "actor": "agent03",
@@ -2410,7 +2374,7 @@
     "sequence": 25
    },
    {
-    "actor": "agent05",
+    "actor": "agent02",
     "command": "release",
     "outcome": "ok",
     "sequence": 25
@@ -2428,28 +2392,22 @@
     "sequence": 25
    },
    {
-    "actor": "agent07",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 26
-   },
-   {
-    "actor": "agent02",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 26
-   },
-   {
     "actor": "agent06",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 26
+    "sequence": 25
    },
    {
     "actor": "agent08",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 26
+    "sequence": 25
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
    },
    {
     "actor": "agent03",
@@ -2458,7 +2416,7 @@
     "sequence": 26
    },
    {
-    "actor": "agent05",
+    "actor": "agent02",
     "command": "persist",
     "outcome": "ok",
     "sequence": 26
@@ -2470,34 +2428,34 @@
     "sequence": 39
    },
    {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
     "actor": "agent04",
     "command": "persist",
     "outcome": "ok",
     "sequence": 26
    },
    {
-    "actor": "agent07",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 27
-   },
-   {
-    "actor": "agent02",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 27
-   },
-   {
     "actor": "agent06",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 27
+    "sequence": 26
    },
    {
     "actor": "agent08",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 27
+    "sequence": 26
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
    },
    {
     "actor": "agent03",
@@ -2506,7 +2464,7 @@
     "sequence": 27
    },
    {
-    "actor": "agent05",
+    "actor": "agent02",
     "command": "emit",
     "outcome": "ok",
     "sequence": 27
@@ -2518,7 +2476,31 @@
     "sequence": 40
    },
    {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
     "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent07",
     "command": "emit",
     "outcome": "ok",
     "sequence": 27
@@ -2530,31 +2512,7 @@
     "sequence": 28
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 28
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 28
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 28
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 28
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 28
@@ -2566,7 +2524,31 @@
     "sequence": 41
    },
    {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 28
@@ -2578,31 +2560,7 @@
     "sequence": 29
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 29
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 29
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 29
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 29
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 29
@@ -2614,7 +2572,31 @@
     "sequence": 42
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 29
@@ -2626,31 +2608,7 @@
     "sequence": 30
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 30
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 30
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 30
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 30
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 30
@@ -2662,7 +2620,31 @@
     "sequence": 43
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 30
@@ -2674,31 +2656,7 @@
     "sequence": 31
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 31
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 31
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 31
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 31
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 31
@@ -2710,7 +2668,31 @@
     "sequence": 44
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 31
@@ -2722,31 +2704,7 @@
     "sequence": 32
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 32
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 32
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 32
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 32
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 32
@@ -2758,7 +2716,31 @@
     "sequence": 45
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 32
@@ -2770,31 +2752,7 @@
     "sequence": 33
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 33
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 33
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 33
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 33
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 33
@@ -2806,7 +2764,31 @@
     "sequence": 46
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 33
@@ -2818,31 +2800,7 @@
     "sequence": 34
    },
    {
-    "actor": "agent07",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 34
-   },
-   {
-    "actor": "agent06",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 34
-   },
-   {
-    "actor": "agent08",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 34
-   },
-   {
     "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 34
-   },
-   {
-    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 34
@@ -2854,7 +2812,37 @@
     "sequence": 47
    },
    {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
     "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 34
@@ -2866,31 +2854,13 @@
     "sequence": 48
    },
    {
-    "actor": "agent03",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 35
-   },
-   {
     "actor": "agent02",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 35
    },
    {
-    "actor": "agent04",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 35
-   },
-   {
-    "actor": "agent06",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 35
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent03",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 35
@@ -2902,16 +2872,28 @@
     "sequence": 35
    },
    {
-    "actor": "agent08",
+    "actor": "agent06",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 35
    },
    {
-    "actor": "agent06",
-    "command": "release",
+    "actor": "agent04",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 36
+    "sequence": 35
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
    },
    {
     "actor": "agent01",
@@ -2920,25 +2902,7 @@
     "sequence": 49
    },
    {
-    "actor": "agent03",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 36
-   },
-   {
-    "actor": "agent04",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 36
-   },
-   {
     "actor": "agent02",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 36
-   },
-   {
-    "actor": "agent05",
     "command": "release",
     "outcome": "ok",
     "sequence": 36
@@ -2950,16 +2914,34 @@
     "sequence": 36
    },
    {
-    "actor": "agent08",
+    "actor": "agent03",
     "command": "release",
     "outcome": "ok",
     "sequence": 36
    },
    {
     "actor": "agent06",
-    "command": "persist",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 37
+    "sequence": 36
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
    },
    {
     "actor": "agent01",
@@ -2968,25 +2950,7 @@
     "sequence": 50
    },
    {
-    "actor": "agent03",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 37
-   },
-   {
-    "actor": "agent04",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 37
-   },
-   {
     "actor": "agent02",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 37
-   },
-   {
-    "actor": "agent05",
     "command": "persist",
     "outcome": "ok",
     "sequence": 37
@@ -2998,16 +2962,34 @@
     "sequence": 37
    },
    {
-    "actor": "agent08",
+    "actor": "agent03",
     "command": "persist",
     "outcome": "ok",
     "sequence": 37
    },
    {
     "actor": "agent06",
-    "command": "emit",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 38
+    "sequence": 37
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
    },
    {
     "actor": "agent01",
@@ -3016,25 +2998,7 @@
     "sequence": 51
    },
    {
-    "actor": "agent03",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 38
-   },
-   {
-    "actor": "agent04",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 38
-   },
-   {
     "actor": "agent02",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 38
-   },
-   {
-    "actor": "agent05",
     "command": "emit",
     "outcome": "ok",
     "sequence": 38
@@ -3046,10 +3010,40 @@
     "sequence": 38
    },
    {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
     "actor": "agent08",
     "command": "emit",
     "outcome": "ok",
     "sequence": 38
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
    },
    {
     "actor": "agent01",
@@ -3058,7 +3052,7 @@
     "sequence": 52
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 39
@@ -3070,13 +3064,13 @@
     "sequence": 39
    },
    {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 39
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 39
@@ -3088,16 +3082,16 @@
     "sequence": 39
    },
    {
-    "actor": "agent07",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 39
    },
    {
-    "actor": "agent08",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 39
+    "sequence": 40
    },
    {
     "actor": "agent01",
@@ -3106,7 +3100,7 @@
     "sequence": 53
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 40
@@ -3118,13 +3112,13 @@
     "sequence": 40
    },
    {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 40
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 40
@@ -3136,16 +3130,16 @@
     "sequence": 40
    },
    {
-    "actor": "agent07",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 40
    },
    {
-    "actor": "agent08",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 40
+    "sequence": 41
    },
    {
     "actor": "agent01",
@@ -3154,7 +3148,7 @@
     "sequence": 54
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 41
@@ -3166,13 +3160,13 @@
     "sequence": 41
    },
    {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 41
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 41
@@ -3184,16 +3178,16 @@
     "sequence": 41
    },
    {
-    "actor": "agent07",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 41
    },
    {
-    "actor": "agent08",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 41
+    "sequence": 42
    },
    {
     "actor": "agent01",
@@ -3202,7 +3196,7 @@
     "sequence": 55
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 42
@@ -3214,13 +3208,13 @@
     "sequence": 42
    },
    {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 42
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 42
@@ -3232,16 +3226,16 @@
     "sequence": 42
    },
    {
-    "actor": "agent07",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 42
    },
    {
-    "actor": "agent08",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 42
+    "sequence": 43
    },
    {
     "actor": "agent01",
@@ -3250,7 +3244,7 @@
     "sequence": 56
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 43
@@ -3262,13 +3256,13 @@
     "sequence": 43
    },
    {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 43
    },
    {
-    "actor": "agent02",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 43
@@ -3280,16 +3274,16 @@
     "sequence": 43
    },
    {
-    "actor": "agent07",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 43
    },
    {
-    "actor": "agent08",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 43
+    "sequence": 44
    },
    {
     "actor": "agent01",
@@ -3298,7 +3292,7 @@
     "sequence": 57
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 44
@@ -3310,25 +3304,19 @@
     "sequence": 44
    },
    {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
     "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 44
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 44
-   },
-   {
     "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 44
-   },
-   {
-    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 44
@@ -3340,13 +3328,19 @@
     "sequence": 44
    },
    {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
     "actor": "agent01",
     "command": "consume",
     "outcome": "ok",
     "sequence": 58
    },
    {
-    "actor": "agent06",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 45
@@ -3358,25 +3352,19 @@
     "sequence": 45
    },
    {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
     "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 45
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 45
-   },
-   {
     "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 45
-   },
-   {
-    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 45
@@ -3394,6 +3382,12 @@
     "sequence": 59
    },
    {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
     "actor": "agent03",
     "command": "allocate",
     "outcome": "ok",
@@ -3412,19 +3406,13 @@
     "sequence": 46
    },
    {
-    "actor": "agent08",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 46
-   },
-   {
     "actor": "agent06",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 46
    },
    {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 46
@@ -3442,7 +3430,7 @@
     "sequence": 60
    },
    {
-    "actor": "agent07",
+    "actor": "agent05",
     "command": "release",
     "outcome": "ok",
     "sequence": 47
@@ -3454,13 +3442,13 @@
     "sequence": 47
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "release",
     "outcome": "ok",
     "sequence": 47
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "release",
     "outcome": "ok",
     "sequence": 47
@@ -3472,13 +3460,13 @@
     "sequence": 47
    },
    {
-    "actor": "agent02",
+    "actor": "agent08",
     "command": "release",
     "outcome": "ok",
     "sequence": 47
    },
    {
-    "actor": "agent05",
+    "actor": "agent07",
     "command": "release",
     "outcome": "ok",
     "sequence": 47
@@ -3490,7 +3478,7 @@
     "sequence": 61
    },
    {
-    "actor": "agent07",
+    "actor": "agent05",
     "command": "persist",
     "outcome": "ok",
     "sequence": 48
@@ -3502,13 +3490,13 @@
     "sequence": 48
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "persist",
     "outcome": "ok",
     "sequence": 48
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "persist",
     "outcome": "ok",
     "sequence": 48
@@ -3520,13 +3508,13 @@
     "sequence": 48
    },
    {
-    "actor": "agent02",
+    "actor": "agent08",
     "command": "persist",
     "outcome": "ok",
     "sequence": 48
    },
    {
-    "actor": "agent05",
+    "actor": "agent07",
     "command": "persist",
     "outcome": "ok",
     "sequence": 48
@@ -3538,7 +3526,7 @@
     "sequence": 62
    },
    {
-    "actor": "agent07",
+    "actor": "agent05",
     "command": "emit",
     "outcome": "ok",
     "sequence": 49
@@ -3550,13 +3538,13 @@
     "sequence": 49
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "emit",
     "outcome": "ok",
     "sequence": 49
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "emit",
     "outcome": "ok",
     "sequence": 49
@@ -3568,19 +3556,19 @@
     "sequence": 49
    },
    {
-    "actor": "agent02",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 49
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "emit",
     "outcome": "ok",
     "sequence": 49
    },
    {
     "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 50
@@ -3598,13 +3586,13 @@
     "sequence": 50
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 50
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 50
@@ -3616,19 +3604,19 @@
     "sequence": 50
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 50
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 50
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 51
@@ -3646,13 +3634,13 @@
     "sequence": 51
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 51
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 51
@@ -3664,19 +3652,19 @@
     "sequence": 51
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 51
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 51
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 52
@@ -3694,13 +3682,13 @@
     "sequence": 52
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 52
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 52
@@ -3712,19 +3700,19 @@
     "sequence": 52
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 52
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 52
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 53
@@ -3742,13 +3730,13 @@
     "sequence": 53
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 53
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 53
@@ -3760,19 +3748,19 @@
     "sequence": 53
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 53
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 53
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 54
@@ -3790,13 +3778,13 @@
     "sequence": 54
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 54
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 54
@@ -3808,19 +3796,19 @@
     "sequence": 54
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 54
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 54
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 55
@@ -3838,13 +3826,13 @@
     "sequence": 55
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 55
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 55
@@ -3856,19 +3844,19 @@
     "sequence": 55
    },
    {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 55
-   },
-   {
-    "actor": "agent05",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 55
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent05",
     "command": "consume",
     "outcome": "ok",
     "sequence": 56
@@ -3886,13 +3874,13 @@
     "sequence": 56
    },
    {
-    "actor": "agent04",
+    "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
     "sequence": 56
    },
    {
-    "actor": "agent08",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
     "sequence": 56
@@ -3904,13 +3892,13 @@
     "sequence": 56
    },
    {
-    "actor": "agent02",
+    "actor": "agent08",
     "command": "consume",
     "outcome": "ok",
     "sequence": 56
    },
    {
-    "actor": "agent05",
+    "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
     "sequence": 56
@@ -3940,7 +3928,7 @@
     "sequence": 73
    },
    {
-    "actor": "agent04",
+    "actor": "agent07",
     "command": "confirm_repair",
     "outcome": "ok",
     "sequence": 57
@@ -3958,7 +3946,7 @@
     "sequence": 57
    },
    {
-    "actor": "agent07",
+    "actor": "agent04",
     "command": "confirm_repair",
     "outcome": "invalid_repair",
     "sequence": 57
@@ -3974,12 +3962,6 @@
     "command": "confirm_repair",
     "outcome": "invalid_repair",
     "sequence": 57
-   },
-   {
-    "actor": "agent05",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 58
    },
    {
     "actor": "agent01",
@@ -3988,19 +3970,7 @@
     "sequence": 74
    },
    {
-    "actor": "agent03",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 58
-   },
-   {
-    "actor": "agent02",
-    "command": "allocate",
-    "outcome": "ok",
-    "sequence": 58
-   },
-   {
-    "actor": "agent04",
+    "actor": "agent06",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 58
@@ -4012,70 +3982,28 @@
     "sequence": 58
    },
    {
-    "actor": "agent06",
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent04",
     "command": "allocate",
     "outcome": "ok",
     "sequence": 58
    },
    {
     "actor": "agent02",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 59
+    "sequence": 58
    },
    {
     "actor": "agent05",
-    "command": "release",
+    "command": "allocate",
     "outcome": "ok",
-    "sequence": 59
-   },
-   {
-    "actor": "agent06",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 59
-   },
-   {
-    "actor": "agent03",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 59
-   },
-   {
-    "actor": "agent04",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 59
-   },
-   {
-    "actor": "agent07",
-    "command": "release",
-    "outcome": "ok",
-    "sequence": 59
-   },
-   {
-    "actor": "agent02",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
-   },
-   {
-    "actor": "agent05",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
-   },
-   {
-    "actor": "agent06",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
-   },
-   {
-    "actor": "agent03",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
+    "sequence": 58
    },
    {
     "actor": "agent01",
@@ -4084,40 +4012,40 @@
     "sequence": 75
    },
    {
-    "actor": "agent04",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
-   },
-   {
-    "actor": "agent07",
-    "command": "persist",
-    "outcome": "ok",
-    "sequence": 60
-   },
-   {
-    "actor": "agent02",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 61
-   },
-   {
-    "actor": "agent05",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 61
-   },
-   {
     "actor": "agent06",
-    "command": "emit",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 61
+    "sequence": 59
    },
    {
     "actor": "agent03",
-    "command": "emit",
+    "command": "release",
     "outcome": "ok",
-    "sequence": 61
+    "sequence": 59
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
    },
    {
     "actor": "agent01",
@@ -4126,40 +4054,40 @@
     "sequence": 76
    },
    {
-    "actor": "agent04",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 61
-   },
-   {
-    "actor": "agent07",
-    "command": "emit",
-    "outcome": "ok",
-    "sequence": 61
-   },
-   {
-    "actor": "agent05",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 62
-   },
-   {
-    "actor": "agent02",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 62
-   },
-   {
     "actor": "agent06",
-    "command": "consume",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 62
+    "sequence": 60
    },
    {
     "actor": "agent03",
-    "command": "consume",
+    "command": "persist",
     "outcome": "ok",
-    "sequence": 62
+    "sequence": 60
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
    },
    {
     "actor": "agent01",
@@ -4168,40 +4096,46 @@
     "sequence": 77
    },
    {
-    "actor": "agent04",
-    "command": "consume",
+    "actor": "agent06",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 62
+    "sequence": 61
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
    },
    {
     "actor": "agent07",
-    "command": "consume",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 62
+    "sequence": 61
    },
    {
-    "actor": "agent05",
-    "command": "consume",
+    "actor": "agent04",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 63
+    "sequence": 61
    },
    {
     "actor": "agent02",
-    "command": "consume",
+    "command": "emit",
     "outcome": "ok",
-    "sequence": 63
+    "sequence": 61
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
    },
    {
     "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 63
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 63
+    "sequence": 62
    },
    {
     "actor": "agent01",
@@ -4210,40 +4144,40 @@
     "sequence": 78
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 63
+    "sequence": 62
    },
    {
     "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 63
+    "sequence": 62
    },
    {
-    "actor": "agent05",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 64
+    "sequence": 62
    },
    {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 64
+    "sequence": 62
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
    },
    {
     "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 64
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 64
+    "sequence": 63
    },
    {
     "actor": "agent01",
@@ -4252,40 +4186,40 @@
     "sequence": 79
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 64
+    "sequence": 63
    },
    {
     "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 64
+    "sequence": 63
    },
    {
-    "actor": "agent05",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 65
+    "sequence": 63
    },
    {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 65
+    "sequence": 63
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
    },
    {
     "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 65
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 65
+    "sequence": 64
    },
    {
     "actor": "agent01",
@@ -4294,40 +4228,40 @@
     "sequence": 80
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 65
+    "sequence": 64
    },
    {
     "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 65
+    "sequence": 64
    },
    {
-    "actor": "agent05",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 66
+    "sequence": 64
    },
    {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 66
+    "sequence": 64
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
    },
    {
     "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 66
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 66
+    "sequence": 65
    },
    {
     "actor": "agent01",
@@ -4336,40 +4270,40 @@
     "sequence": 81
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 66
+    "sequence": 65
    },
    {
     "actor": "agent07",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 66
+    "sequence": 65
    },
    {
-    "actor": "agent05",
+    "actor": "agent04",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 67
+    "sequence": 65
    },
    {
     "actor": "agent02",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 67
+    "sequence": 65
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
    },
    {
     "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 67
-   },
-   {
-    "actor": "agent03",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 67
+    "sequence": 66
    },
    {
     "actor": "agent01",
@@ -4378,13 +4312,37 @@
     "sequence": 82
    },
    {
-    "actor": "agent04",
+    "actor": "agent03",
     "command": "consume",
     "outcome": "ok",
-    "sequence": 67
+    "sequence": 66
    },
    {
     "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent06",
     "command": "consume",
     "outcome": "ok",
     "sequence": 67
@@ -4394,6 +4352,36 @@
     "command": "consume",
     "outcome": "ok",
     "sequence": 83
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
    }
   ]
  }

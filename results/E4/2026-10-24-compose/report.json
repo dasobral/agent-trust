@@ -3,8 +3,8 @@
  "title": "Hostile commit distribution: forged, replayed, spliced, hidden and reordered commits",
  "hypothesis": "(H1) A member never merges a commit without a valid APF ack whose parent is its own frontier: replayed, garbage and spliced handshake entries are skipped and change nothing. (H2) A member from which the relay hides a commit stays at its old epoch: it cannot release, and envelopes of the newer epoch wait instead of being decrypted or lost; once the commit appears it catches up and delivers them. (H3) Entries served out of order are applied in parent order. (H4) The trace stays acceptable to the oracle.",
  "result": "pass",
- "started": 1792861697.8208177,
- "seconds": 2.918,
+ "started": 1792863807.9451876,
+ "seconds": 2.897,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "4e205bedd2d169112cb118a2136bf07949f2af900343083c2b08126d5af2d743",
+    "branch": "486e1f31c35c4d61008241549263f23bd6fe969c18e0e9869c1d06c576e28dc7",
     "epoch": 0
    },
-   "seconds": 0.052
+   "seconds": 0.068
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.005
+   "seconds": 0.008
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.006
+   "seconds": 0.007
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 admit bob (log index 0)",
    "status": "pass",
    "detail": {
-    "branch": "a9ea8382de5f723044483ed4c84e1f58978be5efaf5a9449ba7b037fe6273353",
+    "branch": "792f407075ea3e4f5b3788ba6f8626fe5d0f2a8ca8cff90f5c3de7ff222b2949",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.157
+   "seconds": 0.166
   },
   {
    "index": 4,
@@ -56,12 +56,12 @@
    "name": "A5 admit carol (log index 1)",
    "status": "pass",
    "detail": {
-    "branch": "430744c974e8faa714d77522e05d13ea997e35748d679822a568881eb08665a1",
+    "branch": "1ac5a6d97c0d635591d478edce182b87770ff3a3250018868d12bcaad3a91d3a",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.151
+   "seconds": 0.174
   },
   {
    "index": 5,
@@ -108,7 +108,7 @@
      "carol"
     ]
    },
-   "seconds": 0.016
+   "seconds": 0.019
   },
   {
    "index": 9,
@@ -152,9 +152,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861698245
+    "sent_ms": 1792863808425
    },
-   "seconds": 0.031
+   "seconds": 0.029
   },
   {
    "index": 12,
@@ -170,7 +170,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.435
+   "seconds": 0.33
   },
   {
    "index": 13,
@@ -195,7 +195,7 @@
     "read_fenced": false,
     "revision": 10
    },
-   "seconds": 0.009
+   "seconds": 0.008
   },
   {
    "index": 15,
@@ -205,7 +205,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.008
+   "seconds": 0.007
   },
   {
    "index": 16,
@@ -213,13 +213,13 @@
    "name": "C4 carol commits its rekey (log index 5, hidden from bob)",
    "status": "pass",
    "detail": {
-    "branch": "1a4759d6dd10c750c31620dbf99c877bf25ddc93e0ac3c969a56244f2e3805e0",
+    "branch": "b414309351532b94b96dd7e9fb337a6033f686069536cc23932390f68042511f",
     "epoch": 3,
     "generation": 1,
-    "public_key": "d9f52ce50544977482f67931ff6e49aa3ee8d2b2f606c78643f89e5170faffb4",
+    "public_key": "20ca5204cb4c800e5a1a776566fdb73705d49246fcff20e7a82398c4e1108aa1",
     "right": "write"
    },
-   "seconds": 0.066
+   "seconds": 0.06
   },
   {
    "index": 17,
@@ -244,7 +244,7 @@
      "carol"
     ]
    },
-   "seconds": 0.018
+   "seconds": 0.016
   },
   {
    "index": 19,
@@ -270,7 +270,7 @@
     "refused": "not_ready",
     "error": "not_ready: the local frontier differs from the APF frontier"
    },
-   "seconds": 0.012
+   "seconds": 0.01
   },
   {
    "index": 21,
@@ -284,9 +284,9 @@
      "bob",
      "carol"
     ],
-    "sent_ms": 1792861698833
+    "sent_ms": 1792863808899
    },
-   "seconds": 0.035
+   "seconds": 0.037
   },
   {
    "index": 22,
@@ -302,7 +302,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.277
+   "seconds": 0.331
   },
   {
    "index": 23,
@@ -315,7 +315,7 @@
      "alice-000002"
     ]
    },
-   "seconds": 0.001
+   "seconds": 0.004
   },
   {
    "index": 24,
@@ -326,7 +326,7 @@
     "hidden_from": null,
     "reader": "bob"
    },
-   "seconds": 0.001
+   "seconds": 0.002
   },
   {
    "index": 25,
@@ -342,7 +342,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.229
+   "seconds": 0.231
   },
   {
    "index": 26,
@@ -357,7 +357,7 @@
     "future": 0,
     "waiting": []
    },
-   "seconds": 0.003
+   "seconds": 0.002
   },
   {
    "index": 27,
@@ -382,7 +382,7 @@
     "indices": [],
     "reader": "carol"
    },
-   "seconds": 0.002
+   "seconds": 0.001
   },
   {
    "index": 29,
@@ -393,7 +393,7 @@
     "read_fenced": false,
     "revision": 18
    },
-   "seconds": 0.01
+   "seconds": 0.009
   },
   {
    "index": 30,
@@ -403,7 +403,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.008
+   "seconds": 0.009
   },
   {
    "index": 31,
@@ -411,13 +411,13 @@
    "name": "D4 bob rekeys write (log index 7)",
    "status": "pass",
    "detail": {
-    "branch": "3f1cf344e691cde6b2149079b37fc721e0bc5b4d362734684f45cca32a139620",
+    "branch": "1caf0381865e0ee6eface267f15e0c3f5ddd06f0d86822317062aad0f5e6493f",
     "epoch": 4,
     "generation": 1,
-    "public_key": "cce5412903a8fdb432ff3e8db39db1335163ba48b179a8062464f6c62bd45163",
+    "public_key": "b696ee68484cc3e10c028dfe3bad677c7bc4f09d7f912948d3ed9f647abd752b",
     "right": "write"
    },
-   "seconds": 0.062
+   "seconds": 0.069
   },
   {
    "index": 32,
@@ -428,7 +428,7 @@
     "read_fenced": false,
     "revision": 20
    },
-   "seconds": 0.009
+   "seconds": 0.012
   },
   {
    "index": 33,
@@ -438,7 +438,7 @@
    "detail": {
     "pending": true
    },
-   "seconds": 0.009
+   "seconds": 0.013
   },
   {
    "index": 34,
@@ -446,13 +446,13 @@
    "name": "D7 bob rekeys admit (log index 8)",
    "status": "pass",
    "detail": {
-    "branch": "9f4cc2777e4a95d9ae3559b87ed3071fabaa7c6ffb6b468d1c0c9d9b6141fd96",
+    "branch": "982dded860060e63ceaa8ddec6cdb8c8ac625b218e4ec425f81fa4d5cdcaf80e",
     "epoch": 5,
     "generation": 1,
-    "public_key": "e91cd68ad3e867580ca8d8ec2f29f258bd61c4e51106ac5f4fde7816e43f84b6",
+    "public_key": "d06137f850176d52c64c647f2f7fa7dc5c787113d717d24e4a14b1d0b11e7cd7",
     "right": "admit"
    },
-   "seconds": 0.058
+   "seconds": 0.088
   },
   {
    "index": 35,
@@ -517,9 +517,9 @@
      "alice",
      "bob"
     ],
-    "sent_ms": 1792861699588
+    "sent_ms": 1792863809768
    },
-   "seconds": 0.038
+   "seconds": 0.049
   },
   {
    "index": 40,
@@ -533,9 +533,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792861699661
+    "sent_ms": 1792863809839
    },
-   "seconds": 0.073
+   "seconds": 0.071
   },
   {
    "index": 41,
@@ -551,7 +551,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.437
+   "seconds": 0.338
   },
   {
    "index": 42,
@@ -569,7 +569,7 @@
     "read_fenced": false,
     "repair_pending": null
    },
-   "seconds": 0.002
+   "seconds": 0.001
   },
   {
    "index": 43,
@@ -581,7 +581,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.003
+   "seconds": 0.004
   },
   {
    "index": 44,
@@ -593,7 +593,7 @@
     "consumed": 8,
     "lost_after_consume": 0
    },
-   "seconds": 0.012
+   "seconds": 0.014
   },
   {
    "index": 45,
@@ -617,7 +617,7 @@
      "release": 4
     }
    },
-   "seconds": 0.288
+   "seconds": 0.35
   },
   {
    "index": 46,
@@ -638,7 +638,7 @@
      "repair that keeps the revoked reader"
     ]
    },
-   "seconds": 0.332
+   "seconds": 0.288
   },
   {
    "index": 47,
@@ -659,7 +659,7 @@
      ]
     }
    },
-   "seconds": 0.004
+   "seconds": 0.005
   }
  ],
  "skipped_steps": 0,
@@ -673,11 +673,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "6c0331a8a2f9e4ec0c8f52acca8c4f43612b2ddd"
  },
  "observations": {
   "apf_state": {
-   "branch": "9f4cc2777e4a95d9ae3559b87ed3071fabaa7c6ffb6b468d1c0c9d9b6141fd96",
+   "branch": "982dded860060e63ceaa8ddec6cdb8c8ac625b218e4ec425f81fa4d5cdcaf80e",
    "epoch": 5,
    "grants": [
     {
@@ -782,7 +782,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "9f4cc2777e4a95d9ae3559b87ed3071fabaa7c6ffb6b468d1c0c9d9b6141fd96",
+    "branch": "982dded860060e63ceaa8ddec6cdb8c8ac625b218e4ec425f81fa4d5cdcaf80e",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -804,8 +804,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 33,
-    "public_key": "96e1dbc2a1feb77a988d642d909d5e481b4bfbfb2ed24f727d17cb71d3a399d2",
+    "polls": 31,
+    "public_key": "031ecbef44cdf5ac72762d7463e238ee8e331b7c27b1a06e9e8d776996137b47",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -815,7 +815,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "9f4cc2777e4a95d9ae3559b87ed3071fabaa7c6ffb6b468d1c0c9d9b6141fd96",
+    "branch": "982dded860060e63ceaa8ddec6cdb8c8ac625b218e4ec425f81fa4d5cdcaf80e",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -842,8 +842,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "bob",
-    "polls": 30,
-    "public_key": "e91cd68ad3e867580ca8d8ec2f29f258bd61c4e51106ac5f4fde7816e43f84b6",
+    "polls": 32,
+    "public_key": "d06137f850176d52c64c647f2f7fa7dc5c787113d717d24e4a14b1d0b11e7cd7",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -853,7 +853,7 @@
    },
    "carol": {
     "adversary": [],
-    "branch": "9f4cc2777e4a95d9ae3559b87ed3071fabaa7c6ffb6b468d1c0c9d9b6141fd96",
+    "branch": "982dded860060e63ceaa8ddec6cdb8c8ac625b218e4ec425f81fa4d5cdcaf80e",
     "confirmations": [],
     "cursor": 9,
     "entropy": {
@@ -875,8 +875,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "carol",
-    "polls": 29,
-    "public_key": "d9f52ce50544977482f67931ff6e49aa3ee8d2b2f606c78643f89e5170faffb4",
+    "polls": 35,
+    "public_key": "20ca5204cb4c800e5a1a776566fdb73705d49246fcff20e7a82398c4e1108aa1",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -890,9 +890,9 @@
    "bytes": 1040,
    "clients": {
     "172.18.0.4": 96,
-    "172.18.0.5": 328,
+    "172.18.0.5": 260,
     "172.18.0.6": 356,
-    "172.18.0.7": 260
+    "172.18.0.7": 328
    },
    "mock": true,
    "refused": 0,
@@ -960,13 +960,13 @@
     "sequence": 8
    },
    {
-    "actor": "carol",
+    "actor": "bob",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
    },
    {
-    "actor": "bob",
+    "actor": "carol",
     "command": "consume",
     "outcome": "ok",
     "sequence": 2
@@ -1098,6 +1098,12 @@
     "sequence": 7
    },
    {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
     "actor": "bob",
     "command": "allocate",
     "outcome": "ok",
@@ -1108,12 +1114,6 @@
     "command": "release",
     "outcome": "ok",
     "sequence": 9
-   },
-   {
-    "actor": "alice",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 19
    },
    {
     "actor": "bob",

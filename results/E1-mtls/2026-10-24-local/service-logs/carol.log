@@ -1,15 +1,16 @@
-{"entropy":"qrng","event":"listening","listen":"127.0.0.1:56819","name":"carol","public_key":"e040de1d0f993454e74bcebd8cba2148ee758746e06feff0ae40fa8581328054","role":"agent","ts":1792861264}
-{"event":"joined","name":"carol","role":"agent","ts":1792861264}
-{"event":"delivered","name":"carol","op":"alice-000001","role":"agent","ts":1792861264}
-{"event":"delivered","name":"carol","op":"bob-000001","role":"agent","ts":1792861264}
-{"event":"delivered","name":"carol","op":"alice-000002","role":"agent","ts":1792861264}
-{"event":"delivered","name":"carol","op":"bob-000002","role":"agent","ts":1792861264}
-{"event":"delivered","name":"carol","op":"alice-000003","role":"agent","ts":1792861265}
-{"event":"delivered","name":"carol","op":"bob-000003","role":"agent","ts":1792861265}
-{"event":"delivered","name":"carol","op":"alice-000004","role":"agent","ts":1792861265}
-{"event":"delivered","name":"carol","op":"bob-000004","role":"agent","ts":1792861265}
-{"event":"delivered","name":"carol","op":"alice-000005","role":"agent","ts":1792861266}
-{"event":"delivered","name":"carol","op":"bob-000005","role":"agent","ts":1792861266}
-{"error":"read_fenced","event":"rejected","name":"carol","op":"alice-000006","role":"agent","ts":1792861267}
-{"event":"adversary","name":"carol","retain":true,"role":"agent","ts":1792861268}
-{"consume":"unauthorized","event":"adversary_attempt","mls":"refused: ValidationError(WrongEpoch)","name":"carol","op":"alice-000008","role":"agent","ts":1792861268}
+{"entropy":"qrng","event":"listening","listen":"127.0.0.1:42439","name":"carol","public_key":"356d6209082266f175622c729b5b8bcccc3b9b44a73f3f0540d7c369f427e72b","role":"agent","ts":1792863357}
+{"event":"joined","name":"carol","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"alice-000001","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"bob-000001","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"alice-000002","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"bob-000002","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"alice-000003","role":"agent","ts":1792863358}
+{"event":"delivered","name":"carol","op":"bob-000003","role":"agent","ts":1792863359}
+{"event":"delivered","name":"carol","op":"alice-000004","role":"agent","ts":1792863359}
+{"event":"delivered","name":"carol","op":"bob-000004","role":"agent","ts":1792863359}
+{"error":"undecryptable: MLS processing","event":"rejected","name":"carol","op":"bob-000004","role":"agent","ts":1792863359}
+{"event":"delivered","name":"carol","op":"alice-000005","role":"agent","ts":1792863359}
+{"event":"delivered","name":"carol","op":"bob-000005","role":"agent","ts":1792863360}
+{"error":"read_fenced","event":"rejected","name":"carol","op":"alice-000006","role":"agent","ts":1792863361}
+{"event":"adversary","name":"carol","retain":true,"role":"agent","ts":1792863362}
+{"consume":"unauthorized","event":"adversary_attempt","mls":"refused: ValidationError(WrongEpoch)","name":"carol","op":"alice-000008","role":"agent","ts":1792863362}

@@ -1,5 +1,5 @@
-{"entropy":"qrng","event":"listening","listen":"127.0.0.1:38211","name":"bob","public_key":"86149561083a95109acb1d69098d6e99d0204cf2b81fc44d7e7a6c283869cfcd","role":"agent","ts":1792861286}
-{"event":"joined","name":"bob","role":"agent","ts":1792861287}
-{"action":"request","error":"invalid_invocation","event":"control_error","name":"bob","role":"agent","ts":1792861287}
-{"action":"request","error":"unauthorized","event":"control_error","name":"bob","role":"agent","ts":1792861287}
-{"event":"delivered","name":"bob","op":"alice-000001","role":"agent","ts":1792861287}
+{"entropy":"qrng","event":"listening","listen":"127.0.0.1:47671","name":"bob","public_key":"6a0991a5f8f88e0bd0603b063e3c2ae0bb6fa4773e789f22bd8ecb7f8b9daf42","role":"agent","ts":1792863380}
+{"event":"joined","name":"bob","role":"agent","ts":1792863381}
+{"action":"request","error":"invalid_invocation","event":"control_error","name":"bob","role":"agent","ts":1792863382}
+{"action":"request","error":"unauthorized","event":"control_error","name":"bob","role":"agent","ts":1792863382}
+{"event":"delivered","name":"bob","op":"alice-000001","role":"agent","ts":1792863382}

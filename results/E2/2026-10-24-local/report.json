@@ -3,8 +3,8 @@
  "title": "QRNG outage over the network: fail closed, change nothing, recover",
  "hypothesis": "(H1) While the QRNG service refuses requests, every step that needs fresh randomness on an agent (send, add, rekey) is refused with entropy_unavailable and nothing falls back to another source. (H2) A refused step changes neither the frontier, the roster nor the registered keys; a released but unprotected operation is abandoned at the APF (barrier B2). (H3) A node cannot start during the outage. (H4) When the source returns, every refused step succeeds without operator repair, and the oracle accepts the whole trace.",
  "result": "pass",
- "started": 1792861272.1042647,
- "seconds": 2.628,
+ "started": 1792863366.546405,
+ "seconds": 2.724,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "c25fb7a20accdc4f1b0cd891f09741d1a243d7711b084a6df4ec82593c86f244",
+    "branch": "401eacbd171d7dea790a37ce3141320a02b2d5dcc80e125ac2aaf49e1a3b42bc",
     "epoch": 0
    },
-   "seconds": 0.057
+   "seconds": 0.054
   },
   {
    "index": 1,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.006
+   "seconds": 0.009
   },
   {
    "index": 3,
@@ -43,12 +43,12 @@
    "name": "A4 admit bob",
    "status": "pass",
    "detail": {
-    "branch": "543a91dab26942671b6a83ddaaeb031abaaafd4b1c2b2f44f348386a48459a97",
+    "branch": "bbf02392fe7c2adb4e405bd09ee2d0a25d03302f5526854c44259968426f3990",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.165
+   "seconds": 0.144
   },
   {
    "index": 4,
@@ -73,7 +73,7 @@
     ],
     "subject": "carol"
    },
-   "seconds": 0.011
+   "seconds": 0.015
   },
   {
    "index": 5,
@@ -86,9 +86,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792861272376
+    "sent_ms": 1792863366800
    },
-   "seconds": 0.025
+   "seconds": 0.024
   },
   {
    "index": 6,
@@ -104,7 +104,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.321
+   "seconds": 0.423
   },
   {
    "index": 7,
@@ -125,7 +125,7 @@
     "refused": "entropy_unavailable",
     "error": "entropy_unavailable"
    },
-   "seconds": 0.024
+   "seconds": 0.028
   },
   {
    "index": 9,
@@ -136,7 +136,7 @@
     "refused": "entropy_unavailable",
     "error": "entropy_unavailable"
    },
-   "seconds": 0.003
+   "seconds": 0.002
   },
   {
    "index": 10,
@@ -147,7 +147,7 @@
     "read_fenced": false,
     "revision": 11
    },
-   "seconds": 0.009
+   "seconds": 0.005
   },
   {
    "index": 11,
@@ -199,7 +199,7 @@
      "bob"
     ]
    },
-   "seconds": 0.003
+   "seconds": 0.004
   },
   {
    "index": 15,
@@ -209,7 +209,7 @@
    "detail": {
     "stopped": "bob"
    },
-   "seconds": 0.051
+   "seconds": 0.052
   },
   {
    "index": 16,
@@ -242,7 +242,7 @@
     "service": "bob",
     "started": true
    },
-   "seconds": 0.104
+   "seconds": 0.105
   },
   {
    "index": 19,
@@ -270,9 +270,9 @@
     "recipients": [
      "bob"
     ],
-    "sent_ms": 1792861273040
+    "sent_ms": 1792863367568
    },
-   "seconds": 0.031
+   "seconds": 0.033
   },
   {
    "index": 21,
@@ -288,7 +288,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.322
+   "seconds": 0.321
   },
   {
    "index": 22,
@@ -296,12 +296,12 @@
    "name": "C5 alice adds carol with the same KeyPackage",
    "status": "pass",
    "detail": {
-    "branch": "57f9187367e9acc23e64bac24df5a3f81e46f1675b8d93448394c1be96084c6f",
+    "branch": "a5bceb23aa59997e19789bbe6e40030205831f47b64a1dce6f4d64e8352df26c",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.146
+   "seconds": 0.153
   },
   {
    "index": 23,
@@ -309,13 +309,13 @@
    "name": "C6 bob completes the pending rekey",
    "status": "pass",
    "detail": {
-    "branch": "e2beb9c0af5ee5bbc372777ce9c86979f542422c329c15606f766ed4bcf6dd9f",
+    "branch": "24cb9e55525f27c846599553a9b2e6e956163b66b0d24a340f575fe251d98982",
     "epoch": 3,
     "generation": 1,
-    "public_key": "4ad2b87f8fc8a24b9d089cc414f4ec694f51513b027e32360eb6c9e026280bb3",
+    "public_key": "d17f0e4fbabdb14ac352595d1b3728c90d785b1676b5cf42679945bbaf5edcb6",
     "right": "write"
    },
-   "seconds": 0.072
+   "seconds": 0.08
   },
   {
    "index": 24,
@@ -329,9 +329,9 @@
      "alice",
      "carol"
     ],
-    "sent_ms": 1792861273622
+    "sent_ms": 1792863368155
    },
-   "seconds": 0.041
+   "seconds": 0.033
   },
   {
    "index": 25,
@@ -345,9 +345,9 @@
      "alice",
      "bob"
     ],
-    "sent_ms": 1792861273677
+    "sent_ms": 1792863368202
    },
-   "seconds": 0.055
+   "seconds": 0.047
   },
   {
    "index": 26,
@@ -363,7 +363,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.425
+   "seconds": 0.37
   },
   {
    "index": 27,
@@ -396,7 +396,7 @@
      "carol"
     ]
    },
-   "seconds": 0.003
+   "seconds": 0.006
   },
   {
    "index": 29,
@@ -408,7 +408,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.002
+   "seconds": 0.001
   },
   {
    "index": 30,
@@ -420,7 +420,7 @@
     "consumed": 6,
     "lost_after_consume": 0
    },
-   "seconds": 0.01
+   "seconds": 0.012
   },
   {
    "index": 31,
@@ -445,7 +445,7 @@
      "release": 5
     }
    },
-   "seconds": 0.293
+   "seconds": 0.363
   },
   {
    "index": 32,
@@ -466,7 +466,7 @@
      "repair that keeps the revoked reader"
     ]
    },
-   "seconds": 0.313
+   "seconds": 0.31
   },
   {
    "index": 33,
@@ -511,7 +511,7 @@
      "requests": 36
     }
    },
-   "seconds": 0.007
+   "seconds": 0.004
   }
  ],
  "skipped_steps": 0,
@@ -525,11 +525,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "6c0331a8a2f9e4ec0c8f52acca8c4f43612b2ddd"
  },
  "observations": {
   "apf_state": {
-   "branch": "e2beb9c0af5ee5bbc372777ce9c86979f542422c329c15606f766ed4bcf6dd9f",
+   "branch": "24cb9e55525f27c846599553a9b2e6e956163b66b0d24a340f575fe251d98982",
    "epoch": 3,
    "grants": [
     {
@@ -632,7 +632,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "e2beb9c0af5ee5bbc372777ce9c86979f542422c329c15606f766ed4bcf6dd9f",
+    "branch": "24cb9e55525f27c846599553a9b2e6e956163b66b0d24a340f575fe251d98982",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -648,8 +648,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 27,
-    "public_key": "c0dcded0d44fef8777aa19a3c7713f463e965a77ece9780fd86778d42c70ea54",
+    "polls": 28,
+    "public_key": "9aae29f1cdc19190634fde77981a534431bc6d2fa9a4addfabb063eda3c328a7",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -659,7 +659,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "e2beb9c0af5ee5bbc372777ce9c86979f542422c329c15606f766ed4bcf6dd9f",
+    "branch": "24cb9e55525f27c846599553a9b2e6e956163b66b0d24a340f575fe251d98982",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -676,7 +676,7 @@
     "membership": "member",
     "name": "bob",
     "polls": 18,
-    "public_key": "4ad2b87f8fc8a24b9d089cc414f4ec694f51513b027e32360eb6c9e026280bb3",
+    "public_key": "d17f0e4fbabdb14ac352595d1b3728c90d785b1676b5cf42679945bbaf5edcb6",
     "rejections": [],
     "restarts": 1,
     "retain": false,
@@ -686,7 +686,7 @@
    },
    "carol": {
     "adversary": [],
-    "branch": "e2beb9c0af5ee5bbc372777ce9c86979f542422c329c15606f766ed4bcf6dd9f",
+    "branch": "24cb9e55525f27c846599553a9b2e6e956163b66b0d24a340f575fe251d98982",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -702,8 +702,8 @@
     "inbox": 1,
     "membership": "member",
     "name": "carol",
-    "polls": 28,
-    "public_key": "9fec001ef1f4dba7e9269545ed028a61441275302293be979a6bbcffe4623343",
+    "polls": 29,
+    "public_key": "12c9328e6fb1651c93fc045e17a24ca9bd4b05e539fdbe71fec775b5ca8394f2",
     "rejections": [],
     "restarts": 0,
     "retain": false,

@@ -1,6 +1,6 @@
-{"entropy":"qrng","event":"listening","listen":"0.0.0.0:7300","name":"dave","public_key":"dcc0ca4a725d3383555046aef82a32368155ec5fe180662f4406e789a353d010","role":"agent","ts":1792861734}
-{"event":"joined","name":"dave","role":"agent","ts":1792861736}
-{"event":"delivered","name":"dave","op":"bob-000001","role":"agent","ts":1792861736}
-{"action":"request","error":"unauthorized","event":"control_error","name":"dave","role":"agent","ts":1792861736}
-{"event":"delivered","name":"dave","op":"alice-000001","role":"agent","ts":1792861736}
-{"event":"delivered","name":"dave","op":"bob-000004","role":"agent","ts":1792861737}
+{"entropy":"qrng","event":"listening","listen":"0.0.0.0:7300","name":"dave","public_key":"eadc26011f980c2ab735604717de6fe9f6ef2ae36a41bf6de5b74ae1033b27c1","role":"agent","ts":1792863844}
+{"event":"joined","name":"dave","role":"agent","ts":1792863845}
+{"event":"delivered","name":"dave","op":"bob-000001","role":"agent","ts":1792863845}
+{"action":"request","error":"unauthorized","event":"control_error","name":"dave","role":"agent","ts":1792863846}
+{"event":"delivered","name":"dave","op":"alice-000001","role":"agent","ts":1792863846}
+{"event":"delivered","name":"dave","op":"bob-000004","role":"agent","ts":1792863846}

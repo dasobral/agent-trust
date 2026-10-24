@@ -3,8 +3,8 @@
  "title": "Confused deputy over the network: invocation provenance and attenuation",
  "hypothesis": "(H1) A deputy can act for an origin only through an APF invocation, and only within the rights that both hold. (H2) An origin without a right cannot obtain it through a deputy. (H3) A nested invocation cannot widen its parent, and only the recorded executor can use an invocation. (H4) Revoking the origin's right stops every pending use of the invocation chain at release, while the deputy keeps its own authority. (H5) The APF records who executed each operation and for whom; the oracle accepts the trace.",
  "result": "pass",
- "started": 1792861082.4793916,
- "seconds": 3.051,
+ "started": 1792865757.6961913,
+ "seconds": 3.024,
  "steps": [
   {
    "index": 0,
@@ -12,10 +12,10 @@
    "name": "A1 alice founds the group",
    "status": "pass",
    "detail": {
-    "branch": "4ee6f641910bb1da08b1f994d80a260e12bbe9f886e0acf204c263a583e17910",
+    "branch": "e737b771f00ccb48e58d7dcfb28cc7aee6f531258da38bf9950d696d25ec4a9d",
     "epoch": 0
    },
-   "seconds": 0.057
+   "seconds": 0.058
   },
   {
    "index": 1,
@@ -25,7 +25,7 @@
    "detail": {
     "revision": 1
    },
-   "seconds": 0.019
+   "seconds": 0.016
   },
   {
    "index": 2,
@@ -35,7 +35,7 @@
    "detail": {
     "revision": 2
    },
-   "seconds": 0.018
+   "seconds": 0.016
   },
   {
    "index": 3,
@@ -45,7 +45,7 @@
    "detail": {
     "revision": 3
    },
-   "seconds": 0.018
+   "seconds": 0.017
   },
   {
    "index": 4,
@@ -53,12 +53,12 @@
    "name": "A5 admit bob",
    "status": "pass",
    "detail": {
-    "branch": "7907c30b39f369ac1b59f796dd25d507b18218665896fed11c05aa53d7b5ce6d",
+    "branch": "7ca057c6ad3914f5d716324b7482e6d12ad4300affa59d937dc7543110e8d025",
     "epoch": 1,
     "index": 0,
     "subject": "bob"
    },
-   "seconds": 0.106
+   "seconds": 0.118
   },
   {
    "index": 5,
@@ -66,12 +66,12 @@
    "name": "A6 admit carol",
    "status": "pass",
    "detail": {
-    "branch": "0ad191447a8d3f71fbe438468469e87601094d139ef4879313dc5736a7797474",
+    "branch": "68ab5bb0cea797e448a9140887c3867337743dc7caf15763cd1f3d169988bd39",
     "epoch": 2,
     "index": 1,
     "subject": "carol"
    },
-   "seconds": 0.225
+   "seconds": 0.171
   },
   {
    "index": 6,
@@ -79,12 +79,12 @@
    "name": "A7 admit dave",
    "status": "pass",
    "detail": {
-    "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+    "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
     "epoch": 3,
     "index": 2,
     "subject": "dave"
    },
-   "seconds": 0.235
+   "seconds": 0.254
   },
   {
    "index": 7,
@@ -94,7 +94,7 @@
    "detail": {
     "invocation": "invocation:7"
    },
-   "seconds": 0.012
+   "seconds": 0.018
   },
   {
    "index": 8,
@@ -109,9 +109,9 @@
      "carol",
      "dave"
     ],
-    "sent_ms": 1792861083207
+    "sent_ms": 1792865758414
    },
-   "seconds": 0.039
+   "seconds": 0.05
   },
   {
    "index": 9,
@@ -126,7 +126,7 @@
     "right": "write",
     "resource": "lab"
    },
-   "seconds": 0.008
+   "seconds": 0.009
   },
   {
    "index": 10,
@@ -142,7 +142,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.437
+   "seconds": 0.441
   },
   {
    "index": 11,
@@ -166,7 +166,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.015
+   "seconds": 0.013
   },
   {
    "index": 13,
@@ -177,7 +177,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.033
+   "seconds": 0.026
   },
   {
    "index": 14,
@@ -188,7 +188,7 @@
     "refused": "invalid_invocation",
     "error": "invalid_invocation"
    },
-   "seconds": 0.013
+   "seconds": 0.012
   },
   {
    "index": 15,
@@ -199,7 +199,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.016
+   "seconds": 0.012
   },
   {
    "index": 16,
@@ -209,7 +209,7 @@
    "detail": {
     "invocation": "invocation:15"
    },
-   "seconds": 0.015
+   "seconds": 0.012
   },
   {
    "index": 17,
@@ -231,7 +231,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.014
+   "seconds": 0.016
   },
   {
    "index": 19,
@@ -246,9 +246,9 @@
      "carol",
      "dave"
     ],
-    "sent_ms": 1792861083821
+    "sent_ms": 1792865759015
    },
-   "seconds": 0.044
+   "seconds": 0.04
   },
   {
    "index": 20,
@@ -263,7 +263,7 @@
     "right": "write",
     "resource": "lab"
    },
-   "seconds": 0.021
+   "seconds": 0.012
   },
   {
    "index": 21,
@@ -279,7 +279,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.351
+   "seconds": 0.431
   },
   {
    "index": 22,
@@ -290,7 +290,7 @@
     "read_fenced": false,
     "revision": 22
    },
-   "seconds": 0.017
+   "seconds": 0.016
   },
   {
    "index": 23,
@@ -301,7 +301,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.03
+   "seconds": 0.031
   },
   {
    "index": 24,
@@ -312,7 +312,7 @@
     "refused": "unauthorized",
     "error": "unauthorized"
    },
-   "seconds": 0.034
+   "seconds": 0.029
   },
   {
    "index": 25,
@@ -327,9 +327,9 @@
      "carol",
      "dave"
     ],
-    "sent_ms": 1792861084322
+    "sent_ms": 1792865759596
    },
-   "seconds": 0.048
+   "seconds": 0.063
   },
   {
    "index": 26,
@@ -360,7 +360,7 @@
     "queued": {},
     "held": []
    },
-   "seconds": 0.429
+   "seconds": 0.363
   },
   {
    "index": 28,
@@ -372,7 +372,7 @@
     "excluded": [],
     "optional": 0
    },
-   "seconds": 0.024
+   "seconds": 0.026
   },
   {
    "index": 29,
@@ -384,7 +384,7 @@
     "consumed": 9,
     "lost_after_consume": 0
    },
-   "seconds": 0.035
+   "seconds": 0.037
   },
   {
    "index": 30,
@@ -400,7 +400,7 @@
      "dave"
     ]
    },
-   "seconds": 0.051
+   "seconds": 0.049
   },
   {
    "index": 31,
@@ -423,7 +423,7 @@
      "release": 3
     }
    },
-   "seconds": 0.277
+   "seconds": 0.332
   },
   {
    "index": 32,
@@ -444,7 +444,7 @@
      "rekey that reuses another member's key"
     ]
    },
-   "seconds": 0.351
+   "seconds": 0.276
   },
   {
    "index": 33,
@@ -459,7 +459,7 @@
      "dave"
     ]
    },
-   "seconds": 0.026
+   "seconds": 0.025
   }
  ],
  "skipped_steps": 0,
@@ -473,11 +473,11 @@
   "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
   "openmls_qrand": "a102450febaa00e8955822c72bd309df6d8f43b9",
-  "testbed": "794cca5ab7c9c0a5181761c4c3f84b1c1607ef44"
+  "testbed": "86fd2e7784960223915ec4246acd8e9dac532041"
  },
  "observations": {
   "apf_state": {
-   "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+   "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
    "epoch": 3,
    "grants": [
     {
@@ -594,7 +594,7 @@
   "agents": {
    "alice": {
     "adversary": [],
-    "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+    "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -610,8 +610,8 @@
     "inbox": 2,
     "membership": "member",
     "name": "alice",
-    "polls": 127,
-    "public_key": "7db6ca9ef61fabf3f317ae7b12ce9a4a7e80e09249bb96006e33739a322320f1",
+    "polls": 170,
+    "public_key": "7cea79159ed7668267fb009a5560a6ac0822a344298e0bbb144a1cb0681928ce",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -621,7 +621,7 @@
    },
    "bob": {
     "adversary": [],
-    "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+    "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -637,8 +637,8 @@
     "inbox": 1,
     "membership": "member",
     "name": "bob",
-    "polls": 127,
-    "public_key": "64103acc244b4d6893d6f3f8a33870d085dbe9a53e12b5b8980d0f6dfbe6b227",
+    "polls": 171,
+    "public_key": "735136ee2a0be8023a9628e23a4b058d8e3ba58fd035dff2274d02905431569c",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -648,7 +648,7 @@
    },
    "carol": {
     "adversary": [],
-    "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+    "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -664,8 +664,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "carol",
-    "polls": 128,
-    "public_key": "b2eeb3f9e4605be3c182617451348b4bf2d7bb01558d02ee1313f618bb8c4c67",
+    "polls": 171,
+    "public_key": "365e76acb8e561354fb1c32df701bc2bac0db2e3ee5f60a2d2882b9cbea595ef",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -675,7 +675,7 @@
    },
    "dave": {
     "adversary": [],
-    "branch": "f52c190c06fa3bf1eb6a8c6b0c49aac677647553d11dde9c64a9dc61dd64ffb7",
+    "branch": "72c22100b1d9902239469a219fbb6c5cb5abcc0e852692c969d7b5964761a37b",
     "confirmations": [],
     "cursor": 3,
     "entropy": {
@@ -691,8 +691,8 @@
     "inbox": 3,
     "membership": "member",
     "name": "dave",
-    "polls": 54,
-    "public_key": "c22e7bbb59801af37b3cca50769378fa7e44ecf0a1cb721d299d447e78541a45",
+    "polls": 53,
+    "public_key": "086becee0bf3091340db77cd2f04fa9b1c2cd20c9a45ee2a7b390507eed5ab4a",
     "rejections": [],
     "restarts": 0,
     "retain": false,
@@ -705,11 +705,11 @@
    "available": true,
    "bytes": 972,
    "clients": {
-    "10.42.0.175": 96,
-    "10.42.0.176": 388,
-    "10.42.0.177": 168,
-    "10.42.0.178": 160,
-    "10.42.0.179": 160
+    "10.42.0.114": 160,
+    "10.42.0.115": 96,
+    "10.42.0.116": 388,
+    "10.42.0.117": 168,
+    "10.42.0.118": 160
    },
    "mock": true,
    "refused": 0,
@@ -801,6 +801,12 @@
     "sequence": 5
    },
    {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
     "actor": "dave",
     "command": "consume",
     "outcome": "ok",
@@ -811,12 +817,6 @@
     "command": "consume",
     "outcome": "ok",
     "sequence": 7
-   },
-   {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 3
    },
    {
     "actor": "dave",
@@ -969,16 +969,16 @@
     "sequence": 15
    },
    {
-    "actor": "carol",
-    "command": "consume",
-    "outcome": "ok",
-    "sequence": 5
-   },
-   {
     "actor": "dave",
     "command": "consume",
     "outcome": "ok",
     "sequence": 8
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 5
    }
   ]
  }
