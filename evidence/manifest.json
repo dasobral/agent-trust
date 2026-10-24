@@ -3,7 +3,8 @@
   "project": "agent-trust",
   "recovery": {
     "exact_snapshot": {
-      "path": "/Agents/agent-trust-recovered-2026-09-13",
+      "name": "agent-trust-recovered-2026-09-13",
+      "location": "Library recovery folder, outside the repository",
       "file_count": 49,
       "byte_count": 301037
     },
