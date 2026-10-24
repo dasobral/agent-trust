@@ -4,6 +4,13 @@ Spec: [`experiments/e5-scale.toml`](../../experiments/e5-scale.toml) ·
 Topology: [`topologies/scale-8.toml`](../../topologies/scale-8.toml) (other sizes:
 `scripts/make-topology.py N`) · Evidence: [`results/E5/`](../../results/E5/)
 
+## Scope
+
+E5 runs at 8 agents. A first attempt at 12 agents, 5 messages each in parallel, did
+not finish: the APF's cost per request grew too fast (finding F-8 below). Sends
+passed the 60 s client timeout, and at a history of about 700 events one request
+spent about 16 s in the APF, waiting included. Larger groups wait for F-8.
+
 ## Question
 
 How do admission, release and delivery cost grow with the group and the run length,
@@ -24,16 +31,20 @@ Safety: all 22 steps pass. Every message reached its seven readers exactly once,
 under faults too; the repair excluded agent08; the oracle accepted the 480 event
 trace and rejected the 8 broken controls.
 
-Cost (local backend, one run, 2026-10-24):
+Cost (local backend, the recorded run in `results/E5/2026-10-24-local/report.json`,
+steps A2, B1, C2, D3 and D10; testbed `6c0331a`):
 
 | Measure | Result |
 |---|---|
-| Admission, group of 2 → 8 | 199 → 266 ms each |
+| Admission, group of 2 → 8 | 154 to 231 ms each (median 182 ms) |
 | APF time per request, history ≤ 48 events | 7 ms (median) |
-| … ≤ 192 events | 182 ms |
-| … ≤ 336 events | 536 ms |
-| … ≤ 481 events | 1 105 ms |
-| Round duration (8 messages, 56 deliveries), rounds 1 → 4 | 3.0 → 10.8 → 23.3 → 39.9 s |
+| … ≤ 192 events | 183 ms |
+| … ≤ 336 events | 538 ms |
+| … ≤ 481 events | 1 058 ms |
+| Round duration (8 messages, 56 deliveries), clean rounds 1 → 4 | 3.1 → 10.6 → 24.3 → 43.1 s |
+| Round under 10 % drop and duplication (history 335 → 414) | 68.7 s |
+| Send latency, whole run | median 6.6 s, p95 22.7 s |
+| Delivery latency (send to inbox), whole run | median 7.6 s, p95 40.6 s |
 
 The APF's time per request grows roughly with the square of the history length, and
 the APF serializes requests, so throughput falls as a run gets longer.
