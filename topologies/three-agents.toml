@@ -1,0 +1,23 @@
+# Three agents in one MLS group, one APF authority, one relay, one QRNG service.
+# Deployed identically by every backend (attctl up --backend local|compose).
+name = "three-agents"
+group = "lab"
+root = "alice"           # the founding agent; holds read, write, admin, admit
+
+[entropy]
+# os | mock | qrng. With qrng and no url, the deployment runs the qrng-mock service
+# (OS RNG behind the QRNG Open API: MOCK, not quantum). With url = "https://...",
+# every node uses that endpoint instead, e.g. a Quside Entropy Core.
+source = "qrng"
+
+[relay]
+seed = 7                 # fault schedule seed (drop, duplicate, reorder)
+
+[[agent]]
+name = "alice"
+
+[[agent]]
+name = "bob"
+
+[[agent]]
+name = "carol"

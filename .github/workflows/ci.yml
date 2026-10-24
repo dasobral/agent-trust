@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  local:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit tests and E1 (local backend)
+        run: scripts/ci.sh
+      - name: Keep the run directories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e1-local-runs
+          path: |
+            runs/*/report.*
+            runs/*/trace.json
+            runs/*/service-logs/
+
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit tests, image and E1 (compose backend)
+        run: BACKEND=compose scripts/ci.sh
+      - name: Keep the run directories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e1-compose-runs
+          path: |
+            runs/*/report.*
+            runs/*/trace.json
+            runs/*/service-logs/

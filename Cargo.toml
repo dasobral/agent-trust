@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/att-node"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.91"
+license = "MIT"
+repository = "https://github.com/dasobral/agent-trust-testbed"
+authors = ["Daniel Sobral Blanco <dasobral93@gmail.com>"]
+
+# The Agent Trust stack, pinned in one place. Change these three revisions together:
+# agent-trust pins its own OpenMLS fork revision and openmls-qrand revision.
+[workspace.dependencies]
+agent-trust = { git = "https://github.com/dasobral/agent-trust.git", rev = "9af877cd0556ca46448f3daa20eee19cf8b286d9" }
+openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable"] }
+
+# Same unification as agent-trust: openmls-qrand depends on crates.io openmls_traits.
+[patch.crates-io]
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }

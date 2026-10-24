@@ -1,0 +1,540 @@
+"""Experiment runner.
+
+An experiment is a TOML file: metadata, the topology it needs, and an ordered list
+of ``[[step]]`` tables. Each step is an *action* (it drives the testbed through the
+control and application APIs) or a *check* (``do = "check.<name>"``, it observes and
+asserts). Every action states the outcome it expects (``expect``, default ``"ok"``,
+otherwise an error code). The runner stops at the first failed step, collects the
+artifacts, and writes ``report.json`` and ``report.md``.
+
+Nothing here knows how the testbed is deployed: it reads ``deploy.json`` only.
+"""
+from __future__ import annotations
+
+from collections import Counter
+import json
+import time
+import tomllib
+from pathlib import Path
+
+from . import oracle as oracle_mod
+from .api import ServiceError, Testbed
+
+
+class StepFailure(Exception):
+    pass
+
+
+class Experiment:
+    def __init__(self, path):
+        self.path = Path(path)
+        data = tomllib.loads(self.path.read_text())
+        meta = data.get("experiment", {})
+        self.id = meta["id"]
+        self.title = meta.get("title", self.id)
+        self.hypothesis = meta.get("hypothesis", "")
+        topology = meta["topology"]
+        self.topology_path = (self.path.parent / topology).resolve()
+        self.steps = data.get("step", [])
+        if not self.steps:
+            raise ValueError(f"{path}: no [[step]] tables")
+
+
+class Runner:
+    def __init__(self, testbed: Testbed, run_dir, log=print):
+        self.tb = testbed
+        self.run_dir = Path(run_dir)
+        self.log = log
+        self.sent = {}          # op -> {"from", "text", "payload_hex", "recipients"}
+        self.labels = {}        # experiment label -> op id chosen by the sidecar
+        self.artifacts = {}
+
+    # ------------------------------------------------------------------
+    # Driver
+    # ------------------------------------------------------------------
+
+    def run(self, experiment: Experiment):
+        results = []
+        started = time.time()
+        failed = False
+        for index, step in enumerate(experiment.steps):
+            action = step.get("do", "")
+            label = step.get("name", action)
+            begin = time.monotonic()
+            record = {"index": index, "do": action, "name": label}
+            try:
+                handler = getattr(self, "do_" + action.replace(".", "_").replace("-", "_"), None)
+                if handler is None:
+                    raise StepFailure(f"unknown step {action!r}")
+                detail = handler(step)
+                record.update(status="pass", detail=detail)
+            except (StepFailure, ServiceError) as error:
+                record.update(status="fail", error=str(error))
+                failed = True
+            record["seconds"] = round(time.monotonic() - begin, 3)
+            results.append(record)
+            mark = "PASS" if record["status"] == "pass" else "FAIL"
+            self.log(f"[{mark}] {index:02d} {label}" + ("" if mark == "PASS" else f": {record['error']}"))
+            if failed:
+                break
+        return {
+            "experiment": experiment.id,
+            "title": experiment.title,
+            "hypothesis": experiment.hypothesis,
+            "result": "fail" if failed else "pass",
+            "started": started,
+            "seconds": round(time.time() - started, 3),
+            "steps": results,
+            "skipped_steps": len(experiment.steps) - len(results),
+        }
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _expect(self, step, call):
+        """Runs ``call`` and compares its outcome with ``step["expect"]`` (default ok)."""
+        expect = step.get("expect", "ok")
+        try:
+            value = call()
+        except ServiceError as error:
+            if expect == "ok":
+                raise StepFailure(f"expected ok, got {error.message}") from None
+            if error.code != expect:
+                raise StepFailure(f"expected {expect}, got {error.message}") from None
+            return {"refused": error.code, "error": error.message}
+        if expect != "ok":
+            raise StepFailure(f"expected {expect}, but the step succeeded: {value}")
+        return value
+
+    def _wait(self, predicate, what, timeout=30, interval=0.1):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            value = predicate()
+            if value:
+                return value
+            time.sleep(interval)
+        raise StepFailure(f"timeout after {timeout}s waiting for {what}")
+
+    def _statuses(self):
+        return {name: agent.status() for name, agent in self.tb.agents.items()}
+
+    def _members(self):
+        return [name for name, s in self._statuses().items()
+                if s["membership"] == "member" and not s["retain"]]
+
+    def _sync_members(self):
+        for name in self._members():
+            self.tb.agent(name).control("sync")
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+
+    def do_genesis(self, step):
+        return self._expect(step, lambda: self.tb.agent(step["agent"]).control("genesis"))
+
+    def do_delegate(self, step):
+        subject_key = self.tb.agent(step["subject"]).status()["public_key"]
+        body = {"subject": step["subject"], "subject_key": subject_key, "rights": step["rights"]}
+        for key in ("resources", "ttl_secs", "depth"):
+            if key in step:
+                body[key] = step[key]
+        return self._expect(step, lambda: self.tb.agent(step["by"]).control("delegate", body))
+
+    def do_admit(self, step):
+        subject, by = step["subject"], step["by"]
+
+        def admit():
+            self.tb.agent(subject).control("join")
+            added = self.tb.agent(by).control("add", {"subject": subject})
+            self._wait(lambda: self.tb.agent(subject).status()["membership"] == "member",
+                       f"{subject} to join from its Welcome")
+            self._sync_members()
+            return added
+        return self._expect(step, admit)
+
+    def do_send(self, step):
+        agent = self.tb.agent(step["agent"])
+        body = {k: step[k] for k in ("text", "payload_hex", "op", "content_type") if k in step}
+        result = self._expect(step, lambda: agent.send(**body))
+        if "op" in result:
+            self.sent[result["op"]] = {"from": step["agent"], "text": step.get("text"),
+                                       "payload_hex": step.get("payload_hex"),
+                                       "recipients": result["recipients"]}
+            if "label" in step:
+                self.labels[step["label"]] = result["op"]
+        return result
+
+    def do_burst(self, step):
+        """``count`` messages from each of ``agents``, interleaved, labelled
+        ``<label>-<agent>-<i>``. Every send must succeed."""
+        prefix = step.get("label", "burst")
+        sent = []
+        for i in range(1, step["count"] + 1):
+            for name in step["agents"]:
+                label = f"{prefix}-{name}-{i}"
+                text = f"{label}: {step.get('text', 'burst message')}"
+                self.do_send({"agent": name, "label": label, "text": text})
+                sent.append(label)
+        return {"sent": len(sent)}
+
+    def do_quiesce(self, step):
+        timeout = step.get("timeout", 30)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            before = self.tb.relay.call("GET", "/control/stats")
+            if before["pending"] == 0:
+                polls = {n: s["polls"] for n, s in self._statuses().items()}
+                self._wait(lambda: all(s["polls"] >= polls[n] + 2
+                                       for n, s in self._statuses().items()),
+                           "agents to finish their poll rounds", timeout=10, interval=0.05)
+                after = self.tb.relay.call("GET", "/control/stats")
+                if after["pending"] == 0 and after["fetched"] == before["fetched"]:
+                    return {k: after[k] for k in ("posted", "fetched", "dropped", "duplicated",
+                                                  "tapped", "queued", "held")}
+            time.sleep(0.1)
+        raise StepFailure(f"relay did not drain within {timeout}s")
+
+    def do_faults(self, step):
+        body = {k: step[k] for k in ("drop", "duplicate", "reorder", "seed") if k in step}
+        return self.tb.relay.call("POST", "/control/faults", body)
+
+    def do_hold(self, step):
+        return self.tb.relay.call("POST", "/control/hold",
+                                  {"mailbox": step["mailbox"], "held": step.get("held", True)})
+
+    def do_tap(self, step):
+        return self.tb.relay.call("POST", "/control/tap", {
+            "victim": step["victim"], "observer": step["observer"],
+            "enabled": step.get("enabled", True)})
+
+    def do_revoke(self, step):
+        body = {"command": "revoke", "subject": step["subject"], "right": step["right"]}
+        return self._expect(step, lambda: self.tb.agent(step["by"]).control("request", {"body": body}))
+
+    def do_grant(self, step):
+        body = {"command": "grant", "subject": step["subject"], "right": step["right"],
+                "generation": step["generation"], "fresh_keys": True}
+        result = self._expect(step, lambda: self.tb.agent(step["by"]).control("request", {"body": body}))
+        if "expect_result" in step and result != step["expect_result"]:
+            raise StepFailure(f"expected result {step['expect_result']}, got {result}")
+        return result
+
+    def do_request(self, step):
+        return self._expect(step, lambda: self.tb.agent(step["agent"]).control(
+            "request", {"body": step["body"]}))
+
+    def do_repair(self, step):
+        result = self._expect(step, lambda: self.tb.agent(step["by"]).control("repair"))
+        if "expect_removed" in step and sorted(result.get("removed", [])) != sorted(step["expect_removed"]):
+            raise StepFailure(f"expected removed {step['expect_removed']}, got {result.get('removed')}")
+        if step.get("expect", "ok") == "ok":
+            # The other continuing members confirm as they apply the commit (C-23).
+            self._sync_members()
+            state = self._wait(lambda: (lambda s: s if not s["read_fenced"] else None)(
+                self.tb.apf.call("GET", "/v1/state")), "the APF to reopen the fence")
+            result["read_fenced_after"] = state["read_fenced"]
+            evidence = self._evidence()
+            result["evidence"] = evidence
+            if "expect_evidence" in step and evidence != step["expect_evidence"]:
+                raise StepFailure(f"expected evidence {step['expect_evidence']}, got {evidence}")
+        return result
+
+    def _evidence(self):
+        for status in self._statuses().values():
+            for record in reversed(status["confirmations"]):
+                response = record.get("response") or {}
+                if response.get("opened"):
+                    return response.get("evidence")
+        return None
+
+    def do_rekey(self, step):
+        def rekey():
+            result = self.tb.agent(step["agent"]).control(
+                "rekey", {"right": step["right"], "generation": step["generation"]})
+            self._sync_members()
+            return result
+        return self._expect(step, rekey)
+
+    def do_adversary(self, step):
+        return self.tb.agent(step["agent"]).control("adversary", {"retain": step.get("retain", True)})
+
+    def do_sync(self, step):
+        self._sync_members()
+        return {"synced": self._members()}
+
+    # ------------------------------------------------------------------
+    # Checks
+    # ------------------------------------------------------------------
+
+    def _ops(self, step):
+        return [self._resolve(op) for op in step["ops"]]
+
+    def _resolve(self, label):
+        op = self.labels.get(label, label)
+        if op not in self.sent:
+            raise StepFailure(f"no sent message is labelled {label!r}")
+        return op
+
+    def do_check_delivered(self, step):
+        name = step["agent"]
+        inbox = self.tb.agent(name).inbox()
+        counts = Counter(item["op"] for item in inbox)
+        ops = self._ops(step)
+        problems = []
+        for op in ops:
+            if counts[op] != 1:
+                problems.append(f"{op} delivered {counts[op]} times")
+                continue
+            item = next(i for i in inbox if i["op"] == op)
+            sent = self.sent[op]
+            if item["from"] != sent["from"]:
+                problems.append(f"{op} from {item['from']}, sent by {sent['from']}")
+            if sent["text"] is not None and item.get("text") != sent["text"]:
+                problems.append(f"{op} payload differs from what was sent")
+        if step.get("exact", True):
+            extra = sorted(set(counts) - set(ops))
+            if extra:
+                problems.append(f"unexpected deliveries {extra}")
+        if problems:
+            raise StepFailure(f"{name}: " + "; ".join(problems))
+        return {"agent": name, "delivered": sorted(ops)}
+
+    def do_check_complete(self, step):
+        """Every message sent so far reached every recipient named by its release
+        certificate exactly once, with the sent payload. ``exclude`` lists
+        ``"agent:label"`` pairs that are expected to be missing."""
+        excluded = {(e.split(":")[0], self._resolve(e.split(":")[1])) for e in step.get("exclude", [])}
+        inboxes = {name: agent.inbox() for name, agent in self.tb.agents.items()}
+        problems, checked = [], 0
+        for op, sent in self.sent.items():
+            for to in sent["recipients"]:
+                if (to, op) in excluded:
+                    continue
+                items = [i for i in inboxes[to] if i["op"] == op]
+                checked += 1
+                if len(items) != 1:
+                    problems.append(f"{op}->{to} delivered {len(items)} times")
+                elif sent["text"] is not None and items[0].get("text") != sent["text"]:
+                    problems.append(f"{op}->{to} payload differs")
+        for to, op in excluded:
+            if any(i["op"] == op for i in inboxes[to]):
+                problems.append(f"{op}->{to} was delivered but is excluded")
+        if problems:
+            raise StepFailure("; ".join(problems[:20]))
+        return {"pairs": checked, "excluded": sorted(f"{a}:{o}" for a, o in excluded)}
+
+    def do_check_rejections_are_duplicates(self, step):
+        """C-39: an honest member may reject only a copy of a message it already
+        delivered (the relay's duplicates), never a first copy."""
+        report = {}
+        for name in step["agents"]:
+            agent = self.tb.agent(name)
+            delivered = {i["op"] for i in agent.inbox()}
+            rejections = agent.status()["rejections"]
+            bad = [r for r in rejections if r["op"] not in delivered]
+            if bad:
+                raise StepFailure(f"{name} rejected messages it never delivered: {bad}")
+            report[name] = Counter(r["code"] for r in rejections)
+        return report
+
+    def do_check_not_delivered(self, step):
+        name = step["agent"]
+        delivered = {item["op"] for item in self.tb.agent(name).inbox()}
+        leaked = sorted(set(self._ops(step)) & delivered)
+        if leaked:
+            raise StepFailure(f"{name} received {leaked}")
+        return {"agent": name, "not_delivered": self._ops(step)}
+
+    def do_check_rejected(self, step):
+        """The first copy of ``op`` that reached ``agent`` was refused with one of
+        ``codes``. Later copies are relay duplicates: the MLS ratchet already moved,
+        so they may only be refused as ``duplicate_codes``."""
+        name, op = step["agent"], self._resolve(step["op"])
+        codes = set(step["codes"])
+        duplicate_codes = set(step.get("duplicate_codes", ["undecryptable", "replay"]))
+        rejections = [r for r in self.tb.agent(name).status()["rejections"] if r["op"] == op]
+        if not rejections:
+            raise StepFailure(f"{name} has no rejection of {op}")
+        first, later = rejections[0], rejections[1:]
+        if first["code"] not in codes:
+            raise StepFailure(f"{name} refused the first copy of {op} with {first}, expected {sorted(codes)}")
+        unexpected = [r for r in later if r["code"] not in duplicate_codes]
+        if unexpected:
+            raise StepFailure(f"{name} refused later copies of {op} with unexpected codes: {unexpected}")
+        return {"agent": name, "op": op, "first": first["code"], "duplicates": [r["code"] for r in later]}
+
+    def do_check_adversary(self, step):
+        name = step["agent"]
+        attempts = self.tb.agent(name).status()["adversary"]
+        report = []
+        for op in self._ops(step):
+            mine = [a for a in attempts if a["op"] == op]
+            if not mine:
+                raise StepFailure(f"{name} made no attempt on {op} (the tap did not deliver it)")
+            for attempt in mine:
+                if attempt["decrypted"]:
+                    raise StepFailure(f"{name} DECRYPTED {op} with retained keys: {attempt}")
+                if attempt["consume"] == "ok":
+                    raise StepFailure(f"the APF let {name} consume {op}: {attempt}")
+            report.extend(mine)
+        return {"agent": name, "attempts": report}
+
+    def do_check_apf(self, step):
+        state = self.tb.apf.call("GET", "/v1/state")
+        problems = []
+        for key in ("roster", "read_fenced", "repair_pending", "epoch"):
+            if key in step:
+                actual = sorted(state[key]) if key == "roster" else state[key]
+                expected = sorted(step[key]) if key == "roster" else step[key]
+                if actual != expected:
+                    problems.append(f"{key} is {actual}, expected {expected}")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return {k: state[k] for k in ("roster", "epoch", "policy_revision", "read_fenced", "repair_pending")}
+
+    def do_check_frontiers(self, step):
+        state = self.tb.apf.call("GET", "/v1/state")
+        names = step.get("agents") or self._members()
+        bad = {}
+        for name in names:
+            status = self.tb.agent(name).status()
+            if (status["epoch"], status["branch"]) != (state["epoch"], state["branch"]):
+                bad[name] = status["epoch"]
+        if bad:
+            raise StepFailure(f"agents off the APF frontier (epoch {state['epoch']}): {bad}")
+        return {"epoch": state["epoch"], "agents": names}
+
+    def do_check_exactly_once(self, step):
+        delivered = Counter()
+        for name, agent in self.tb.agents.items():
+            for item in agent.inbox():
+                delivered[(item["op"], name)] += 1
+        duplicates = {f"{op}->{to}": n for (op, to), n in delivered.items() if n > 1}
+        checkpoint = self.tb.apf.call("GET", "/control/checkpoint")
+        history = checkpoint.get("history", [])
+        snapshot = history[-1]["event"]["snapshot"] if history else {}
+        consumed = {(c["op"], c["recipient"]) for c in snapshot.get("consumed", [])}
+        without_consume = sorted(f"{op}->{to}" for (op, to) in delivered if (op, to) not in consumed)
+        consumed_not_delivered = sorted(f"{op}->{to}" for (op, to) in consumed if (op, to) not in delivered)
+        if duplicates or without_consume or consumed_not_delivered:
+            raise StepFailure(f"duplicates={duplicates} delivered_without_consume={without_consume} "
+                              f"consumed_not_delivered={consumed_not_delivered}")
+        return {"deliveries": sum(delivered.values()), "consumed": len(consumed)}
+
+    def do_check_oracle(self, step):
+        module, path = oracle_mod.load()
+        trace = self.tb.apf.call("GET", "/control/trace")["trace"]
+        self.artifacts["trace"] = trace
+        (self.run_dir / "trace.json").write_text(json.dumps(trace, indent=1))
+        violations = module.check_trace(trace)
+        if violations:
+            raise StepFailure(f"the oracle rejected the exported trace: {violations}")
+        kinds = Counter(event.get("type") for event in trace)
+        return {"oracle": str(Path(path).name), "events": len(trace), "kinds": dict(sorted(kinds.items()))}
+
+    def do_check_broken_controls(self, step):
+        module, _ = oracle_mod.load()
+        trace = self.artifacts.get("trace") or self.tb.apf.call("GET", "/control/trace")["trace"]
+        if module.check_trace(trace):
+            raise StepFailure("precondition: the real trace is not accepted")
+        controls, skipped = oracle_mod.broken_controls(trace, step["revoked_reader"], step["writer"])
+        results, blind = {}, []
+        for label, (events, index, code) in controls.items():
+            violations = module.check_trace(events)
+            results[label] = violations
+            if violations != [{"index": index, "code": code}]:
+                blind.append(f"{label}: expected {code} at {index}, got {violations}")
+        minimum = step.get("minimum", len(controls))
+        if blind or len(controls) < minimum:
+            raise StepFailure("; ".join(blind) or f"only {len(controls)} controls, skipped {skipped}")
+        return {"rejected": {k: v[0]["code"] for k, v in results.items()}, "skipped": skipped}
+
+    def do_check_entropy(self, step):
+        source = step["source"]
+        reports = {"apf": self.tb.apf.call("GET", "/control/entropy")}
+        for name, agent in self.tb.agents.items():
+            reports[name] = agent.control("entropy", method="GET")
+        problems = []
+        for name, report in reports.items():
+            if report.get("source") != source:
+                problems.append(f"{name} uses {report.get('source')}")
+            if source != "os" and (report.get("failures", 0) != 0 or report.get("requests", 0) == 0):
+                problems.append(f"{name} report {report}")
+        detail = {"nodes": reports}
+        if self.tb.qrng is not None:
+            stats = self.tb.qrng.call("GET", "/control/stats")
+            detail["qrng_service"] = stats
+            if stats["refused"] != 0 or stats["bytes"] == 0:
+                problems.append(f"qrng service {stats}")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return detail
+
+    def do_check_no_errors(self, step):
+        names = step.get("agents") or list(self.tb.agents)
+        errors = {n: self.tb.agent(n).status()["errors"] for n in names}
+        errors = {n: e for n, e in errors.items() if e}
+        if errors:
+            raise StepFailure(f"agent errors: {errors}")
+        return {"agents": names}
+
+    # ------------------------------------------------------------------
+    # Artifacts
+    # ------------------------------------------------------------------
+
+    def collect(self):
+        """Final observations: statuses, relay and entropy stats, APF state."""
+        out = {}
+        for label, fetch in (
+            ("apf_state", lambda: self.tb.apf.call("GET", "/v1/state")),
+            ("relay_stats", lambda: self.tb.relay.call("GET", "/control/stats")),
+            ("agents", self._statuses),
+            ("qrng_stats", lambda: self.tb.qrng.call("GET", "/control/stats") if self.tb.qrng else None),
+            ("adapter_trace", lambda: self.tb.apf.call("GET", "/control/adapter-trace")),
+        ):
+            try:
+                out[label] = fetch()
+            except ServiceError as error:
+                out[label] = {"unavailable": error.message}
+        return out
+
+
+def render_markdown(report, deployment, observations):
+    lines = [
+        f"# {report['experiment']}: {report['title']}",
+        "",
+        f"- Result: **{report['result'].upper()}**",
+        f"- Backend: `{deployment['backend']}`; topology `{deployment['name']}`; "
+        f"entropy `{deployment['entropy'].get('source')}`",
+        f"- Duration: {report['seconds']} s; steps run: {len(report['steps'])}; "
+        f"steps not run: {report['skipped_steps']}",
+        "",
+        f"Hypothesis: {report['hypothesis']}",
+        "",
+        "| # | Step | Result | Seconds | Detail |",
+        "|---|------|--------|---------|--------|",
+    ]
+    for step in report["steps"]:
+        detail = step.get("error") or _short(step.get("detail"))
+        lines.append(f"| {step['index']} | {step['name']} | {step['status']} | {step['seconds']} | "
+                     f"{detail.replace('|', '/')} |")
+    state = observations.get("apf_state", {})
+    relay = observations.get("relay_stats", {})
+    lines += [
+        "",
+        "## Final state",
+        "",
+        f"- APF roster: {state.get('roster')}; epoch {state.get('epoch')}; "
+        f"policy revision {state.get('policy_revision')}; read fenced {state.get('read_fenced')}",
+        f"- Relay: posted {relay.get('posted')}, fetched {relay.get('fetched')}, "
+        f"dropped {relay.get('dropped')}, duplicated {relay.get('duplicated')}, tapped {relay.get('tapped')}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _short(value, limit=160):
+    text = json.dumps(value, sort_keys=True) if not isinstance(value, str) else value
+    return text if len(text) <= limit else text[:limit - 3] + "..."

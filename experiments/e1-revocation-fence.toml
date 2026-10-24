@@ -1,0 +1,356 @@
+# E1: authorization and cryptographic capability stay coherent over a real network.
+#
+# Run:  ./attctl run experiments/e1-revocation-fence.toml --backend local
+#       ./attctl run experiments/e1-revocation-fence.toml --backend compose
+# Design and expected results: docs/experiments/E1-revocation-fence.md
+
+[experiment]
+id = "E1"
+title = "Revocation fence, repair and rekey across a faulty network"
+topology = "../topologies/three-agents.toml"
+hypothesis = """With the APF, the agents and the relay as separate network services, and \
+the relay dropping, duplicating and reordering traffic: (H1) every authorized \
+message reaches each current reader exactly once and only after an APF consumption; \
+(H2) a read revocation stops new releases and in-flight deliveries until a repair \
+commit removes the reader; (H3) a removed member that keeps its keys can neither \
+decrypt nor consume later traffic; (H4) a re-granted write right needs fresh keys; \
+(H5) the independent oracle accepts the exported trace and rejects every broken control."""
+
+# ---------------------------------------------------------------- Phase A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group with the APF"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 alice delegates read, write, admit to bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 alice delegates read, write, admit to carol"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "A4 bob joins through a certified KeyPackage"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "admit"
+name = "A5 carol joins through a certified KeyPackage"
+by = "alice"
+subject = "carol"
+
+[[step]]
+do = "check.apf"
+name = "A6 APF roster and frontier after admission"
+roster = ["alice", "bob", "carol"]
+epoch = 2
+read_fenced = false
+
+[[step]]
+do = "check.frontiers"
+name = "A7 every agent is on the APF frontier"
+agents = ["alice", "bob", "carol"]
+
+# ------------------------------------------------- Phase B: messaging under faults (H1)
+[[step]]
+do = "faults"
+name = "B1 relay drops 25%, duplicates 25%, reorders"
+drop = 25
+duplicate = 25
+reorder = true
+seed = 11
+
+[[step]]
+do = "send"
+name = "B2 alice sends m1"
+agent = "alice"
+label = "m1"
+text = "m1: hello from alice"
+
+[[step]]
+do = "send"
+name = "B3 bob sends m2"
+agent = "bob"
+label = "m2"
+text = "m2: hello from bob"
+
+[[step]]
+do = "send"
+name = "B4 carol sends m3"
+agent = "carol"
+label = "m3"
+text = "m3: hello from carol"
+
+[[step]]
+do = "burst"
+name = "B5 burst: 4 interleaved messages from each agent"
+agents = ["alice", "bob", "carol"]
+count = 4
+
+[[step]]
+do = "quiesce"
+name = "B5b relay drains (retransmissions and duplicates included)"
+
+[[step]]
+do = "check.delivered"
+name = "B6 alice received m2 and m3 exactly once"
+agent = "alice"
+ops = ["m2", "m3"]
+exact = false
+
+[[step]]
+do = "check.delivered"
+name = "B7 bob received m1 and m3 exactly once"
+agent = "bob"
+ops = ["m1", "m3"]
+exact = false
+
+[[step]]
+do = "check.delivered"
+name = "B8 carol received m1 and m2 exactly once"
+agent = "carol"
+ops = ["m1", "m2"]
+exact = false
+
+[[step]]
+do = "check.complete"
+name = "B9 every burst message reached every reader exactly once"
+
+[[step]]
+do = "check.rejections_are_duplicates"
+name = "B10 every rejected copy was a duplicate of a delivered message"
+agents = ["alice", "bob", "carol"]
+
+[[step]]
+do = "check.exactly_once"
+name = "B11 no duplicate delivery, no delivery without APF consumption"
+
+# ------------------------------------------- Phase C: revocation fence (H2)
+[[step]]
+do = "hold"
+name = "C1 relay holds carol's mailbox (message in flight)"
+mailbox = "carol"
+held = true
+
+[[step]]
+do = "send"
+name = "C2 alice sends m4 before the revocation"
+agent = "alice"
+label = "m4"
+text = "m4: released before the revocation"
+
+[[step]]
+do = "quiesce"
+name = "C3 bob's copy drains; carol's copy stays in flight"
+
+[[step]]
+do = "revoke"
+name = "C4 alice revokes carol's read right"
+by = "alice"
+subject = "carol"
+right = "read"
+
+[[step]]
+do = "check.apf"
+name = "C5 the APF read fence is closed"
+read_fenced = true
+
+[[step]]
+do = "send"
+name = "C6 alice cannot release while fenced"
+agent = "alice"
+text = "must not be released"
+expect = "read_fenced"
+
+[[step]]
+do = "send"
+name = "C7 bob cannot release while fenced"
+agent = "bob"
+text = "must not be released"
+expect = "read_fenced"
+
+[[step]]
+do = "hold"
+name = "C8 relay releases carol's mailbox"
+mailbox = "carol"
+held = false
+
+[[step]]
+do = "quiesce"
+name = "C9 carol processes the in-flight m4"
+
+[[step]]
+do = "check.rejected"
+name = "C10 carol decrypts m4 but the APF refuses its consumption"
+agent = "carol"
+op = "m4"
+codes = ["read_fenced"]
+
+[[step]]
+do = "check.not_delivered"
+name = "C11 carol's application never sees m4"
+agent = "carol"
+ops = ["m4"]
+
+[[step]]
+do = "check.delivered"
+name = "C12 bob received m4"
+agent = "bob"
+ops = ["m4"]
+exact = false
+
+# ------------------------------- Phase D: repair and the retained-key adversary (H3)
+[[step]]
+do = "adversary"
+name = "D1 carol turns adversary: keeps its epoch keys, ignores its removal"
+agent = "carol"
+retain = true
+
+[[step]]
+do = "repair"
+name = "D2 alice commits the repair; bob confirms; the fence reopens"
+by = "alice"
+expect_removed = ["carol"]
+expect_evidence = "pair"
+
+[[step]]
+do = "check.apf"
+name = "D3 carol is out of the roster and the fence is open"
+roster = ["alice", "bob"]
+epoch = 3
+read_fenced = false
+
+[[step]]
+do = "tap"
+name = "D4 the relay leaks every copy for bob to carol"
+victim = "bob"
+observer = "carol"
+
+[[step]]
+do = "send"
+name = "D5 alice sends m6 after the repair"
+agent = "alice"
+label = "m6"
+text = "m6: after carol's removal"
+
+[[step]]
+do = "quiesce"
+name = "D6 relay drains"
+
+[[step]]
+do = "check.delivered"
+name = "D7 bob received m6"
+agent = "bob"
+ops = ["m6"]
+exact = false
+
+[[step]]
+do = "check.adversary"
+name = "D8 carol's retained keys cannot decrypt m6 and the APF refuses it"
+agent = "carol"
+ops = ["m6"]
+
+# ------------------------------------------------- Phase E: rekey (H4)
+[[step]]
+do = "revoke"
+name = "E1 alice revokes bob's write right"
+by = "alice"
+subject = "bob"
+right = "write"
+
+[[step]]
+do = "send"
+name = "E2 bob cannot release without write"
+agent = "bob"
+text = "must not be released"
+expect = "unauthorized"
+
+[[step]]
+do = "grant"
+name = "E3 alice re-grants write at generation 1: a rekey offer only"
+by = "alice"
+subject = "bob"
+right = "write"
+generation = 1
+expect_result = { pending = true }
+
+[[step]]
+do = "send"
+name = "E4 the offer alone does not restore write"
+agent = "bob"
+text = "must not be released"
+expect = "unauthorized"
+
+[[step]]
+do = "rekey"
+name = "E5 bob commits a new signature key and incarnation"
+agent = "bob"
+right = "write"
+generation = 1
+
+[[step]]
+do = "send"
+name = "E6 bob sends m8 with its new key"
+agent = "bob"
+label = "m8"
+text = "m8: bob after the rekey"
+
+[[step]]
+do = "quiesce"
+name = "E7 relay drains"
+
+[[step]]
+do = "check.delivered"
+name = "E8 alice received m8"
+agent = "alice"
+ops = ["m8"]
+exact = false
+
+# ------------------------------------------------- Phase F: verification (H1, H5)
+[[step]]
+do = "check.frontiers"
+name = "F1 alice and bob are on the APF frontier"
+agents = ["alice", "bob"]
+
+[[step]]
+do = "check.complete"
+name = "F2 every message reached every certified reader exactly once, except the fenced m4"
+exclude = ["carol:m4"]
+
+[[step]]
+do = "check.rejections_are_duplicates"
+name = "F2b the honest agents rejected only duplicates"
+agents = ["alice", "bob"]
+
+[[step]]
+do = "check.exactly_once"
+name = "F2c no delivery without APF consumption, over the whole run"
+
+[[step]]
+do = "check.oracle"
+name = "F3 the independent oracle accepts the exported APF trace"
+
+[[step]]
+do = "check.broken_controls"
+name = "F4 the oracle rejects every broken control derived from the trace"
+revoked_reader = "carol"
+writer = "alice"
+
+[[step]]
+do = "check.entropy"
+name = "F5 every node drew its randomness from the QRNG service, with no failure"
+source = "qrng"
+
+[[step]]
+do = "check.no_errors"
+name = "F6 the honest agents logged no processing error"
+agents = ["alice", "bob"]

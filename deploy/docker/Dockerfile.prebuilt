@@ -1,0 +1,10 @@
+# att-node image from a binary built on the host (`attctl build`).
+# The base image must have a glibc at least as new as the build host's.
+#   docker build -f deploy/docker/Dockerfile.prebuilt -t agent-trust-testbed/att-node:local .
+ARG BASE_IMAGE=ubuntu:24.04
+FROM ${BASE_IMAGE}
+RUN useradd --system --uid 10001 --home-dir /var/lib/att att \
+ && mkdir -p /var/lib/att/apf && chown -R att /var/lib/att
+COPY target/release/att-node /usr/local/bin/att-node
+USER att
+ENTRYPOINT ["att-node"]
