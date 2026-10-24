@@ -29,20 +29,20 @@
   ],
   "latest_verification": {
     "date": "2026-10-24",
-    "commit": "50f0127",
+    "commit": "b8e70b3",
     "command": "python3 scripts/verify.py",
     "python_oracle_tests": 73,
     "rust_tests": 164,
     "harness_tests": 106,
     "integration_tests": 5,
-    "log": "evidence/verify-2026-10-24.txt",
+    "log": "evidence/verify-2026-10-24-integration.txt",
     "status": "pass"
   },
   "claim_boundary": {
     "full_lap_mls": true,
     "bridge_remove_etk": "open",
     "live_entropy_core": "unmet",
-    "hpke_randomness": "excluded",
+    "hpke_randomness": "drbg_seeded_from_source",
     "gates": {
       "build": "pass",
       "python-oracle": "pass",
@@ -50,6 +50,6 @@
       "harness": "pass",
       "integration": "pass"
     },
-    "reason": "every gate passed in this run; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is excluded"
+    "reason": "every gate passed in this run; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is DRBG output seeded from the selected source"
   }
 }

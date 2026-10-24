@@ -23,7 +23,7 @@ messaging system.
 
 | Claim | Result |
 | --- | --- |
-| `full_lap_mls` | **`true`**, recorded 2026-10-24 ([log](evidence/verify-2026-10-24.txt)) |
+| `full_lap_mls` | **`true`**, recorded 2026-10-24 on the current OpenMLS pin ([log](evidence/verify-2026-10-24-integration.txt)) |
 | `Bridge_remove^ETK` | **Open** cryptographic proof obligation |
 | Live Entropy Core run | **Not yet run** |
 | HPKE encapsulation randomness | **Derived** from the selected source: HMAC-DRBG output seeded from it ([§8](docs/adapter-contract.md#8-entropy-seam)) |

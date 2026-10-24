@@ -1,0 +1,211 @@
+# python3 scripts/verify.py on feat/openmls-main-libcrux b8e70b3, 2026-10-24: exit=0
+# Trimmed: per-test 'ok' lines are omitted; every gate summary and the claim line are kept.
+
+   Compiling agent-trust v0.1.0 (<repo>)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.56s
+PASS build
+
+----------------------------------------------------------------------
+Ran 73 tests in 0.027s
+
+OK
+PASS python-oracle (73 tests)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 12 tests
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+
+running 5 tests
+test live_entropy_core_gate ... ignored, live Entropy Core gate: needs AGENT_TRUST_QRNG_BASE_URL; unmet until executed
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.80s
+
+
+running 8 tests
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.31s
+
+
+running 8 tests
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+
+running 13 tests
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.55s
+
+
+running 15 tests
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
+
+
+running 4 tests
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.83s
+
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+
+running 4 tests
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 4 tests
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+
+running 2 tests
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+
+running 6 tests
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+
+running 2 tests
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 5 tests
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 13 tests
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s
+
+
+running 6 tests
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+   Compiling agent-trust v0.1.0 (<repo>)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.19s
+     Running unittests src/lib.rs (target/debug/deps/agent_trust-47d569d54ef4141c)
+     Running unittests src/main.rs (target/debug/deps/agent_trust-5be61a1001df2510)
+     Running tests/adapter_admission.rs (target/debug/deps/adapter_admission-03375c27f3f4d4ab)
+     Running tests/adapter_compat.rs (target/debug/deps/adapter_compat-20e36a8085fb29da)
+     Running tests/adapter_entropy.rs (target/debug/deps/adapter_entropy-aceaa529290178ca)
+     Running tests/adapter_identity.rs (target/debug/deps/adapter_identity-56b9c0d75e741124)
+     Running tests/adapter_recovery.rs (target/debug/deps/adapter_recovery-aa068dc70c8a2464)
+     Running tests/adapter_rekey.rs (target/debug/deps/adapter_rekey-93f11835e7ee8cff)
+     Running tests/adapter_release.rs (target/debug/deps/adapter_release-8ecc55f4032420de)
+     Running tests/adapter_repair.rs (target/debug/deps/adapter_repair-52017350d59e2957)
+     Running tests/adapter_repair_stacked.rs (target/debug/deps/adapter_repair_stacked-1f2b1c8103224c09)
+     Running tests/authority_adversarial.rs (target/debug/deps/authority_adversarial-5a54c4ee5660acb3)
+     Running tests/authority_contract.rs (target/debug/deps/authority_contract-c871fe68923da292)
+     Running tests/authority_corrections.rs (target/debug/deps/authority_corrections-ccdfdf3ade977f7b)
+     Running tests/authority_gap_contract.rs (target/debug/deps/authority_gap_contract-8c6a3fa24795ad91)
+     Running tests/authority_invocation_resources.rs (target/debug/deps/authority_invocation_resources-9ff2c6e0a3464590)
+     Running tests/authority_rekey_contract.rs (target/debug/deps/authority_rekey_contract-dbd3430fdcc8bd17)
+     Running tests/authority_resource_contract.rs (target/debug/deps/authority_resource_contract-e375e264377ffba7)
+     Running tests/authority_subject_status.rs (target/debug/deps/authority_subject_status-394ddb3bb65c8d63)
+     Running tests/confused_deputy_red.rs (target/debug/deps/confused_deputy_red-1f59cbb75d1f3eab)
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-9cd88a4d2243dcff)
+     Running tests/mls_contract.rs (target/debug/deps/mls_contract-c904f3a8528ada26)
+PASS rust (164 tests)
+
+seeded delivery schedules, seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615]
+seed 0: rounds=3 attempts=23 reorder=yes drop=yes duplicate=yes
+seed 1: rounds=2 attempts=24 reorder=yes drop=yes duplicate=yes
+seed 2: rounds=2 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 3: rounds=2 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 4: rounds=2 attempts=21 reorder=yes drop=yes duplicate=yes
+seed 5: rounds=2 attempts=26 reorder=yes drop=yes duplicate=yes
+seed 6: rounds=2 attempts=30 reorder=yes drop=yes duplicate=yes
+seed 7: rounds=3 attempts=35 reorder=yes drop=yes duplicate=yes
+seed 8: rounds=3 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 9: rounds=3 attempts=29 reorder=yes drop=yes duplicate=yes
+seed 10: rounds=4 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 11: rounds=2 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 12: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 13: rounds=2 attempts=23 reorder=yes drop=yes duplicate=yes
+seed 17: rounds=2 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 23: rounds=2 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 42: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 99: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 1234: rounds=2 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 65535: rounds=2 attempts=22 reorder=yes drop=yes duplicate=yes
+seed 4294967297: rounds=3 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 18446744073709551615: rounds=2 attempts=24 reorder=yes drop=yes duplicate=yes
+seeds exercising each fault: {'reorder': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615], 'drop': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615], 'duplicate': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615]}
+
+----------------------------------------------------------------------
+Ran 106 tests in 54.256s
+
+OK
+PASS harness (106 tests)
+
+seeded delivery schedules, seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615]
+seed 0: rounds=3 attempts=23 reorder=yes drop=yes duplicate=yes
+seed 1: rounds=2 attempts=24 reorder=yes drop=yes duplicate=yes
+seed 2: rounds=2 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 3: rounds=2 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 4: rounds=2 attempts=21 reorder=yes drop=yes duplicate=yes
+seed 5: rounds=2 attempts=26 reorder=yes drop=yes duplicate=yes
+seed 6: rounds=2 attempts=30 reorder=yes drop=yes duplicate=yes
+seed 7: rounds=3 attempts=35 reorder=yes drop=yes duplicate=yes
+seed 8: rounds=3 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 9: rounds=3 attempts=29 reorder=yes drop=yes duplicate=yes
+seed 10: rounds=4 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 11: rounds=2 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 12: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 13: rounds=2 attempts=23 reorder=yes drop=yes duplicate=yes
+seed 17: rounds=2 attempts=28 reorder=yes drop=yes duplicate=yes
+seed 23: rounds=2 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 42: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 99: rounds=3 attempts=25 reorder=yes drop=yes duplicate=yes
+seed 1234: rounds=2 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 65535: rounds=2 attempts=22 reorder=yes drop=yes duplicate=yes
+seed 4294967297: rounds=3 attempts=27 reorder=yes drop=yes duplicate=yes
+seed 18446744073709551615: rounds=2 attempts=24 reorder=yes drop=yes duplicate=yes
+seeds exercising each fault: {'reorder': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615], 'drop': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615], 'duplicate': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 23, 42, 99, 1234, 65535, 4294967297, 18446744073709551615]}
+
+----------------------------------------------------------------------
+Ran 5 tests in 47.096s
+
+OK
+PASS integration (5 tests, named oracle controls passed)
+claim_boundary.full_lap_mls: true
