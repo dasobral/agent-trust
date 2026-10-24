@@ -8,6 +8,13 @@ every run with agent-trust's independent oracle.
 
 This is research software, not a production system.
 
+> **Where this lives.** The session that built the testbed could not create a new
+> GitHub repository, so the history is on the branch `testbed/main` of
+> `dasobral/agent-trust` (unrelated to that repository's `main`). To move it to its
+> own repository, create an empty `dasobral/agent-trust-testbed` and run
+> `git push git@github.com:dasobral/agent-trust-testbed.git origin/testbed/main:refs/heads/main`
+> from any clone of agent-trust. Nothing in the testbed depends on the branch name.
+
 **Owner:** [Daniel Sobral Blanco](https://github.com/dasobral) · **License:** [MIT](LICENSE)
 
 ## Status
