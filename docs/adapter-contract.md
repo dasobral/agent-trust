@@ -598,7 +598,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
     - An `admit` that fails at the candidate's KeyPackage drops that candidate's lab identity. A later `admit` of the same subject then returns `invalid_transition: … no unused candidate identity`.
   - **Determinism.** With `mock` and a fixed seed, every identity key the lab exports is a function of that seed. `harness/test_entropy_lab.py` checks this, rekey included. HPKE randomness stays outside the seam (§8, D-5), so ciphertexts are not reproducible.
   - **Claim boundary.** A `mock` run exercises the real `QrngRand` / provider wiring, not the QRNG HTTP client, transport or Open API parsing. `tests/adapter_entropy.rs` keeps covering those against its loopback mock server. `live_entropy_core` stays `unmet` until a run against a real endpoint is recorded.
-  - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `fe9ea1355aa61cc41a171ec05f56d1f15b3406c7`. That revision adds the `EntropyBackend` seam and `MockEntropy`. This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
+  - **Dependency.** `openmls_qrand` is a normal dependency with the `mock` feature, pinned at openmls-qrand `11ee2edd042aea4803ee14086dcb8e53d709a673`, the openmls-qrand `main` merge of `fe9ea13`, which adds the `EntropyBackend` seam and `MockEntropy` (same tree; the evidence was recorded at `fe9ea13`). This replaces the phase 4.6 plan's `entropy-qrng` cargo feature: one build selects its source at run time.
 
 ## 9. Traces and the independent oracle
 

@@ -1683,7 +1683,7 @@ dependencies = [
 [[package]]
 name = "openmls_qrand"
 version = "0.1.0"
-source = "git+https://github.com/dasobral/openmls-qrand.git?rev=fe9ea1355aa61cc41a171ec05f56d1f15b3406c7#fe9ea1355aa61cc41a171ec05f56d1f15b3406c7"
+source = "git+https://github.com/dasobral/openmls-qrand.git?rev=11ee2edd042aea4803ee14086dcb8e53d709a673#11ee2edd042aea4803ee14086dcb8e53d709a673"
 dependencies = [
  "base64 0.22.1",
  "openmls_traits",
