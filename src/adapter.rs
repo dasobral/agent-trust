@@ -127,6 +127,35 @@ impl ClientIdentity {
         Ok(Self { signer })
     }
 
+    /// Rebuilds a stored identity, for a client restart. Only an Ed25519 pair whose public
+    /// key derives from its private seed is accepted (`binding_mismatch` otherwise), so a
+    /// stored secret cannot be paired with a foreign public key. New keys still come only
+    /// from [`ClientIdentity::generate`] (C-6).
+    pub fn restore(key_pair: SignatureKeyPair) -> Result<Self, String> {
+        if key_pair.signature_scheme() != SignatureScheme::ED25519 {
+            return Err("binding_mismatch: identity scheme".into());
+        }
+        let restored = Self { signer: key_pair };
+        let probe = b"agent-trust/identity-restore/v1";
+        let signature = restored
+            .signer
+            .sign(probe)
+            .map_err(|_| "binding_mismatch: identity key".to_string())?;
+        let public: [u8; KEY_LEN] = restored
+            .signer
+            .public()
+            .try_into()
+            .map_err(|_| "binding_mismatch: identity public key".to_string())?;
+        let verifying = ed25519_dalek::VerifyingKey::from_bytes(&public)
+            .map_err(|_| "binding_mismatch: identity public key".to_string())?;
+        let signature = ed25519_dalek::Signature::from_slice(&signature)
+            .map_err(|_| "binding_mismatch: identity key".to_string())?;
+        verifying.verify_strict(probe, &signature).map_err(|_| {
+            "binding_mismatch: the public key does not derive from the seed".to_string()
+        })?;
+        Ok(restored)
+    }
+
     /// The 32-byte Ed25519 public key.
     pub fn public_key(&self) -> &[u8] {
         self.signer.public()

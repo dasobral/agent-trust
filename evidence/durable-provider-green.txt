@@ -1,0 +1,13 @@
+# F-2 durable lab provider: green
+command: cargo test --locked --test lab_durable
+exit: 0
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+command: python3 scripts/verify.py
+exit: 0
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (170 tests)
+PASS harness (106 tests)
+PASS integration (5 tests, named oracle controls passed)
+claim_boundary.full_lap_mls: true

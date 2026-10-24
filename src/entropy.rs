@@ -510,6 +510,24 @@ impl LabEntropy {
         }
     }
 
+    /// A provider like [`LabEntropy::provider`] whose OpenMLS storage is the SQLite file at
+    /// `path` (created if missing, migrations applied). Reopening the same path after a
+    /// restart gives the stored groups and keys back, for `ClientEndpoint::load` (C-33).
+    /// Opening draws nothing from the source.
+    pub fn durable_provider(&self, path: &Path) -> Result<DurableLabProvider, String> {
+        let connection = openmls_sqlite_storage::Connection::open(path)
+            .map_err(|err| format!("malformed: client storage file: {err}"))?;
+        let mut storage = DurableStorage::new(connection);
+        storage
+            .run_migrations()
+            .map_err(|err| format!("malformed: client storage migrations: {err}"))?;
+        Ok(DurableLabProvider {
+            crypto: Arc::clone(&self.crypto),
+            storage,
+            rand: self.rand(),
+        })
+    }
+
     /// `{source}` for `os`; `{source, requests, bytes, failures}` otherwise.
     pub fn report(&self) -> Value {
         match &self.backend {
@@ -662,6 +680,52 @@ impl OpenMlsProvider for LabProvider {
     type CryptoProvider = LabCrypto;
     type RandProvider = LabRand;
     type StorageProvider = MemoryStorage;
+
+    fn storage(&self) -> &Self::StorageProvider {
+        &self.storage
+    }
+
+    fn crypto(&self) -> &Self::CryptoProvider {
+        &self.crypto
+    }
+
+    fn rand(&self) -> &Self::RandProvider {
+        &self.rand
+    }
+}
+
+/// serde_json codec of the durable client storage.
+#[derive(Default)]
+pub struct StorageCodec;
+
+impl openmls_sqlite_storage::Codec for StorageCodec {
+    type Error = serde_json::Error;
+
+    fn to_vec<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, Self::Error> {
+        serde_json::to_vec(value)
+    }
+
+    fn from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, Self::Error> {
+        serde_json::from_slice(slice)
+    }
+}
+
+/// The OpenMLS storage of a [`DurableLabProvider`]: one SQLite file.
+pub type DurableStorage =
+    openmls_sqlite_storage::SqliteStorageProvider<StorageCodec, openmls_sqlite_storage::Connection>;
+
+/// A [`LabProvider`] with durable storage: the shared [`LabCrypto`], the selected rand and
+/// one SQLite storage file (see [`LabEntropy::durable_provider`]).
+pub struct DurableLabProvider {
+    crypto: Arc<LabCrypto>,
+    storage: DurableStorage,
+    rand: LabRand,
+}
+
+impl OpenMlsProvider for DurableLabProvider {
+    type CryptoProvider = LabCrypto;
+    type RandProvider = LabRand;
+    type StorageProvider = DurableStorage;
 
     fn storage(&self) -> &Self::StorageProvider {
         &self.storage

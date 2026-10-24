@@ -1,0 +1,8 @@
+# F-2 durable lab provider: red
+command: cargo test --locked --test lab_durable
+exit: 101 (build failure: the interface does not exist yet; no test body ran)
+
+      1 error: could not compile `agent-trust` (test "lab_durable") due to 5 previous errors
+      1 error[E0599]: no associated function or constant named `restore` found for struct `ClientIdentity` in the current scope
+      1 error[E0599]: no method named `durable_provider` found for reference `&LabEntropy` in the current scope
+      3 error[E0599]: no method named `durable_provider` found for struct `LabEntropy` in the current scope
