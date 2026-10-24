@@ -7,7 +7,7 @@
 //! application API below. That API is the integration seam of the testbed.
 //!
 //! Application API (`ATT_APP_TOKEN`):
-//! - `POST /app/send {payload_hex | text, content_type?, op?}` → `{op, recipients, epoch}`
+//! - `POST /app/send {payload_hex | text, content_type?, op?, invocation?}` → `{op, recipients, epoch}`
 //! - `GET  /app/inbox?after=N` → delivered messages
 //! - `GET  /app/status`
 //!
@@ -850,7 +850,13 @@ impl Agent {
         let from = self.cfg.name.clone();
         self.endpoint_mut()?;
 
-        self.request(json!({ "command": "allocate", "op": op }))?;
+        // An operation on behalf of another agent is bound to an APF invocation at
+        // allocation; the APF bounds it by the origin's and this executor's authority.
+        let mut allocate = json!({ "command": "allocate", "op": op });
+        if let Some(invocation) = body.get("invocation").and_then(Value::as_str) {
+            allocate["invocation"] = json!(invocation);
+        }
+        self.request(allocate)?;
         let state = self.apf_state()?;
         let frontier = Frontier {
             epoch: state["epoch"].as_u64().ok_or("malformed: APF epoch")?,

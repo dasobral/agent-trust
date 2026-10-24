@@ -1,0 +1,244 @@
+# E7: invocation provenance across agents. Routing a request through a more
+# privileged agent never increases the authority available to the request.
+#   ./attctl run experiments/e7-confused-deputy.toml --backend local
+# Design and expected results: docs/experiments/E7-confused-deputy.md
+
+[experiment]
+id = "E7"
+title = "Confused deputy over the network: invocation provenance and attenuation"
+topology = "../topologies/four-agents.toml"
+hypothesis = """(H1) A deputy can act for an origin only through an APF invocation, and only \
+within the rights that both hold. (H2) An origin without a right cannot obtain it \
+through a deputy. (H3) A nested invocation cannot widen its parent, and only the \
+recorded executor can use an invocation. (H4) Revoking the origin's right stops every \
+pending use of the invocation chain at release, while the deputy keeps its own \
+authority. (H5) The APF records who executed each operation and for whom; the oracle \
+accepts the trace."""
+
+# ---------------------------------------------------------------- A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 bob, the deputy: read, write, admit"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 carol, an origin with write: read, write, admit"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A4 dave, a reader only: read, admit"
+by = "alice"
+subject = "dave"
+rights = ["read", "admit"]
+
+[[step]]
+do = "admit"
+name = "A5 admit bob"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "admit"
+name = "A6 admit carol"
+by = "alice"
+subject = "carol"
+
+[[step]]
+do = "admit"
+name = "A7 admit dave"
+by = "alice"
+subject = "dave"
+
+# ------------------------------------------------------- B: a legitimate deputy (H1)
+[[step]]
+do = "invoke"
+name = "B1 carol invokes bob to write for her"
+by = "carol"
+executor = "bob"
+rights = ["write"]
+label = "inv-carol-bob"
+
+[[step]]
+do = "send"
+name = "B2 bob sends m1 under carol's invocation"
+agent = "bob"
+label = "m1"
+text = "m1: written by bob for carol"
+invocation = "inv-carol-bob"
+
+[[step]]
+do = "check.operation"
+name = "B3 the APF records bob as executor of m1, for carol's invocation"
+op = "m1"
+actor = "bob"
+invocation = "inv-carol-bob"
+
+[[step]]
+do = "quiesce"
+name = "B4 drain"
+
+[[step]]
+do = "check.delivered"
+name = "B5 dave received m1"
+agent = "dave"
+ops = ["m1"]
+exact = false
+
+# --------------------------------------------- C: confused deputy attempts (H2, H3)
+[[step]]
+do = "invoke"
+name = "C1 dave (read only) cannot ask bob to write for him"
+by = "dave"
+executor = "bob"
+rights = ["write"]
+expect = "unauthorized"
+
+[[step]]
+do = "send"
+name = "C2 dave cannot write himself"
+agent = "dave"
+text = "must not be released"
+expect = "unauthorized"
+
+[[step]]
+do = "invoke"
+name = "C3 bob cannot widen carol's invocation to admin"
+by = "bob"
+executor = "alice"
+rights = ["write", "admin"]
+parent = "inv-carol-bob"
+expect = "invalid_invocation"
+
+[[step]]
+do = "invoke"
+name = "C4 bob cannot pass carol's invocation to dave, who lacks write"
+by = "bob"
+executor = "dave"
+rights = ["write"]
+parent = "inv-carol-bob"
+expect = "unauthorized"
+
+[[step]]
+do = "invoke"
+name = "C5 bob delegates carol's invocation to alice, within its rights"
+by = "bob"
+executor = "alice"
+rights = ["write"]
+parent = "inv-carol-bob"
+label = "inv-nested"
+
+[[step]]
+do = "send"
+name = "C6 bob cannot use the nested invocation: alice is its executor"
+agent = "bob"
+text = "must not be released"
+invocation = "inv-nested"
+expect = "unauthorized"
+
+[[step]]
+do = "send"
+name = "C7 dave cannot use carol's invocation: bob is its executor"
+agent = "dave"
+text = "must not be released"
+invocation = "inv-carol-bob"
+expect = "unauthorized"
+
+[[step]]
+do = "send"
+name = "C8 alice sends m2 under the nested invocation"
+agent = "alice"
+label = "m2"
+text = "m2: written by alice for carol, through bob"
+invocation = "inv-nested"
+
+[[step]]
+do = "check.operation"
+name = "C9 the APF records alice as executor of m2 under the nested invocation"
+op = "m2"
+actor = "alice"
+invocation = "inv-nested"
+
+# ----------------------------------------------------------- D: origin revocation (H4)
+[[step]]
+do = "quiesce"
+name = "D0 drain before the policy change"
+
+[[step]]
+do = "revoke"
+name = "D1 alice revokes carol's write"
+by = "alice"
+subject = "carol"
+right = "write"
+
+[[step]]
+do = "send"
+name = "D2 bob can no longer write for carol"
+agent = "bob"
+text = "must not be released"
+invocation = "inv-carol-bob"
+expect = "unauthorized"
+
+[[step]]
+do = "send"
+name = "D3 alice can no longer write for carol through the nested invocation"
+agent = "alice"
+text = "must not be released"
+invocation = "inv-nested"
+expect = "unauthorized"
+
+[[step]]
+do = "send"
+name = "D4 bob keeps his own authority: m3 without invocation"
+agent = "bob"
+label = "m3"
+text = "m3: bob for himself"
+
+[[step]]
+do = "check.operation"
+name = "D5 m3 is bob's own operation"
+op = "m3"
+actor = "bob"
+invocation = "none"
+
+[[step]]
+do = "quiesce"
+name = "D6 drain"
+
+# ------------------------------------------------------------- E: verification (H5)
+[[step]]
+do = "check.complete"
+name = "E1 every released message reached every certified reader exactly once"
+
+[[step]]
+do = "check.exactly_once"
+name = "E2 no delivery without APF consumption"
+
+[[step]]
+do = "check.frontiers"
+name = "E3 every agent is on the APF frontier"
+
+[[step]]
+do = "check.oracle"
+name = "E4 the oracle accepts the trace"
+
+[[step]]
+do = "check.broken_controls"
+name = "E5 the oracle rejects the broken controls that apply"
+revoked_reader = "nobody"
+writer = "alice"
+minimum = 3
+
+[[step]]
+do = "check.no_errors"
+name = "E6 no agent logged a processing error"

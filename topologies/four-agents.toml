@@ -1,0 +1,23 @@
+# Four agents: the topology of experiment E7 (confused deputy).
+# alice is the root; bob is the privileged deputy; carol holds write; dave only reads.
+name = "four-agents"
+group = "lab"
+root = "alice"
+
+[entropy]
+source = "qrng"
+
+[relay]
+seed = 9
+
+[[agent]]
+name = "alice"
+
+[[agent]]
+name = "bob"
+
+[[agent]]
+name = "carol"
+
+[[agent]]
+name = "dave"

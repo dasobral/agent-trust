@@ -52,6 +52,7 @@ class Runner:
         self.sent = {}          # op -> {"from", "text", "payload_hex", "recipients"}
         self.labels = {}        # experiment label -> op id chosen by the sidecar
         self.metrics = {"send_ms": [], "admit_ms": []}
+        self.invocations = {}   # experiment label -> APF invocation id
         self._lock = threading.Lock()
         self.artifacts = {}
 
@@ -197,6 +198,8 @@ class Runner:
     def do_send(self, step):
         agent = self.tb.agent(step["agent"])
         body = {k: step[k] for k in ("text", "payload_hex", "op", "content_type") if k in step}
+        if "invocation" in step:
+            body["invocation"] = self.invocations.get(step["invocation"], step["invocation"])
         begin = time.monotonic()
         result = self._expect(step, lambda: agent.send(**body))
         elapsed = (time.monotonic() - begin) * 1000
@@ -344,6 +347,18 @@ class Runner:
         result = self._expect(step, lambda: self.tb.agent(step["by"]).control("request", {"body": body}))
         if "expect_result" in step and result != step["expect_result"]:
             raise StepFailure(f"expected result {step['expect_result']}, got {result}")
+        return result
+
+    def do_invoke(self, step):
+        """``by`` asks the APF for an invocation: ``executor`` may act for ``by`` (or, with
+        ``parent``, for the parent's origin) within ``rights`` on ``resources``."""
+        body = {"command": "invoke", "executor": step["executor"], "rights": step["rights"],
+                "resources": step.get("resources", [self.tb.group])}
+        if "parent" in step:
+            body["parent_invocation"] = self.invocations.get(step["parent"], step["parent"])
+        result = self._expect(step, lambda: self.tb.agent(step["by"]).control("request", {"body": body}))
+        if "invocation" in result and "label" in step:
+            self.invocations[step["label"]] = result["invocation"]
         return result
 
     def do_request(self, step):
@@ -601,6 +616,29 @@ class Runner:
         if problems:
             raise StepFailure(f"{name}: " + "; ".join(problems))
         return {k: status[k] for k in ("membership", "epoch", "restarts", "skipped_entries", "future", "waiting")}
+
+    def do_check_operation(self, step):
+        """The APF's record of a sent message: its executor (``actor``), its
+        ``invocation`` (a label, or ``none``) and its ``status``."""
+        op = self._resolve(step["op"])
+        checkpoint = self.tb.apf.call("GET", "/control/checkpoint")
+        history = checkpoint.get("history", [])
+        operations = history[-1]["event"]["snapshot"].get("operations", []) if history else []
+        record = next((o for o in operations if o["op"] == op), None)
+        if record is None:
+            raise StepFailure(f"the APF has no operation {op}")
+        problems = []
+        if "actor" in step and record["actor"] != step["actor"]:
+            problems.append(f"actor {record['actor']}, expected {step['actor']}")
+        if "invocation" in step:
+            expected = None if step["invocation"] == "none" else self.invocations.get(step["invocation"])
+            if record.get("invocation") != expected:
+                problems.append(f"invocation {record.get('invocation')}, expected {expected}")
+        if "status" in step and record["status"] != step["status"]:
+            problems.append(f"status {record['status']}, expected {step['status']}")
+        if problems:
+            raise StepFailure(f"{op}: " + "; ".join(problems))
+        return {k: record.get(k) for k in ("op", "actor", "invocation", "status", "right", "resource")}
 
     def do_check_apf(self, step):
         state = self.tb.apf.call("GET", "/v1/state")
