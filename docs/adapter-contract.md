@@ -583,7 +583,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 
 - **C-40, one source per lab run.** `agent-trust lab` selects one entropy source before it reads any request (`src/entropy.rs`). Every adapter and client provider and every lab identity key, rekey keys included, draws from that source. A failure to select or reach the source exits nonzero with `entropy_unavailable: <reason>` on stderr and processes no request. Nothing falls back to another source.
   - **Sources.**
-    - `os` (the default): the OS-seeded RustCrypto rand.
+    - `os` (the default): the OS-seeded RustCrypto rand for direct draws, and the OS RNG for the lab crypto provider's DRBG (§8).
     - `mock`: openmls-qrand `MockEntropy`, a seeded in-process SplitMix64 stream. **It is not an entropy source.** It is for development and tests only, and it carries no entropy claim.
     - `qrng`: a QRNG Open API endpoint through openmls-qrand `QrngClient`.
   - **Selection.**
