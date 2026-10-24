@@ -4,7 +4,7 @@ This repository is a forensic reconstruction of the `agent-trust` work that was 
 
 | Surface | Recovery source | Fidelity | Result |
 |---|---|---|---|
-| 2026-09-13 project snapshot | Library folder `/Agents/agent-trust-recovered-2026-09-13` | Exact: 49 files, 301,037 bytes | Restored in commit `542b326` |
+| 2026-09-13 project snapshot | Library folder `agent-trust-recovered-2026-09-13`, outside the repository | Exact: 49 files, 301,037 bytes | Restored in commit `542b326` |
 | Interim source repair | `agent-trust-interim-2026-09-13.patch` and its Library folder | Exact surviving patch and nine-file checkpoint | Replayed in commit `9c7ad49` |
 | Authority-gap RED suite | `tests/authority_gap_contract.rs` from the interim checkpoint | Exact | Three failures and one guard pass reproduced before repair |
 | Latest APF, MLS, CLI and Rust tests | Surviving local `agent-trust` checkout | Exact surviving files | Restored, audited, and repaired |

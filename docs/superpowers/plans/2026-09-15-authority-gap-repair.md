@@ -17,6 +17,7 @@
 - Use TDD: each production fix needs a regression test that fails before the fix.
 - Do not weaken existing assertions or alter the invocation-chain semantics.
 - Do not force-push or invent an upstream repository URL/branch.
+- Cargo commands assume the Rust toolchain is on `PATH`; for a toolchain outside the default location, export `RUSTUP_HOME` and `CARGO_HOME` first.
 
 ---
 
@@ -38,11 +39,7 @@ Add tests named `revoking_non_roster_read_does_not_fence_the_group` and `release
 Run:
 
 ```bash
-RUSTUP_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/rustup \
-CARGO_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/cargo \
 cargo test --locked --test authority_contract revoking_non_roster_read_does_not_fence_the_group -- --exact
-RUSTUP_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/rustup \
-CARGO_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/cargo \
 cargo test --locked --test authority_contract release_rejects_administrative_rights -- --exact
 ```
 
@@ -81,14 +78,8 @@ Run the two commands from Task 1. Expected: both pass.
 - [x] **Step 1: Run the complete matrix**
 
 ```bash
-RUSTUP_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/rustup \
-CARGO_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/cargo \
 cargo fmt --all -- --check
-RUSTUP_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/rustup \
-CARGO_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/cargo \
 cargo build --locked
-RUSTUP_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/rustup \
-CARGO_HOME=/workspace/scratch/497b97a1cafd/rust-toolchain/cargo \
 cargo test --locked --all-targets
 python3 -m unittest discover -s harness -v
 git diff --check

@@ -96,18 +96,14 @@ git diff --check
 
 ## Current recovered workspace
 
-The implementation is currently in:
-
-```text
-/workspace/scratch/497b97a1cafd/agent-trust
-```
+The implementation is currently in a recovered scratch checkout outside the repository, called `<RECOVERED_CHECKOUT>` below.
 
 This workspace was reconstructed from the persistent recovery package. It has a local Git repository, but it does not have the correct upstream remote configured and has no project-specific commit history yet. The recovered files are staged as the current baseline plus implementation.
 
 Before committing, inspect:
 
 ```bash
-cd /workspace/scratch/497b97a1cafd/agent-trust
+cd <RECOVERED_CHECKOUT>
 git status
 git diff --cached --stat
 git diff --cached --check
