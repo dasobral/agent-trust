@@ -279,6 +279,7 @@ impl MockQrng {
             entropy_type: None,
             request_timeout: Duration::from_secs(10),
             health_poll_interval: None,
+            key_exchange: openmls_qrand::KeyExchange::default(),
         }
     }
 
@@ -1501,6 +1502,13 @@ fn live_entropy_core_gate() {
         entropy_type: var("AGENT_TRUST_QRNG_ENTROPY_TYPE"),
         request_timeout: Duration::from_secs(10),
         health_poll_interval: None,
+        // C-42: post quantum TLS only, unless the live endpoint is configured otherwise.
+        key_exchange: var("AGENT_TRUST_QRNG_KEY_EXCHANGE")
+            .map(|name| {
+                openmls_qrand::KeyExchange::parse(&name)
+                    .expect("live gate: AGENT_TRUST_QRNG_KEY_EXCHANGE is pq-only or pq-preferred")
+            })
+            .unwrap_or_default(),
     };
     // Only the error category is reported: QRNG errors can carry the endpoint URL.
     let qrng =

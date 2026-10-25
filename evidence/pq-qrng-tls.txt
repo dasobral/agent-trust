@@ -1,0 +1,27 @@
+# C-42, QRNG link (2026-10-25): post quantum TLS key exchange of the qrng source (openmls-qrand 66026082) and GenesisPending::suite.
+# Red: tests/pq_suite.rs with the two new tests, before the implementation. Interface build failure only.
+$ cargo test --locked --release --test pq_suite
+      1 error: could not compile `agent-trust` (test "pq_suite") due to 3 previous errors
+      1 error[E0432]: unresolved import `agent_trust::entropy::QrngKeyExchange`
+      1 error[E0599]: no method named `suite` found for struct `GenesisPending<P, C>` in the current scope
+      1 error[E0609]: no field `key_exchange` on type `QrngSettings`
+exit status: 101
+
+# Green:
+$ cargo test --locked --release --test pq_suite --test lab_entropy --test adapter_entropy
+     Running tests/adapter_entropy.rs (target/release/deps/adapter_entropy-b1988d70044d5c22)
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.18s
+     Running tests/lab_entropy.rs (target/release/deps/lab_entropy-d6418c2f68bdb370)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.11s
+     Running tests/pq_suite.rs (target/release/deps/pq_suite-0476a8b6fa084745)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+$ python3 scripts/verify.py
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (183 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_lap_mls: true
+EXIT 0

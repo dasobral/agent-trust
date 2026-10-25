@@ -7,7 +7,7 @@
 mod common;
 
 use agent_trust::adapter::{Adapter, ClientIdentity, SignedRequest, APF_KEY_FILE};
-use agent_trust::entropy::EntropyConfig;
+use agent_trust::entropy::{EntropyConfig, QrngKeyExchange};
 use agent_trust::lab::run_lab_with_suite;
 use agent_trust::suite::{Suite, SUITE_ENV};
 use common::{adapter_dir, code, lower_hex, scripted_provider, FixedClock, ScriptedRand};
@@ -555,4 +555,92 @@ fn a_full_lab_session_runs_under_pq() {
 #[test]
 fn the_same_session_runs_under_classical() {
     check_session(Suite::Classical, "0x0001");
+}
+
+// ---------------------------------------------------------------------------
+// The QRNG link: post quantum TLS key exchange (C-42, openmls-qrand `KeyExchange`)
+// ---------------------------------------------------------------------------
+
+fn qrng_key_exchange(config: Result<EntropyConfig, String>) -> Result<QrngKeyExchange, String> {
+    match config? {
+        EntropyConfig::Qrng(settings) => Ok(settings.key_exchange),
+        other => panic!("expected a qrng source, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_qrng_key_exchange_is_post_quantum_only_unless_configured() {
+    let file = |extra: &str| {
+        EntropyConfig::parse(
+            &format!(
+                "source = \"qrng\"\n[qrng]\nbase_url = \"https://127.0.0.1:8002\"\ntransport = \"tls\"\n{extra}"
+            ),
+            std::path::Path::new("base"),
+        )
+    };
+    assert_eq!(
+        qrng_key_exchange(file("")),
+        Ok(QrngKeyExchange::PostQuantumOnly)
+    );
+    assert_eq!(
+        qrng_key_exchange(file("key_exchange = \"pq-only\"")),
+        Ok(QrngKeyExchange::PostQuantumOnly)
+    );
+    assert_eq!(
+        qrng_key_exchange(file("key_exchange = \"pq-preferred\"")),
+        Ok(QrngKeyExchange::PostQuantumPreferred)
+    );
+
+    let env = |pairs: &'static [(&'static str, &'static str)]| {
+        EntropyConfig::from_env_with(move |name| {
+            pairs
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_string())
+        })
+    };
+    const BASE: [(&str, &str); 2] = [
+        ("AGENT_TRUST_ENTROPY_SOURCE", "qrng"),
+        ("AGENT_TRUST_QRNG_BASE_URL", "https://127.0.0.1:8002"),
+    ];
+    assert_eq!(
+        qrng_key_exchange(env(&BASE)),
+        Ok(QrngKeyExchange::PostQuantumOnly)
+    );
+    const PREFERRED: [(&str, &str); 3] = [
+        BASE[0],
+        BASE[1],
+        ("AGENT_TRUST_QRNG_KEY_EXCHANGE", "pq-preferred"),
+    ];
+    assert_eq!(
+        qrng_key_exchange(env(&PREFERRED)),
+        Ok(QrngKeyExchange::PostQuantumPreferred)
+    );
+
+    // Negative: an unknown value is an error, never a classical fallback.
+    let error = qrng_key_exchange(file("key_exchange = \"classical\"")).expect_err("unknown");
+    assert!(error.contains("key_exchange"), "{error}");
+    const BAD: [(&str, &str); 3] = [
+        BASE[0],
+        BASE[1],
+        ("AGENT_TRUST_QRNG_KEY_EXCHANGE", "x25519"),
+    ];
+    let error = qrng_key_exchange(env(&BAD)).expect_err("unknown");
+    assert!(error.contains("AGENT_TRUST_QRNG_KEY_EXCHANGE"), "{error}");
+}
+
+#[test]
+fn genesis_reports_its_suite_before_completion() {
+    let dir = adapter_dir();
+    let (provider, _) = scripted_provider(b"pending/apf");
+    let pending = Adapter::begin_genesis(
+        dir.path(),
+        GROUP,
+        ROOT,
+        pq_identity("pending/root").public_key(),
+        provider,
+        FixedClock::new(5),
+    )
+    .expect("pq genesis");
+    assert_eq!(pending.suite(), Suite::PostQuantum);
 }

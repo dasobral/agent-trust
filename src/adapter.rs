@@ -2130,6 +2130,11 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
         self.apf.public()
     }
 
+    /// The group's suite, fixed by the root's key (C-42).
+    pub fn suite(&self) -> Suite {
+        self.suite
+    }
+
     /// Signed founder certificate bytes for the root client.
     pub fn founder_certificate(&self) -> &[u8] {
         &self.founder_certificate

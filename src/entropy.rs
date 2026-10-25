@@ -37,6 +37,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use openmls_libcrux_crypto::{CryptoProvider as LibcruxCrypto, TryCryptoRng, TryRng};
+/// The TLS key exchange of the QRNG link (openmls-qrand `KeyExchange`, C-42):
+/// `PostQuantumOnly` (`X25519MLKEM768` only, the default) or `PostQuantumPreferred`.
+pub use openmls_qrand::KeyExchange as QrngKeyExchange;
 use openmls_qrand::{
     ApiAuth, EntropyBackend, EntropyRng, MockEntropy, QrngClient, QrngConfig, QrngError, QrngRand,
     TransportMode,
@@ -61,6 +64,8 @@ const QRNG_CLIENT_KEY_PEM_ENV: &str = "AGENT_TRUST_QRNG_CLIENT_KEY_PEM";
 const QRNG_BEARER_TOKEN_ENV: &str = "AGENT_TRUST_QRNG_BEARER_TOKEN";
 const QRNG_API_KEY_ENV: &str = "AGENT_TRUST_QRNG_API_KEY";
 const QRNG_ENTROPY_TYPE_ENV: &str = "AGENT_TRUST_QRNG_ENTROPY_TYPE";
+/// TLS key exchange of the QRNG link: `pq-only` (the default) or `pq-preferred` (C-42).
+const QRNG_KEY_EXCHANGE_ENV: &str = "AGENT_TRUST_QRNG_KEY_EXCHANGE";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -78,6 +83,8 @@ pub struct QrngSettings {
     pub auth: QrngAuth,
     pub entropy_type: Option<String>,
     pub request_timeout: Duration,
+    /// The TLS key exchange; ignored for plain HTTP (C-42).
+    pub key_exchange: QrngKeyExchange,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,6 +144,7 @@ struct FileQrng {
     auth_secret_env: Option<String>,
     entropy_type: Option<String>,
     request_timeout_ms: Option<u64>,
+    key_exchange: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -324,12 +332,18 @@ impl QrngSettings {
             Some(0) => return Err("invalid entropy config: request_timeout_ms must be > 0".into()),
             Some(ms) => Duration::from_millis(ms),
         };
+        let key_exchange = match file.key_exchange {
+            None => QrngKeyExchange::default(),
+            Some(name) => QrngKeyExchange::parse(&name)
+                .map_err(|err| format!("invalid entropy config: key_exchange: {err}"))?,
+        };
         Ok(Self {
             base_url: file.base_url,
             transport,
             auth,
             entropy_type: file.entropy_type,
             request_timeout,
+            key_exchange,
         })
     }
 
@@ -373,12 +387,18 @@ impl QrngSettings {
                 ))
             }
         };
+        let key_exchange = match var(QRNG_KEY_EXCHANGE_ENV) {
+            None => QrngKeyExchange::default(),
+            Some(name) => QrngKeyExchange::parse(&name)
+                .map_err(|err| format!("{QRNG_KEY_EXCHANGE_ENV}: {err}"))?,
+        };
         Ok(Self {
             base_url,
             transport,
             auth,
             entropy_type: var(QRNG_ENTROPY_TYPE_ENV),
             request_timeout: DEFAULT_TIMEOUT,
+            key_exchange,
         })
     }
 
@@ -428,6 +448,7 @@ impl QrngSettings {
             entropy_type: self.entropy_type.clone(),
             request_timeout: self.request_timeout,
             health_poll_interval: None,
+            key_exchange: self.key_exchange,
         })
     }
 }

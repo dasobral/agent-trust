@@ -13,7 +13,7 @@ use std::thread;
 use std::time::Duration;
 
 use agent_trust::adapter::ClientIdentity;
-use agent_trust::entropy::{EntropyConfig, QrngAuth, QrngSettings, QrngTransport};
+use agent_trust::entropy::{EntropyConfig, QrngAuth, QrngKeyExchange, QrngSettings, QrngTransport};
 use openmls_traits::random::OpenMlsRand;
 use openmls_traits::OpenMlsProvider;
 use serde_json::json;
@@ -41,6 +41,7 @@ fn plain(base_url: &str) -> EntropyConfig {
         auth: QrngAuth::None,
         entropy_type: None,
         request_timeout: Duration::from_secs(5),
+        key_exchange: QrngKeyExchange::PostQuantumOnly,
     })
 }
 
@@ -131,6 +132,7 @@ fn file_paths_resolve_relative_to_the_file_and_auth_names_a_variable() {
             },
             entropy_type: Some("raw".into()),
             request_timeout: Duration::from_millis(2500),
+            key_exchange: QrngKeyExchange::PostQuantumOnly,
         }))
     );
 }
@@ -227,6 +229,7 @@ fn environment_selects_the_source() {
             },
             entropy_type: Some("raw".into()),
             request_timeout: Duration::from_secs(5),
+            key_exchange: QrngKeyExchange::PostQuantumOnly,
         }))
     );
     assert_eq!(
@@ -243,6 +246,7 @@ fn environment_selects_the_source() {
             },
             entropy_type: None,
             request_timeout: Duration::from_secs(5),
+            key_exchange: QrngKeyExchange::PostQuantumOnly,
         }))
     );
 }
@@ -409,6 +413,7 @@ fn qrng_secret_is_read_only_from_the_named_variable() {
         },
         entropy_type: None,
         request_timeout: Duration::from_secs(5),
+        key_exchange: QrngKeyExchange::PostQuantumOnly,
     });
     let error = config
         .connect_with(env(&[]))
