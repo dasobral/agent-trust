@@ -24,10 +24,10 @@
 \author{Daniel Sobral}
 \affiliation{Quside Technologies, Barcelona, Spain}
 
-\date{23 October 2026}
+\date{23 October 2026, revised 25 October 2026}
 
 \begin{abstract}
-MLS lets members change the extensions of the group context through a GroupContextExtensions proposal. Applications use this proposal to carry their own data, such as an authorization binding. The ETK analysis of RFC~9420 does not model the proposal. We sketch why ETK's main theorem should extend, with the same safety and injection predicates, to proposals that change only \emph{opaque} extensions, meaning extensions that no MLS processing rule reads. In ETK's abstraction such a proposal has three visible effects: it forces a rekeying path, it updates a public field, and it appears in the committed proposal list. The first is already part of ETK's healing structure. The second carries no secret. The third is covered by ETK's consistency argument. Along the way we observe that a \emph{constant} extension, fixed at group creation, is outside ETK's model in exactly the way every other group-context field is. This note is a sketch, not a proof. It was written against the conference version of ETK and lists what must be checked against the full proof. It is meant as a basis for discussion with ETK's authors.
+MLS lets members change the extensions of the group context through a GroupContextExtensions proposal. Applications use this proposal to carry their own data, such as an authorization binding. The ETK analysis of RFC~9420 does not model the proposal. We sketch why ETK's main theorem should extend, with the same safety and injection predicates, to proposals that change only \emph{opaque} extensions, meaning extensions that no MLS processing rule reads. In ETK's abstraction such a proposal has three visible effects: it forces a rekeying path, it updates a public field, and it appears in the committed proposal list. The first is already part of ETK's healing structure. The second carries no secret. The third is covered by ETK's consistency argument. Along the way we observe that a \emph{constant} extension, fixed at group creation, is outside ETK's model in exactly the way every other group-context field is. This note is a sketch, not a proof. It was written against the conference version of ETK. The full version answers the first of the checks it lists. It is meant as a basis for discussion with ETK's authors.
 \end{abstract}
 
 \maketitle
@@ -55,7 +55,7 @@ RFC~9420 fixes the following facts.
 \item \emph{Where the context enters} (Secs.~6.1, 8). The group context is an input to the derivation of the joiner secret and of the epoch secret. It is also part of the content that members sign.
 \end{enumerate}
 
-ETK's model is more abstract than RFC~9420 in one relevant respect. Its key schedule (Fig.~2 of Ref.~\cite{etk}) derives the joiner and epoch secrets from the init secret, the commit secret and the pre-shared keys, with no context input. The conference text never mentions the group context. We read this as a deliberate abstraction, also applied to the group identifier, cipher suite and version. The reading must be confirmed against the full protocol specification of Ref.~\cite{etk}.
+ETK's model is more abstract than RFC~9420 in one relevant respect. The conference text's key schedule (Fig.~2 of Ref.~\cite{etk}) shows no context input. The full version (version~2.0, Appendix~E) does model a group context, $\mathit{groupCtxt}=(\mathit{groupId},\mathit{epoch},\mathit{treeHash},\mathit{confTransHash})$. It is an input of $\mathrm{HKDF.Expand}$ for the joiner secret and of $\mathrm{HKDF.Extract}$ for the epoch secret, and the first component of every signed content. The extension list is not part of it, and cipher suite and version are omitted too (Appendix~C there).
 
 %=====================================================================
 \section{Scope: opaque extensions}
@@ -76,10 +76,10 @@ Application-defined extensions, such as an authorization binding in a private-us
 The simplest case needs no extension of ETK at all.
 
 \begin{lemma}[Constant extensions]\label{lem:static}
-Consider a group whose extension list $E_0$ is fixed at creation and never changed. In ETK's abstraction $E_0$ does not occur, because the group context does not. ETK's Theorem~1 therefore covers such a group to exactly the same extent as it covers the group identifier and every other group-context field.
+Consider a group whose extension list $E_0$ is fixed at creation and never changed. In ETK's model $E_0$ does not occur, because the modeled group context omits the extension list. ETK's Theorem~1 therefore covers such a group to exactly the same extent as it covers the group identifier and every other group-context field.
 \end{lemma}
 
-The lemma is a statement about modeling fidelity, not a reduction. It says that a constant application extension introduces no new modeling gap. This is the situation after correction R-11 in our construction, where the extension only names the authority's key and the group. A model that \emph{did} include the group context as a key-derivation and signature input would need the argument of Sec.~\ref{sec:refined}.
+The lemma is a statement about modeling fidelity, not a reduction. It says that a constant application extension introduces no new modeling gap. This is the situation after correction R-11 in our construction, where the extension only names the authority's key and the group. ETK's full version already includes the group context as a key-derivation and signature input, without extensions. Adding the extension list to it is the refined model of Sec.~\ref{sec:refined}.
 
 %=====================================================================
 \section{Extending ETK}
@@ -136,15 +136,15 @@ In this refined model a constant extension list (Lemma~\ref{lem:static}) is cove
 \section{What must be checked}
 %=====================================================================
 
-This sketch was written against the conference version of ETK. The full proof is in the appendices of the full version~\cite{etk}, which we have not read. The following points must be verified there.
+This sketch was written against the conference version of ETK. The full version~\cite{etk} answers the first of the following points; the others must still be verified in its Appendix~J.
 \begin{enumerate}
-\item The protocol specification omits the group context from key derivation and signature inputs, or, if it includes it, treats it as public input to random-oracle calls.
+\item \emph{Answered.} The protocol specification includes the group context as a public input to random-oracle calls and to signatures, without the extension list. This is the refined model of Sec.~\ref{sec:refined}.
 \item The proof treats commits with an empty proposal list exactly as described here, since \gce-only commits reduce to them.
 \item The formal consistency invariant can take the $\ext$ clause without other changes.
 \item The simulator's construction of commits and group information can include public data taken from the history graph.
 \item The tree-secret reduction does not depend on the shape of the proposal list beyond adds, removes and updates.
 \end{enumerate}
-One point is already settled by the conference text. $\F$ forbids corrupting an epoch once it has been created securely. A static coalition fits this rule: its keys are exposed before its members are added, so their epochs are never created securely.
+One point is settled by the functionality. $\F$ refuses an exposure only if some challenged epoch would then be unsafe, and it puts no restriction on corrupting randomness. For the static coalition of Ref.~\cite{concordance} no such refusal arises, because every epoch whose roster excludes the coalition stays safe under all its exposures. The case-by-case check is in \texttt{formal/notes/etk-full-check.md}.
 
 %=====================================================================
 \section{Outside the opaque class}
@@ -171,7 +171,7 @@ Three cases need more than this sketch.
 
 \bibitem{rfc9420} R.~Barnes, B.~Beurdouche, R.~Robert, J.~Millican, E.~Omara, and K.~Cohn-Gordon, \emph{The Messaging Layer Security (MLS) Protocol}, RFC 9420 (IETF, 2023).
 
-\bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229.
+\bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229, version 2.0 (11 April 2026).
 
 \bibitem{concordance} D.~Sobral, Two clocks, one cut: may--can concordance and revocation in MLS groups, manuscript (2026).
 

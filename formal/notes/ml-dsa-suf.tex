@@ -1,0 +1,174 @@
+\documentclass[aps,prx,reprint,superscriptaddress,nofootinbib,floatfix]{revtex4-2}
+
+\usepackage[T1]{fontenc}
+\usepackage[sc]{mathpazo}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\newcommand{\Adv}{\mathrm{Adv}}
+\newcommand{\Sign}{\textsf{Sign}}
+\newcommand{\Sim}{\textsf{Sim}}
+\newcommand{\Hc}{H_{c}}
+\newcommand{\Hm}{H_{\mu}}
+\newcommand{\Hr}{H_{\rho}}
+
+\begin{document}
+
+\title{Strong unforgeability of ML-DSA\\ from the corrected Fiat--Shamir-with-aborts proof}
+
+\author{Daniel Sobral}
+\affiliation{Quside Technologies, Barcelona, Spain}
+
+\date{25 October 2026}
+
+\begin{abstract}
+The may--can concordance construction needs strongly unforgeable signatures (condition K4), because the ETK theorem it relies on needs them: in MLS a signature enters the transcript hash, so a mauled signature splits a group. Its default suite signs with ML-DSA-44. FIPS~204 states strong unforgeability as a design goal. The concrete bound of Kiltz, Lyubashevsky and Schaffner covers it, but Barbosa \emph{et al.} found a gap in that proof and published a corrected one, which treats only ordinary unforgeability and says that the strong case follows when the identification scheme has computational unique responses. We write that step out. The corrected reduction bounds a distinguishing advantage, so it applies unchanged to a strong-forgery predicate. A forgery that falls on a programmed oracle point yields two accepting transcripts with the same commitment and challenge, which is the MSIS argument of the Dilithium specification. Three bookkeeping terms cover what ML-DSA adds to the abstract scheme: the message representative, deterministic signing and the byte encoding. We checked that both verifiers in the implementation reject non-canonical hint encodings, without which the result fails trivially. The argument holds in the classical and the quantum random-oracle model. It is a proof at the level of a reduction, written by hand and not mechanized.
+\end{abstract}
+
+\maketitle
+
+%=====================================================================
+\section{Why the strong notion is needed}
+%=====================================================================
+
+The paper~\cite{concordance} uses signatures in two places. Write concordance (its Theorem~2) needs only existential unforgeability of the ledger's key. Computational key confinement (its Proposition~3) rests on Theorem~1 of ETK~\cite{etk}, which assumes SUF-CMA. ETK explains why: in RFC~9420 the signature is part of the transcript hash, so a member who mauls another's commit signature makes two honest members process the same content into different epochs~\cite[Sec.~5.2]{etk}. The default suite of the implementation (\texttt{0x0052}) signs with ML-DSA-44~\cite{fips204}, deterministically and with an empty context, both in the ledger and in every client.
+
+Three sources bear on ML-DSA's strong unforgeability.
+\begin{enumerate}
+\item FIPS~204, Sec.~3.1, says ML-DSA ``is designed to be'' SUF-CMA, and Sec.~3.3 hashes the public key into the message representative for the beyond-unforgeability properties of Ref.~\cite{buff}.
+\item The Dilithium specification~\cite[Sec.~6.2]{dilithium} restates the bound of Ref.~\cite{kls18}: SUF-CMA in the quantum random-oracle model under MLWE, SelfTargetMSIS and MSIS. Its Sec.~6.2.2 sketches the additional strong case.
+\item Barbosa \emph{et al.}~\cite{fsa-fix} found a gap in the chosen-message step of Ref.~\cite{kls18}, which affects every Fiat--Shamir-with-aborts scheme, and gave corrected proofs in both random-oracle models, with a mechanized classical one. Their footnote~2 restricts the result: ``for simplicity, we consider ordinary unforgeability. It is not too hard to extend our results to strong unforgeability if the considered IDS satisfies the additional property of having computational unique-responses.''
+\end{enumerate}
+This note carries out that extension and adds the steps between the abstract scheme and ML-DSA.
+
+%=====================================================================
+\section{Setting}
+%=====================================================================
+
+\paragraph*{The abstract scheme.} Following Ref.~\cite{fsa-fix}, $\mathrm{FSwA}[\mathrm{ID},H]$ is the signature scheme obtained from an identification scheme $\mathrm{ID}=(\mathrm{Com},\mathrm{Resp},\mathrm{Verify})$ by the Fiat--Shamir transform with aborts. To sign $m$, the signer repeats $(w,\mathit{st})\gets\mathrm{Com}(\mathit{sk})$, $c\gets H(w,m)$ and $z\gets\mathrm{Resp}(w,c,\mathit{st})$ until $z\neq\bot$, and outputs $(w,z)$. The proof replaces the signing oracle $\Sign$ in three steps, $\Sign\to\textsf{Prog}\to\textsf{Trans}\to\Sim$, where $\Sim$ draws an accepting transcript $(w,c,z)$ from the zero-knowledge simulator, programs $H(w,m):=c$ and returns $(w,z)$. The simulator needs only the public key.
+
+\paragraph*{The distinguishing bounds.} The two hops are bounded by quantities $\Delta^{\Sign\to\textsf{Prog}}(q_S,q_H)$ and $\Delta^{\textsf{Prog}\to\textsf{Trans}}(q_S,q_H)$. They are defined~\cite[Sec.~3]{fsa-fix} as upper bounds on
+\[
+\bigl|\Pr[1\gets A^{\mathcal O,H}]-\Pr[1\gets A^{\mathcal O',H}]\bigr|
+\]
+for \emph{any} classical or quantum oracle algorithm $A$ that makes $q_S$ classical signing queries and $q_H$ (possibly quantum) queries to $H$, and outputs one bit. The third hop costs $q_S\zeta_{\rm zk}$, the simulation error, and a bad-key event costs $\delta$. Theorems~2 and 3 of Ref.~\cite{fsa-fix} instantiate these bounds in the quantum and the classical random-oracle model. Freshness of the forged message is used in exactly one place: to ensure that the forgery's validity does not depend on a programmed point, so that the final adversary is a no-message forger against the unprogrammed oracle~\cite[proof of Lemma~1]{fsa-fix}.
+
+\begin{definition}[Computational unique responses]
+$\mathrm{ID}$ has computational unique responses (CUR) if no efficient algorithm, given $\mathit{pk}$, outputs $(w,c,z,z')$ with $z\neq z'$ such that $\mathrm{Verify}(\mathit{pk},w,c,z)=\mathrm{Verify}(\mathit{pk},w,c,z')=1$, except with advantage $\Adv^{\rm cur}$.
+\end{definition}
+
+%=====================================================================
+\section{The abstract strong case}
+%=====================================================================
+
+\begin{lemma}[Strong forgeries]\label{lem:abstract}
+Let $A$ be a SUF-CMA attacker against $\mathrm{FSwA}[\mathrm{ID},H]$ with $q_S$ signing and $q_H$ oracle queries, classical or quantum. Then there are an EF-NMA attacker $B$ and a CUR attacker $B'$, each running in about the time of $A$ plus $q_S$ simulator runs, with
+\begin{multline*}
+\Adv^{\rm SUF\text{-}CMA}(A)\le \Adv^{\rm EF\text{-}NMA}(B)+\Adv^{\rm cur}(B')\\
++\Delta^{\Sign\to\textsf{Prog}}+\Delta^{\textsf{Prog}\to\textsf{Trans}}+q_S\zeta_{\rm zk}+\delta,
+\end{multline*}
+where both $\Delta$ terms are evaluated at $(q_S,q_H+1)$, as in Ref.~\cite{fsa-fix}.
+\end{lemma}
+\begin{proof}
+Let $\tilde A$ run $A^{\Sign,H}$, record the list $Q$ of signing queries and answers, and output 1 if and only if the forgery $(m^\ast,\sigma^\ast)$ verifies and $(m^\ast,\sigma^\ast)\notin Q$. $\tilde A$ is an oracle algorithm with one output bit and $q_H+1$ oracle queries, the extra one being verification. The bounds of Ref.~\cite{fsa-fix} hold for every such algorithm, so the three hops apply to $\tilde A$ exactly as to the existential-forgery predicate:
+\[
+\Pr[1\gets\tilde A^{\Sign,H}]\le\Pr[1\gets\tilde A^{\Sim,H}]+\Delta^{\Sign\to\textsf{Prog}}+\Delta^{\textsf{Prog}\to\textsf{Trans}}+q_S\zeta_{\rm zk}+\delta .
+\]
+It remains to bound $\Pr[1\gets\tilde A^{\Sim,H}]$. Write $\sigma^\ast=(w^\ast,z^\ast)$. Let $F$ be the event that $(w^\ast,m^\ast)$ is one of the points that $\Sim$ programmed, say $(w_i,m_i)$ with value $c_i$ and answer $\sigma_i=(w_i,z_i)$.
+
+\emph{If $F$ does not occur}, the validity of $\sigma^\ast$ depends only on unprogrammed points. Let $B$ run $A$ with $\Sim$, keeping the programmed values in a table and forwarding all other queries to its own oracle, as in Ref.~\cite{fsa-fix}, and output $(m^\ast,\sigma^\ast)$. This is a valid no-message forgery. A no-message forger has no freshness condition to meet.
+
+\emph{If $F$ occurs}, then $m^\ast=m_i$, and $(m^\ast,\sigma^\ast)\notin Q$ forces $\sigma^\ast\neq\sigma_i$. Since $w^\ast=w_i$, this means $z^\ast\neq z_i$. The transcript $(w_i,c_i,z_i)$ is accepting because the simulator outputs only accepting transcripts, and $(w_i,c_i,z^\ast)$ is accepting because $\sigma^\ast$ verifies at the programmed point. Let $B'$, given $\mathit{pk}$, run $A$ with $\Sim$, which needs no secret key, and output $(w_i,c_i,z_i,z^\ast)$. This breaks CUR.
+
+The two cases are disjoint and $F$ is decided classically from the forgery and the table, so
+$\Pr[1\gets\tilde A^{\Sim,H}]\le\Adv^{\rm EF\text{-}NMA}(B)+\Adv^{\rm cur}(B')$.
+\end{proof}
+
+\begin{remark}
+Against a quantum $A$, the queries to $H$ may be in superposition, but the signing queries, the forgery and the table of programmed points are classical. The case split is a classical computation on classical data. The lemma therefore holds in the quantum random-oracle model with the quantum instantiation of the $\Delta$ terms (Theorem~2 of Ref.~\cite{fsa-fix}).
+\end{remark}
+
+%=====================================================================
+\section{From the abstract scheme to ML-DSA}
+%=====================================================================
+
+ML-DSA~\cite{fips204} differs from $\mathrm{FSwA}[\mathrm{ID},H]$ in four ways that matter here.
+
+\paragraph*{Commitment recovery and the challenge hash.} The commitment is $w_1=\mathrm{HighBits}(\mathbf A\mathbf y)$. The signature is $(\tilde c,\mathbf z,\mathbf h)$ with $\tilde c=\Hc(\mu\,\|\,w_1)$, and the verifier recomputes $w_1'=\mathrm{UseHint}(\mathbf h,\mathbf A\mathbf z-c\,\mathbf t_1 2^d)$ with $c=\mathrm{SampleInBall}(\tilde c)$. We take the identification transcript to be $(w_1,\tilde c,(\mathbf z,\mathbf h))$, with $\tilde c$ as the challenge. The proof of Lemma~\ref{lem:abstract} uses the scheme only through the event $F$ and the unique-response break. With $\sigma=(\tilde c,\mathbf z,\mathbf h)$, $F$ holds when $(\mu^\ast,w_1')$ is a programmed point $(\mu_i,w_{1,i})$; then $\tilde c^\ast=\tilde c_i$, and $\sigma^\ast\neq\sigma_i$ means $(\mathbf z^\ast,\mathbf h^\ast)\neq(\mathbf z_i,\mathbf h_i)$. Under random-oracle modeling of $\Hc$ and of the expansion in SampleInBall, $c$ is uniform on its challenge set, as the abstract scheme requires.
+
+\paragraph*{Computational unique responses from MSIS.} Suppose $(w_1,\tilde c,(\mathbf z,\mathbf h))$ and $(w_1,\tilde c,(\mathbf z',\mathbf h'))$ both verify, with $(\mathbf z,\mathbf h)\neq(\mathbf z',\mathbf h')$.
+\begin{itemize}
+\item If $\mathbf z=\mathbf z'$, both hints are applied to the same vector $\mathbf r=\mathbf A\mathbf z-c\mathbf t_12^d$. At a coefficient where the hints differ, UseHint returns the high bits of $r$ for hint 0 and those high bits shifted by $\pm1$ modulo $m=(q-1)/2\gamma_2$ for hint 1. These differ because $m=44$ for ML-DSA-44, so the two recovered commitments differ, which contradicts both being $w_1$. Hence $\mathbf z\neq\mathbf z'$.
+\item If $\mathbf z\neq\mathbf z'$, the equality $\mathrm{UseHint}(\mathbf h,\mathbf A\mathbf z-c\mathbf t_12^d)=\mathrm{UseHint}(\mathbf h',\mathbf A\mathbf z'-c\mathbf t_12^d)$ gives, by Lemma~1 of the specification, a short nonzero solution $\mathbf A\mathbf z''+\mathbf u=0$ with $\|\mathbf z''\|_\infty\le2(\gamma_1-\beta)$ and $\|\mathbf u\|_\infty\le4\gamma_2+2$~\cite[Sec.~6.2.2]{dilithium}.
+\end{itemize}
+So $\Adv^{\rm cur}\le\Adv^{\rm MSIS}$ for the parameters of Eq.~(8) of Ref.~\cite{dilithium}. ML-DSA-44 has the parameters of round-3 Dilithium at NIST level~2, entry for entry ($q$, $d=13$, $\tau=39$, $\gamma_1=2^{17}$, $\gamma_2=(q-1)/88$, $(k,\ell)=(4,4)$, $\eta=2$, $\beta=78$, $\omega=80$; FIPS~204 Table~1 against Ref.~\cite{dilithium} Table~2). For that instance the specification reports the strongly unforgeable MSIS instance at 121 bits of classical and 110 bits of quantum Core-SVP hardness, against 123 and 112 for the existential instance~\cite[Table~1]{dilithium}.
+
+\paragraph*{The message representative.} ML-DSA signs $\mu=\Hm(\mathit{tr}\,\|\,M')$ with $\mathit{tr}=H(\mathit{pk})$, where $M'$ encodes the message and the empty context. A strong forgery $(M^\ast,\sigma^\ast)$ against ML-DSA either has $\mu^\ast=\mu_i$ for a queried $M_i\neq M^\ast$, which is a collision of $\Hm$, or is a strong forgery against the abstract scheme on $\mu^\ast$. The output is 512 bits, so the collision term is at most $q_H^2/2^{512}$ classically and $O(q_H^3/2^{512})$ against quantum queries~\cite{zhandry-coll}.
+
+\paragraph*{Deterministic signing.} The implementation signs with $\mathit{rnd}=0^{256}$, so the per-message seed is $\rho''=\Hr(K\,\|\,0^{256}\,\|\,\mu)$ with a 256-bit secret $K$. Replacing $\Hr(K\,\|\,\cdot)$ by an independent random function costs the probability that the adversary queries a point with prefix $K$: at most $q_H/2^{256}$ classically, and $O(q_H/2^{128})$ by one-way-to-hiding against quantum queries~\cite{o2h}. After the replacement, a repeated query on the same $\mu$ returns the same signature, and the reduction answers it from a cache. Reference~\cite{kls18} already treats deterministic schemes in this way.
+
+\paragraph*{Encoding.} Strong unforgeability is a statement about byte strings, so the decoder must be injective on valid signatures. FIPS~204's HintBitUnpack (Algorithm~21) rejects three kinds of malformed input: decreasing or out-of-range cut points, non-increasing indices within a polynomial, and nonzero padding. With these checks every hint vector has one encoding. FIPS~204 explains why the checks are there: its initial draft omitted one of them, and ``failure to perform this check results in a signature scheme that is not strongly existentially unforgeable''~\cite[App.~D.2]{fips204}. The response encoding is a bijection on its range, and $\tilde c$ is copied. Both verifiers in the implementation enforce the three checks: the \texttt{ml-dsa} crate (version 0.1.1, \texttt{Hint::bit\_unpack}), used by the ledger and the adapter, and \texttt{libcrux-ml-dsa} (version 0.0.11, \texttt{encoding::signature::deserialize}), used by OpenMLS through its libcrux provider. The latter states the purpose in a comment: ``we allow only one such encoding, to ensure strong unforgeability.''
+
+\paragraph*{Hash domains.} We treat $\Hm$, $\Hc$, $\Hr$ and the expansions as independent random oracles. All are SHAKE256 without explicit domain separation. Their inputs begin with $\mathit{tr}$, with an output of $\Hm$, or with the secret $K$, so two uses collide only if an output of $\Hm$ equals $\mathit{tr}$ or the adversary finds $K$. We state this as part of the model and do not prove it here.
+
+%=====================================================================
+\section{The result}
+%=====================================================================
+
+\begin{proposition}[ML-DSA-44 is SUF-CMA]\label{prop:suf}
+In the quantum random-oracle model, for every quantum attacker $A$ against deterministic ML-DSA-44 with an empty context, making $q_S$ signing and $q_H$ oracle queries,
+\begin{multline*}
+\Adv^{\rm SUF\text{-}CMA}_{\text{ML-DSA-44}}(A)\le\Adv^{\rm EF\text{-}CMA}_{\rm Dil}\bigl[\text{Thm.~2 of \cite{fsa-fix}}\bigr]\\
++\Adv^{\rm MSIS}_{\text{Eq.~(8)}}+O\!\left(\frac{q_H^3}{2^{512}}\right)+O\!\left(\frac{q_H}{2^{128}}\right),
+\end{multline*}
+where the first term is the corrected bound for existential unforgeability, that is, its no-message term plus the hop costs, and the hash domains are modeled as in Sec.~IV. The classical statement replaces Theorem~2 by Theorem~3 of Ref.~\cite{fsa-fix} and the last two terms by $q_H^2/2^{512}$ and $q_H/2^{256}$.
+\end{proposition}
+\begin{proof}
+Apply, in order: the domain separation of Sec.~IV; the replacement of the deterministic seed; the reduction from $M'$ to $\mu$, which costs the collision term; Lemma~\ref{lem:abstract} for the abstract scheme on $\mu$; and the bound $\Adv^{\rm cur}\le\Adv^{\rm MSIS}$. The no-message term and the hop costs are those of Ref.~\cite{fsa-fix}, unchanged.
+\end{proof}
+
+%=====================================================================
+\section{What this does and does not settle}
+%=====================================================================
+
+\begin{itemize}
+\item \emph{Settled at the level of a written reduction.} Footnote~2 of Ref.~\cite{fsa-fix} is carried out. The only new case is a forgery at a programmed point, which is a break of computational unique responses, and that reduces to MSIS by the specification's own argument.
+\item \emph{Implementation.} Both verifiers reject non-canonical hints, so the encoding step holds for the code as built.
+\item \emph{Not mechanized.} The EasyCrypt development of Ref.~\cite{fsa-fix} covers existential unforgeability in the classical model. The strong case here is by hand.
+\item \emph{Abstraction gap.} Reference~\cite{fsa-fix} proves its bounds for Dilithium version~3.1~\cite{dilithium}. FIPS~204, Appendix~D, lists what changed since: $\mathit{tr}$ grows to 512 bits; signing is hedged by default, with the deterministic option we use; the hint check is restored; all bits of $\tilde c$ enter SampleInBall; ExpandMask takes its bits from the start of the output; and domain separation is added for pure versus pre-hashed signing and in key generation. The argument above uses the first four. We did not check every change against the whole proof of Ref.~\cite{fsa-fix}.
+\item \emph{Concrete security.} Section~7 of Ref.~\cite{fsa-fix} finds that the round-3 parameters absorb the corrected loss. The extra MSIS term is reported here from Table~1 of Ref.~\cite{dilithium} (121 bits classical Core-SVP), not re-estimated.
+\item \emph{The no-message assumption in the quantum model.} The no-message term rests on MLWE and SelfTargetMSIS. Jackson, Miller and Wang reduce SelfTargetMSIS to MLWE in the quantum random-oracle model, under $q\equiv1\bmod 2n$, which ML-DSA's modulus satisfies~\cite{jmw}. We cite this as asymptotic support only.
+\end{itemize}
+
+\begin{thebibliography}{99}
+
+\bibitem{concordance} D.~Sobral, Two clocks, one cut: may--can concordance and revocation in MLS groups, manuscript (2026).
+
+\bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229, version 2.0 (11 April 2026).
+
+\bibitem{fips204} National Institute of Standards and Technology, \emph{Module-Lattice-Based Digital Signature Standard}, FIPS 204 (2024).
+
+\bibitem{buff} C.~Cremers, S.~D\"uzl\"u, R.~Fiedler, M.~Fischlin, and C.~Janson, BUFFing signature schemes beyond unforgeability and the case of post-quantum signatures, in \emph{IEEE Symposium on Security and Privacy} (2021).
+
+\bibitem{dilithium} L.~Ducas, E.~Kiltz, T.~Lepoint, V.~Lyubashevsky, P.~Schwabe, G.~Seiler, and D.~Stehl\'e, \emph{CRYSTALS-Dilithium Algorithm Specifications and Supporting Documentation}, version 3.1 (2021).
+
+\bibitem{kls18} E.~Kiltz, V.~Lyubashevsky, and C.~Schaffner, A concrete treatment of Fiat--Shamir signatures in the quantum random-oracle model, in \emph{Eurocrypt 2018}.
+
+\bibitem{fsa-fix} M.~Barbosa, G.~Barthe, C.~Doczkal, J.~Don, S.~Fehr, B.~Gr\'egoire, Y.-H.~Huang, A.~H\"ulsing, Y.~Lee, and X.~Wu, Fixing and mechanizing the security proof of Fiat--Shamir with aborts and Dilithium, in \emph{Crypto 2023}, LNCS 14085; IACR ePrint 2023/246.
+
+\bibitem{zhandry-coll} M.~Zhandry, A note on the quantum collision and set equality problems, Quantum Inf. Comput. \textbf{15} (2015).
+
+\bibitem{o2h} A.~Ambainis, M.~Hamburg, and D.~Unruh, Quantum security proofs using semi-classical oracles, in \emph{Crypto 2019}.
+
+\bibitem{jmw} K.~A.~Jackson, C.~A.~Miller, and D.~Wang, Evaluating the security of CRYSTALS-Dilithium in the quantum random oracle model, arXiv:2312.16619 (2024).
+
+\end{thebibliography}
+
+\end{document}

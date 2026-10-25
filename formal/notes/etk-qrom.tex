@@ -1,0 +1,156 @@
+\documentclass[aps,prx,reprint,superscriptaddress,nofootinbib,floatfix]{revtex4-2}
+
+\usepackage[T1]{fontenc}
+\usepackage[sc]{mathpazo}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{conjecture}{Conjecture}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\newcommand{\F}{\mathcal F_{\rm ECGKA}}
+\newcommand{\GRO}{\mathcal G_{\rm RO}}
+
+\begin{document}
+
+\title{ETK against quantum adversaries:\\ what lifts, and the one step that does not}
+
+\author{Daniel Sobral}
+\affiliation{Quside Technologies, Barcelona, Spain}
+
+\date{25 October 2026}
+
+\begin{abstract}
+The may--can concordance construction runs MLS with a post-quantum cipher suite, but its computational key confinement rests on the ETK theorem, which is proved against classical adversaries in the random-oracle model. We ask what a quantum version needs. Three observations from the full version of ETK narrow the question. First, the construction uses ETK only as a real--ideal indistinguishability statement for one class of environments, so no quantum composition theorem is required. Second, ETK's simulator neither programs nor observes the random oracle, and the hybrid argument runs the environment once, without rewinding. Third, the oracle's classical power is used in exactly one way: three reductions to generalized selective decryption search the environment's query history for a secret. That step has no quantum analogue, but each instance is a search for a secret hidden behind the oracle, which is the setting of one-way-to-hiding and of compressed-oracle extraction. We state the quantum version as a conjecture, give the hypotheses for the post-quantum suite, and list five checks that would turn the conjecture into a theorem. One of them concerns a lemma from a prior paper that we have not read.
+\end{abstract}
+
+\maketitle
+
+%=====================================================================
+\section{The question}
+%=====================================================================
+
+Proposition~3 of the paper~\cite{concordance} derives computational key confinement from Theorem~1 of ETK~\cite{etk}: under IND-CCA public-key encryption and SUF-CMA signatures, with HKDF and MAC modeled as a global random oracle $\GRO$, ETK realizes the ideal functionality $\F$. The implementation's default suite uses X-Wing and ML-DSA-44, which are believed secure against quantum computers. The theorem, however, quantifies over classical environments. An adversary that stores today's traffic and later runs a quantum computer is outside it.
+
+The question is what a version of Theorem~1 against quantum environments needs. We answer it at the level of the proof's structure, from version~2.0 of the full version (Appendices B, E and J). We did not re-verify every case of that proof, and one lemma it imports is not read (Sec.~\ref{sec:checks}, check Q4).
+
+%=====================================================================
+\section{What the construction needs from ETK}
+%=====================================================================
+
+Game $G_2$ in the proof of the paper's Theorem~1 replaces the MLS layer by $\F$. The ledger, the adapters and the adversary together play ETK's environment $Z$. The paper uses the realization statement once, for this one environment. It does not compose ETK with other protocols.
+
+So the target is not a statement in a quantum universal-composability framework. It is the following.
+
+\begin{quote}
+\emph{For every quantum polynomial-time environment $Z$ that interacts classically with the parties, issues inputs allowed by $\F$, and has quantum access to $\GRO$, the real execution of ETK and the ideal execution with $\F$ and ETK's simulator are indistinguishable.}
+\end{quote}
+
+The interaction with the parties is classical because messages on a network are classical. Only the hash function is queried in superposition. This is the usual quantum random-oracle model~\cite{qrom}. A composition theorem with a global random oracle against quantum environments would be a stronger result. We do not need it.
+
+%=====================================================================
+\section{How ETK's proof uses the random oracle}
+%=====================================================================
+
+ETK defines its oracle as a function that returns uniform, consistent answers, and it names one more property: an adversary that wants $H(x)$ ``must query the random oracle with $x$'', which ETK calls extractability~\cite[App.~B.4]{etk}. The proof of Theorem~1 has three parts~\cite[App.~J]{etk}.
+\begin{itemize}
+\item \emph{Consistency} (Lemma~1, J.1). The simulator follows the history graph of $\F$ and checks, operation by operation, that the real protocol halts whenever $\F$ would.
+\item \emph{Confidentiality} (Lemma~2, J.2). A sequence of sub-hybrids over epochs. Each hop is reduced to the generalized selective decryption (GSD) security of the encryption scheme, for every epoch $c$ with $\mathsf{safe}(c)$. GSD reduces to IND-CCA by a theorem of Alwen \emph{et al.}~\cite{active-cgka}, quoted as Theorem~3 in Ref.~\cite{etk}.
+\item \emph{Authenticity} (Lemmas~3--5, J.3). Injections are reduced to SUF-CMA of the signature and to unforgeability of the MAC.
+\end{itemize}
+
+A search of the full text for every use of the oracle beyond answering queries gives the following.
+\begin{enumerate}
+\item No step programs the oracle.
+\item No step rewinds the environment. The hybrids run $Z$ once, and the reductions guess an epoch or a node, which costs a polynomial factor.
+\item The simulator does not read the environment's queries. It reads the history graph of $\F$.
+\item Three reductions $B$ to GSD \emph{search the query history} of $Z$~\cite[pp.~78--81]{etk}:
+\begin{enumerate}
+\item[(E1)] An injected commit carries a valid confirmation tag. Since the tag is $H(\mathit{confKey},\mathit{confTransHash})$, $B$ finds $\mathit{confKey}$ among $Z$'s queries, and from it $\mathit{joinerSec}$, which yields the challenge's application secret.
+\item[(E2)] An injected Welcome decrypts correctly. $B$ parses every query as a candidate $\mathit{joinerSec}$, derives the welcome key, and tests whether it decrypts the injected group information.
+\item[(E3)] An injected external commit copies an honest KEM output. $B$ finds $\mathit{ext\text{-}initSec}$ among the queries that derive $\mathit{joinerSec}$.
+\end{enumerate}
+\end{enumerate}
+Item~4 is the only use of a classical-only property. Against a quantum $Z$ the reduction cannot keep a list of queries, because a query in superposition is not a value.
+
+%=====================================================================
+\section{Why the three searches should lift}
+%=====================================================================
+
+In each of (E1)--(E3) the reduction looks for a secret $s$ that $B$ does not know and that is hidden from $Z$ by the GSD challenge. $Z$ succeeds only if it has, in effect, evaluated $H$ on an input containing $s$. Two quantum techniques address exactly this pattern.
+
+\emph{One-way to hiding.} Reprogram $H$ on all inputs that contain $s$. The semi-classical one-way-to-hiding lemma~\cite{o2h} bounds the change in $Z$'s success by $2\sqrt{(q+1)\,P_{\rm find}}$, where $q$ counts $Z$'s queries and $P_{\rm find}$ is the probability that measuring the query register finds an input containing $s$. In the reprogrammed game the confirmation tag, welcome key or initial secret is independent of $Z$'s view, so injection fails except with the MAC or decryption error. $P_{\rm find}$ is then a search for the challenge secret, which a GSD adversary can turn into a win: it measures a random query of $Z$, parses it as in (E1)--(E3), and computes the application secret. The cost is a square root and a factor $q$ in place of the classical additive term. This is the route used for the Fujisaki--Okamoto transform in the quantum model~\cite{hhk,o2h}.
+
+\emph{Online extraction.} The compressed-oracle technique records a quantum database of $Z$'s queries without disturbing it noticeably. When $Z$ outputs a value $y$ that must equal $H(x)$ for some $x$, an extractor can recover $x$ with small error~\cite{dfms22}. (E1) is of this form twice: from the tag to $\mathit{confKey}$, then from $\mathit{confKey}$ to $\mathit{joinerSec}$. (E2) and (E3) are of the same form after one decryption. Online extraction gives straight-line reductions. A recent MLS-shaped protocol with post-quantum security proves its reductions straight-line in the quantum model in this way~\cite{au-cgka}. That analysis assumes secure erasures. The coalition pattern of the paper corrupts only parties outside the challenge epoch and never corrupts a reader, so erasure of honest state does not enter it.
+
+Either route needs one bound per extraction site, of the form above. Neither changes the hybrid structure, the predicates or the simulator.
+
+%=====================================================================
+\section{The hypotheses for the post-quantum suite}
+%=====================================================================
+
+\begin{itemize}
+\item \emph{Encryption.} HPKE in base mode over X-Wing. X-Wing is IND-CCA against quantum adversaries in the standard model if ML-KEM-768 is IND-CCA and SHA3-256 is a pseudorandom function~\cite{xwing}. ML-KEM's IND-CCA security rests on the Fujisaki--Okamoto transform in the quantum random-oracle model~\cite{hhk,fips203}. The KEM--DEM composition~\cite{cramer-shoup} holds against quantum adversaries whose decryption queries are classical.
+\item \emph{Signatures.} SUF-CMA of deterministic ML-DSA-44 in the quantum random-oracle model, from the corrected proof of Barbosa \emph{et al.} with the strong case written out in \texttt{formal/notes/ml-dsa-suf.tex}.
+\item \emph{MAC and key schedule.} HKDF and the MAC are calls to $\GRO$. A tag on a fresh input under a hidden key is unpredictable against quantum queries by one-way-to-hiding.
+\end{itemize}
+
+%=====================================================================
+\section{The conjecture}
+%=====================================================================
+
+\begin{conjecture}[ETK in the quantum random-oracle model]\label{conj}
+Theorem~1 of Ref.~\cite{etk} holds for every quantum polynomial-time environment that interacts classically with the parties and has quantum access to $\GRO$, with the same predicates $\mathsf{safe}$ and $\mathsf{inj\text{-}allowed}$. The hypotheses are IND-CCA security of the encryption scheme against quantum adversaries and SUF-CMA security of the signature in the quantum random-oracle model. The advantage grows by at most a polynomial factor and by square-root terms at the three extraction sites.
+\end{conjecture}
+
+\begin{proposition}[Conditional]
+If Conjecture~\ref{conj} holds, then Proposition~3 of the paper holds against quantum adversaries for the post-quantum suite, with the hypotheses of Sec.~V. Theorem~1 of the paper then holds with $\mathrm{Adv}^{\rm ETK}$ replaced by its quantum counterpart, and $\epsilon_{\rm RO}$ by the corresponding quantum loss of the secret-tree derivation.
+\end{proposition}
+\begin{proof}
+Game $G_2$ uses ETK's realization for one environment. The other hops of the paper's Theorem~1 use the ledger's signature (EUF-CMA of ML-DSA in the quantum model, which the corrected proof gives) and AEAD security, which do not depend on the adversary being classical once message keys are random.
+\end{proof}
+
+%=====================================================================
+\section{What would turn the conjecture into a theorem}\label{sec:checks}
+%=====================================================================
+
+\begin{enumerate}
+\item[Q1.] \emph{The three sites.} Write the one-way-to-hiding or online-extraction bound for (E1), (E2) and (E3), including the two-step chain of (E1).
+\item[Q2.] \emph{No other classical step.} Confirm, case by case through Appendix~J, that the simulator and the hybrids use no other property of a classical oracle, such as checking whether a value was queried.
+\item[Q3.] \emph{Guessing.} Confirm that every guess in the hybrids is classical and made before $Z$ runs, so that the polynomial loss is unchanged.
+\item[Q4.] \emph{GSD in the quantum model.} The reduction from GSD to IND-CCA (Theorem~3 of Ref.~\cite{etk}) is imported from Ref.~\cite{active-cgka}, where keys are derived from seeds through the random oracle. We have not read that proof. If it programs or observes the oracle, it needs the same treatment.
+\item[Q5.] \emph{Authenticity.} Lemma~5 bounds MAC forgeries by a guessing argument over epochs. Check that its reduction does not search the query history. In the parts read, it does not.
+\end{enumerate}
+Q1 is new mathematics of a standard kind. Q2, Q3 and Q5 are careful reading. Q4 needs Ref.~\cite{active-cgka}. A natural place to discuss all five is with ETK's authors, together with the questions of \texttt{formal/notes/etk-gce-extension.tex}.
+
+\begin{thebibliography}{99}
+
+\bibitem{concordance} D.~Sobral, Two clocks, one cut: may--can concordance and revocation in MLS groups, manuscript (2026).
+
+\bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229, version 2.0 (11 April 2026).
+
+\bibitem{qrom} D.~Boneh, \"O.~Dagdelen, M.~Fischlin, A.~Lehmann, C.~Schaffner, and M.~Zhandry, Random oracles in a quantum world, in \emph{Asiacrypt 2011}.
+
+\bibitem{active-cgka} J.~Alwen, S.~Coretti, D.~Jost, and M.~Mularczyk, Continuous group key agreement with active security, in \emph{TCC} (2020).
+
+\bibitem{o2h} A.~Ambainis, M.~Hamburg, and D.~Unruh, Quantum security proofs using semi-classical oracles, in \emph{Crypto 2019}.
+
+\bibitem{hhk} D.~Hofheinz, K.~H\"ovelmanns, and E.~Kiltz, A modular analysis of the Fujisaki--Okamoto transformation, in \emph{TCC} (2017).
+
+\bibitem{dfms22} J.~Don, S.~Fehr, C.~Majenz, and C.~Schaffner, Online-extractability in the quantum random-oracle model, in \emph{Eurocrypt 2022}.
+
+\bibitem{au-cgka} E.~V.~Mangipudi, M.~Gorman, and S.~Levinshteyn, Auditable continuous group key agreement, IACR ePrint 2026/1710.
+
+\bibitem{xwing} M.~Barbosa, D.~Connolly, J.~D.~Duarte, A.~Kaiser, P.~Schwabe, K.~Varner, and B.~Westerbaan, X-Wing: The hybrid KEM you've been looking for, IACR Communications in Cryptology \textbf{1}(1) (2024).
+
+\bibitem{fips203} National Institute of Standards and Technology, \emph{Module-Lattice-Based Key-Encapsulation Mechanism Standard}, FIPS 203 (2024).
+
+\bibitem{cramer-shoup} R.~Cramer and V.~Shoup, Design and analysis of practical public-key encryption schemes secure against adaptive chosen ciphertext attack, SIAM J. Comput. \textbf{33}, 167 (2003).
+
+\end{thebibliography}
+
+\end{document}
