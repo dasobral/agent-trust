@@ -20,5 +20,7 @@ auth = "none"              # "none" | "bearer" | "x-api-key"
 # auth_secret_env = "QRNG_API_KEY"      # the secret itself is read from this variable
 # entropy_type = "raw"
 request_timeout_ms = 5000
-# TLS key exchange (C-42): "pq-only" (default, X25519MLKEM768 only) | "pq-preferred"
-key_exchange = "pq-only"
+# TLS key exchange (C-42, D-14): "pq-preferred" (default: X25519MLKEM768 first, a classical
+# group only from a server without it; the lab "entropy" report shows the group) |
+# "pq-only" (X25519MLKEM768 only; a server without it is refused)
+key_exchange = "pq-preferred"

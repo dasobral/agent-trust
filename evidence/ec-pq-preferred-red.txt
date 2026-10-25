@@ -1,0 +1,14 @@
+# cargo test --all-features --no-fail-fast --test pq_suite --test lab_entropy, 2026-10-25, before the D-14 change (tests updated, src unchanged). Filtered.
+     Running tests/lab_entropy.rs (target/debug/deps/lab_entropy-2404b59572a99240)
+test qrng_outage_mid_session_fails_closed_without_naming_the_endpoint ... FAILED
+thread 'qrng_outage_mid_session_fails_closed_without_naming_the_endpoint' (15739) panicked at tests/lab_entropy.rs:490:5:
+  left: Null
+ right: "none (plain HTTP)"
+test result: FAILED. 12 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.29s
+     Running tests/pq_suite.rs (target/debug/deps/pq_suite-473ff69a21ff29e8)
+test the_qrng_key_exchange_is_post_quantum_preferred_unless_configured ... FAILED
+thread 'the_qrng_key_exchange_is_post_quantum_preferred_unless_configured' (15763) panicked at tests/pq_suite.rs:584:5:
+  left: Ok(PostQuantumOnly)
+ right: Ok(PostQuantumPreferred)
+test result: FAILED. 12 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.91s
+exit=101

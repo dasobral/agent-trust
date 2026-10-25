@@ -113,7 +113,7 @@ seeded from the same source when it is connected:
 | --- | --- | --- |
 | `os` | nothing (default) | The OS RNG: OS-seeded RustCrypto for direct draws, the OS RNG for the crypto provider's DRBG |
 | `mock` | `AGENT_TRUST_ENTROPY_SOURCE=mock`, optional `AGENT_TRUST_MOCK_SEED=N` | Seeded, **not random**. For development and tests: the same seed gives the same keys. |
-| `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` and `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Quside Entropy Core |
+| `qrng` | `AGENT_TRUST_ENTROPY_SOURCE=qrng` and `AGENT_TRUST_QRNG_BASE_URL` | A QRNG Open API endpoint such as Quside Entropy Core. Over TLS it prefers the post quantum key exchange `X25519MLKEM768` and accepts a classical group from a server without it (`pq-preferred`, the default; `pq-only` refuses that server). The lab `entropy` report shows the negotiated group (`key_exchange`, `post_quantum`) |
 
 A TOML file named by `AGENT_TRUST_ENTROPY_CONFIG` can select the source instead;
 see [`config/entropy.example.toml`](config/entropy.example.toml). A source that

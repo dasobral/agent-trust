@@ -41,7 +41,7 @@ fn plain(base_url: &str) -> EntropyConfig {
         auth: QrngAuth::None,
         entropy_type: None,
         request_timeout: Duration::from_secs(5),
-        key_exchange: QrngKeyExchange::PostQuantumOnly,
+        key_exchange: QrngKeyExchange::PostQuantumPreferred,
     })
 }
 
@@ -132,7 +132,7 @@ fn file_paths_resolve_relative_to_the_file_and_auth_names_a_variable() {
             },
             entropy_type: Some("raw".into()),
             request_timeout: Duration::from_millis(2500),
-            key_exchange: QrngKeyExchange::PostQuantumOnly,
+            key_exchange: QrngKeyExchange::PostQuantumPreferred,
         }))
     );
 }
@@ -229,7 +229,7 @@ fn environment_selects_the_source() {
             },
             entropy_type: Some("raw".into()),
             request_timeout: Duration::from_secs(5),
-            key_exchange: QrngKeyExchange::PostQuantumOnly,
+            key_exchange: QrngKeyExchange::PostQuantumPreferred,
         }))
     );
     assert_eq!(
@@ -246,7 +246,7 @@ fn environment_selects_the_source() {
             },
             entropy_type: None,
             request_timeout: Duration::from_secs(5),
-            key_exchange: QrngKeyExchange::PostQuantumOnly,
+            key_exchange: QrngKeyExchange::PostQuantumPreferred,
         }))
     );
 }
@@ -413,7 +413,7 @@ fn qrng_secret_is_read_only_from_the_named_variable() {
         },
         entropy_type: None,
         request_timeout: Duration::from_secs(5),
-        key_exchange: QrngKeyExchange::PostQuantumOnly,
+        key_exchange: QrngKeyExchange::PostQuantumPreferred,
     });
     let error = config
         .connect_with(env(&[]))
@@ -486,6 +486,9 @@ fn qrng_outage_mid_session_fails_closed_without_naming_the_endpoint() {
     // The two successful requests seeded the lab crypto provider at connect.
     assert_eq!(report["requests"], 2);
     assert_eq!(report["failures"], 2);
+    // The link's key exchange: none over plain HTTP, so not post quantum.
+    assert_eq!(report["key_exchange"], "none (plain HTTP)");
+    assert_eq!(report["post_quantum"], false);
 }
 
 #[test]

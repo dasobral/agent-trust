@@ -569,7 +569,10 @@ fn qrng_key_exchange(config: Result<EntropyConfig, String>) -> Result<QrngKeyExc
 }
 
 #[test]
-fn the_qrng_key_exchange_is_post_quantum_only_unless_configured() {
+fn the_qrng_key_exchange_is_post_quantum_preferred_unless_configured() {
+    // D-14: the `qrng` source is the Entropy Core link. It prefers `X25519MLKEM768` and
+    // accepts a classical group from a server without it; the entropy report shows the
+    // group (see `lab_entropy.rs`). `pq-only` stays available.
     let file = |extra: &str| {
         EntropyConfig::parse(
             &format!(
@@ -580,7 +583,7 @@ fn the_qrng_key_exchange_is_post_quantum_only_unless_configured() {
     };
     assert_eq!(
         qrng_key_exchange(file("")),
-        Ok(QrngKeyExchange::PostQuantumOnly)
+        Ok(QrngKeyExchange::PostQuantumPreferred)
     );
     assert_eq!(
         qrng_key_exchange(file("key_exchange = \"pq-only\"")),
@@ -605,6 +608,15 @@ fn the_qrng_key_exchange_is_post_quantum_only_unless_configured() {
     ];
     assert_eq!(
         qrng_key_exchange(env(&BASE)),
+        Ok(QrngKeyExchange::PostQuantumPreferred)
+    );
+    const ONLY: [(&str, &str); 3] = [
+        BASE[0],
+        BASE[1],
+        ("AGENT_TRUST_QRNG_KEY_EXCHANGE", "pq-only"),
+    ];
+    assert_eq!(
+        qrng_key_exchange(env(&ONLY)),
         Ok(QrngKeyExchange::PostQuantumOnly)
     );
     const PREFERRED: [(&str, &str); 3] = [

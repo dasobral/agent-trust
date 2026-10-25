@@ -38,11 +38,11 @@ use std::time::Duration;
 
 use openmls_libcrux_crypto::{CryptoProvider as LibcruxCrypto, TryCryptoRng, TryRng};
 /// The TLS key exchange of the QRNG link (openmls-qrand `KeyExchange`, C-42):
-/// `PostQuantumOnly` (`X25519MLKEM768` only, the default) or `PostQuantumPreferred`.
+/// `PostQuantumPreferred` (the default here, D-14) or `PostQuantumOnly`.
 pub use openmls_qrand::KeyExchange as QrngKeyExchange;
 use openmls_qrand::{
-    ApiAuth, EntropyBackend, EntropyRng, MockEntropy, QrngClient, QrngConfig, QrngError, QrngRand,
-    TransportMode,
+    ApiAuth, EntropyBackend, EntropyRng, MockEntropy, NegotiatedKeyExchange, QrngClient,
+    QrngConfig, QrngError, QrngRand, TransportMode,
 };
 use openmls_rust_crypto::{MemoryStorage, RandError, RustCrypto};
 use openmls_traits::random::OpenMlsRand;
@@ -64,10 +64,13 @@ const QRNG_CLIENT_KEY_PEM_ENV: &str = "AGENT_TRUST_QRNG_CLIENT_KEY_PEM";
 const QRNG_BEARER_TOKEN_ENV: &str = "AGENT_TRUST_QRNG_BEARER_TOKEN";
 const QRNG_API_KEY_ENV: &str = "AGENT_TRUST_QRNG_API_KEY";
 const QRNG_ENTROPY_TYPE_ENV: &str = "AGENT_TRUST_QRNG_ENTROPY_TYPE";
-/// TLS key exchange of the QRNG link: `pq-only` (the default) or `pq-preferred` (C-42).
+/// TLS key exchange of the QRNG link: `pq-preferred` (the default, D-14) or `pq-only` (C-42).
 const QRNG_KEY_EXCHANGE_ENV: &str = "AGENT_TRUST_QRNG_KEY_EXCHANGE";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+/// The `qrng` source is the Entropy Core link. It prefers `X25519MLKEM768` and accepts a
+/// classical group from a server without it; [`LabEntropy::report`] shows the group (D-14).
+const DEFAULT_KEY_EXCHANGE: QrngKeyExchange = QrngKeyExchange::PostQuantumPreferred;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EntropyConfig {
@@ -263,7 +266,10 @@ impl EntropyConfig {
                 };
                 let client = QrngClient::connect(settings.qrng_config(auth)?)
                     .map_err(|err| format!("QRNG connect failed: {}", qrng_error_category(&err)))?;
-                LabEntropy::with_backend("qrng", Arc::new(client), None)
+                let key_exchange = client.key_exchange().clone();
+                let mut lab = LabEntropy::with_backend("qrng", Arc::new(client), None)?;
+                lab.key_exchange = Some(key_exchange);
+                Ok(lab)
             }
         }
     }
@@ -333,7 +339,7 @@ impl QrngSettings {
             Some(ms) => Duration::from_millis(ms),
         };
         let key_exchange = match file.key_exchange {
-            None => QrngKeyExchange::default(),
+            None => DEFAULT_KEY_EXCHANGE,
             Some(name) => QrngKeyExchange::parse(&name)
                 .map_err(|err| format!("invalid entropy config: key_exchange: {err}"))?,
         };
@@ -388,7 +394,7 @@ impl QrngSettings {
             }
         };
         let key_exchange = match var(QRNG_KEY_EXCHANGE_ENV) {
-            None => QrngKeyExchange::default(),
+            None => DEFAULT_KEY_EXCHANGE,
             Some(name) => QrngKeyExchange::parse(&name)
                 .map_err(|err| format!("{QRNG_KEY_EXCHANGE_ENV}: {err}"))?,
         };
@@ -479,6 +485,8 @@ pub struct LabEntropy {
     backend: Option<Arc<dyn EntropyBackend>>,
     /// The same backend as `backend` when the source is `mock`, for the outage control.
     mock: Option<Arc<MockEntropy>>,
+    /// The TLS key exchange of the link when the source is `qrng`.
+    key_exchange: Option<NegotiatedKeyExchange>,
     /// The crypto provider every lab provider shares (see [`LabProvider`]).
     crypto: Arc<LabCrypto>,
 }
@@ -490,6 +498,7 @@ impl LabEntropy {
             label: "os",
             backend: None,
             mock: None,
+            key_exchange: None,
             crypto: Arc::new(lab_crypto(CryptoSource::Os(SysRng))?),
         })
     }
@@ -505,6 +514,7 @@ impl LabEntropy {
             label,
             backend: Some(backend),
             mock,
+            key_exchange: None,
             crypto: Arc::new(crypto),
         })
     }
@@ -549,18 +559,24 @@ impl LabEntropy {
         })
     }
 
-    /// `{source}` for `os`; `{source, requests, bytes, failures}` otherwise.
+    /// `{source}` for `os`; `{source, requests, bytes, failures}` otherwise; `qrng` adds
+    /// `key_exchange` (the TLS group of the link) and `post_quantum`.
     pub fn report(&self) -> Value {
         match &self.backend {
             None => json!({ "source": self.label }),
             Some(backend) => {
                 let metrics = backend.metrics_snapshot();
-                json!({
+                let mut report = json!({
                     "source": self.label,
                     "requests": metrics.entropy_requests_total,
                     "bytes": metrics.entropy_bytes_total,
                     "failures": metrics.entropy_failures_total,
-                })
+                });
+                if let Some(key_exchange) = &self.key_exchange {
+                    report["key_exchange"] = json!(key_exchange.to_string());
+                    report["post_quantum"] = json!(key_exchange.is_post_quantum());
+                }
+                report
             }
         }
     }
