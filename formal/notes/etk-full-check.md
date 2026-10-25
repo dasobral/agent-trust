@@ -1,8 +1,7 @@
 # ETK full version against the construction
 
 25 October 2026. Source: ETK, IACR ePrint 2025/229, version 2.0 of
-11 April 2026, 109 pages (Daniel placed a copy in `formal/baseline/`; it is
-not committed). The paper's Proposition 3 had been matched against the
+11 April 2026, 109 pages (Daniel placed a copy at `formal/baseline/etk-2025-229-v2.pdf`). The paper's Proposition 3 had been matched against the
 conference text only. This note records the check against the full version.
 
 Page numbers are those of the full version. "F" is the functionality
@@ -71,7 +70,7 @@ signature key).
 | a) orphan root with exposed key | `c` has a parent: the ledger installs only children of `e*`. |
 | b) `c` adds a member with exposed `spk` | Added members are in `M_c`; their keys are fresh (K5) and never exposed. |
 | c) a member added by `c` is exposed later without an update | Added members are in `M_c`, hence readers at the cut, hence never exposed in this game. |
-| d) `know(c, ∗)` with a known parent epoch | Needs some `id` with `know(c, id)`. Directly: no member of `M_c` is exposed, and `*secrets-injected(c, id)` fails because the sender is honest with good randomness, no update proposal is injected, and no added `spk` is exposed. From the parent: `know(p, r)` for `r ∈ C_a` does not pass to `c`, because `c` either removes `r`, which makes `*secrets-replaced(c, r)` true by clause b), or `r` was already outside the parent. Honest members' states at the parent are not known, by the same argument one epoch earlier. From a child: a child that knows `r`'s state re-adds `r` (K5 makes it a new identity) or removes it; either makes `*secrets-replaced` true. |
+| d) `know(c, ∗)` with a known parent epoch | Needs some `id` with `know(c, id)`. Directly: no member of `M_c` is exposed, and `*secrets-injected(c, id)` fails because the sender is honest with good randomness, no update proposal is injected, and no added `spk` is exposed. From the parent: `know(p, r)` for `r ∈ C_a` does not pass to `c`, because `c` either removes `r`, which makes `*secrets-replaced(c, r)` true by clause b), or `r` was already outside the parent. Honest members' states at the parent are not known, by the same argument one epoch earlier. From a child: a child `c′` of `c` cannot know `r`'s state, because `r` is not in `M_c` and `c′` does not add `r`; a re-admission adds a new identity (K5), not `r`. |
 | e) external commit with leaked or injected secret | `c` is a member commit (K2). |
 
 This is the row-by-row content of the ETK table in Appendix A of the paper, now checked
@@ -148,4 +147,4 @@ Two consequences:
 | `safe(c)` for coalition-free epochs | matched on the conference text | checked against Fig. 7 of version 2 |
 | Group context in the model | "never mentioned" | modeled without extensions; GCE-note check 1 answered |
 | Proof of Theorem 1 | not read | structure and the extraction steps read; case analyses not re-verified |
-| Proposition 3 for the code | pending R-11 | still pending R-11 (proposal type) |
+| Proposition 3 for the code | pending R-11 | covered since R-11 (commit `0db5f6f`): no commit carries a GroupContextExtensions proposal |

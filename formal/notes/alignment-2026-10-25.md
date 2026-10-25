@@ -91,7 +91,7 @@ Proposition 3 covered the construction, not the repair commit of the code;
 Proposition 2 covered both. R-11 is implemented (C-44): no commit carries a
 GroupContextExtensions proposal, the anchor is static, and the policy
 binding is in the canonical ack. Proposition 3 now covers the code's
-commits with the two remaining open items named in `formal/README.md`.
+commits, with the one remaining open item named in `formal/README.md`.
 
 ## B. The project documents are two generations behind the paper
 
@@ -103,8 +103,9 @@ commits with the two remaining open items named in `formal/README.md`.
 - `formal/README.md` says key confinement is derived: symbolically as a
   corollary of TreeKEM DY\*, computationally from ETK with named gaps.
 - Both cannot stand. Both now say **conditional** and name the same open
-  items. After the proof work of 25 October these are R-11 and the quantum
-  version of ETK (`etk-full-check.md`, `etk-qrom.tex`, `ml-dsa-suf.tex`). (R-11 closed on 25 October 2026, A-6; two items remain.)
+  items. After the proof work and R-11 of 25 October, one remains: the
+  quantum version of ETK (`etk-qrom.tex`). The full-version check is in
+  `etk-full-check.md` and the ML-DSA strong case in `ml-dsa-suf.tex`.
 - `Bridge_remove^ETK` and `full_lap_mls` are also names from the Third
   Edition. `full_lap_mls` is a field in `evidence/manifest.json` and
   `scripts/verify.py`; its rename is a schema change, listed in C-43.

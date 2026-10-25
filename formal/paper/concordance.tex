@@ -403,13 +403,13 @@ K1--K5 & Table~\ref{tab:K}, Appendix~\ref{app:mapping}\\
 \end{ruledtabular}
 \end{table}
 
-Four differences between the code and the model are worth stating.
+Three differences between the code and the model are worth stating.
 \begin{itemize}
 \item The implementation is \emph{stricter} in three places. First, a receiver delivers only while the epoch and generations are unchanged, whereas the model allows a pre-cut message to be accepted later. Theorems~\ref{thm:read} and \ref{thm:write} hold a fortiori, since only acceptances are removed, but Proposition~\ref{prop:progress} then promises nothing for in-flight messages. Second, the central fence opens only after a second continuing member confirms the repaired epoch, which discharges the processing assumption of Proposition~\ref{prop:progress}. Third, every application message is both a write by its sender and a read-protected action for the group. Its release therefore checks both conditions of Rule R, and it also checks directly that every member of the current roster holds a live read justification, which is the conclusion of Lemma~\ref{lem:roster}.
 \item Delegations carry wall-clock validity windows, evaluated at release, so their expiry is not a ledger event and Eq.~\eqref{eq:locality} is not met literally. The theory predicts the consequence. If a member's delegation expires, releases are refused, which is safe. But the fence never closes, so no repair can remove that member, which is a loss of progress. Recording expiry as a ledger revocation restores Eq.~\eqref{eq:locality}.
 \item Condition K1 asks for good randomness. The adapter draws path secrets directly from the selected entropy source. The HPKE encapsulation inside OpenMLS draws from a deterministic random bit generator seeded from that same source. Both are good randomness, so K1 holds. The distinction matters only for claims about where the entropy comes from.
-\item The repair commit currently still carries a GroupContextExtensions proposal with the policy binding. This is the earlier design discussed in Sec.~\ref{sec:K}, and it lies outside ETK's model. A proposed correction moves the binding into the ledger's acknowledgement and freezes the context extension. Until it is applied, Proposition~\ref{prop:Kcomp} covers the construction but not this one commit type of the code. Proposition~\ref{prop:Ksym} covers both.
 \end{itemize}
+A fourth difference has been removed. The repair commit used to carry a GroupContextExtensions proposal with the policy binding, the earlier design discussed in Sec.~\ref{sec:K}, which lies outside ETK's model. Correction R-11 moved the binding into the ledger's acknowledgement and froze the context extension. No commit of the code now carries such a proposal, and the sequencer rejects one. Every commit the code produces is therefore an operation ETK models, and Proposition~\ref{prop:Kcomp} covers the code as well as the construction.
 
 The implementation's tests (a retained-key adversary on successor traffic, crash barriers, and an independent trace oracle) are evidence for the executions they run. They are not proofs, and the paper does not use them as such.
 
@@ -433,7 +433,7 @@ Concordance asks one thing: whoever can exercise a capability on an action may d
 
 Four steps remain open, in decreasing order of importance.
 \begin{enumerate}
-\item \emph{Align the code and lift ETK.} Apply the proposed correction that moves the policy binding into the acknowledgement. Then settle the five checks of Ref.~\cite{note-qrom}, which would extend Proposition~\ref{prop:Kcomp} to quantum adversaries. Separately, an extension of ETK to group-context changes is a natural question for its authors.
+\item \emph{Lift ETK to quantum adversaries.} Settle the five checks of Ref.~\cite{note-qrom}, which would extend Proposition~\ref{prop:Kcomp} to quantum adversaries. Separately, an extension of ETK to group-context changes is a natural question for its authors.
 \item \emph{Mechanize Lemma~\ref{lem:fence} and Theorem~\ref{thm:write}.} Both are inductive invariants of a small transition system and suit a proof assistant or TLA$^+$ with its proof system.
 \item \emph{Other cuts.} Causal and lease cuts trade the ledger contact of Proposition~\ref{prop:price} for weaker guarantees. Each needs its own analogue of Lemma~\ref{lem:roster}.
 \item \emph{Finer read domains.} Here one group is one read domain. Per-resource read access within a group cannot be expressed by group keys alone and needs per-resource keys or separate groups.
@@ -515,7 +515,7 @@ K2 & \cell{0.8\columnwidth}{sequencer accepts only \texttt{Sender::Member} commi
 K3 & \cell{0.8\columnwidth}{no exporter secret is used in \texttt{src/}}\\
 K4 & \cell{0.8\columnwidth}{default suite \texttt{0x0052}: ML-DSA-44 signatures, X-Wing HPKE; classical suite \texttt{0x0001}: Ed25519 verified with \texttt{verify\_strict}, DHKEM(X25519). OpenMLS and the ledger use the same signature scheme}\\
 K5 & \cell{0.8\columnwidth}{re-admission by a new KeyPackage; other rights by an update with a new signer}\\
-pending & \cell{0.8\columnwidth}{the repair commit still calls \texttt{propose\_group\_context\_extensions}; the proposed correction removes it}\\
+R-11 & \cell{0.8\columnwidth}{the repair commit carries only Remove proposals and a forced path; the sequencer rejects any GroupContextExtensions proposal and requires the parent's extensions in the successor}\\
 \end{tabular}
 \end{ruledtabular}
 \end{table}
