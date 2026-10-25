@@ -146,7 +146,10 @@ ML-DSA). A server presents its classical certificate only to a client that offer
 ML-DSA signature scheme, and accepts a classical client certificate only for `attctl` and
 `<agent>-app`: a classical certificate that names a service is refused (`403`). With
 OpenSSL 3.5 or later, `attctl` uses its post quantum certificate instead; reports name
-the chain it used (`check.pq_tls`, `control_link`).
+the chain it used (`check.pq_tls`, `control_link`). In these runs the classical control
+link also carries the decrypted messages that `attctl` reads from `/app/inbox` as the
+application, and the app token. A real application uses its own post quantum
+`<agent>-app` certificate.
 
 Each backend gives each service its own certificates: local processes read
 `<run_dir>/pki`; compose mounts it read-only at `/etc/att/pki` (its keys are made

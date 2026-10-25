@@ -39,7 +39,7 @@ every TLS link between services is ML-DSA-44 over the hybrid key exchange
 | [K8S](deploy/k3s/README.md) | NetworkPolicy isolation of the services | | | PASS |
 
 E5 fails in the `pq` suite because of finding F-8: the kernel keeps every envelope in
-every history snapshot, and ML-DSA signatures make envelopes about four times larger, so
+every history snapshot, and ML-DSA signatures make envelopes about seven times larger, so
 the APF slows down too fast for parallel sends (the sends time out). The F-8 fix needs
 approval. E5 in the classical suite passes.
 

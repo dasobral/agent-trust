@@ -67,7 +67,8 @@ classical suite pass (`experiments/e5-scale-classical.toml`,
 
 The cause is F-8 below, made steeper: the kernel stores each persisted envelope in every
 history snapshot, and a `pq` envelope carries two ML-DSA-44 signatures (2420 bytes each:
-the APF release certificate and the MLS message), so it is about four times larger. The
+the APF release certificate and the MLS message), so it is about seven times larger (median
+5450 bytes against 738), and each operation record about five times. The
 F-8 proposal would remove the effect; it needs approval. CI runs E5 in the classical
 suite (`SCALE=1`); `SCALE=pq scripts/ci.sh` runs it in the `pq` suite.
 

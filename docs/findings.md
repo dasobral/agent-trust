@@ -107,6 +107,9 @@ Residual classical parts:
 
 - The control plane link from `attctl`, while its Python links OpenSSL 3.0 (this host
   and the Ubuntu 24.04 CI runners). It upgrades by itself with OpenSSL 3.5 or later.
+  In these runs this link also carries the decrypted messages that `attctl` reads from
+  `/app/inbox` as the application, and the app token. A real application uses its own
+  post quantum `<agent>-app` certificate.
 - The QRNG link to a real Entropy Core needs that server to offer `X25519MLKEM768`;
   `key_exchange = "pq-preferred"` is the explicit, reported downgrade (E6).
 - The legacy `MlsLab` of agent-trust (`mls-demo`), which is not on the adapter path.
@@ -124,8 +127,9 @@ Cost (E8, local backend; sizes in bytes):
 
 E5 does not complete in the `pq` suite (`results/E5/2026-10-25-local`). The kernel keeps
 every persisted envelope in each history snapshot (F-8), and an envelope carries two
-ML-DSA-44 signatures (the release certificate and the MLS message), so it is about four
-times larger. In the recorded runs the kernel history grew to 143 MB against 31 MB in the
+ML-DSA-44 signatures (the release certificate and the MLS message), so it is about seven
+times larger (median 5450 bytes against 738), and each operation record about five times
+larger. In the recorded runs the kernel history grew to 143 MB against 31 MB in the
 classical suite (`results/E5-classical/2026-10-25-local`), and the APF time per request
 at up to 335 history events was 1.58 s against 0.72 s (p50). In the round under faults
 it was 2.0 s against 1.0 s, and in the next round parallel sends passed the 60 s client

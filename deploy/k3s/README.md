@@ -12,7 +12,7 @@ For a topology named `three-agents`, in namespace `att-three-agents`:
 |---|---|---|
 | `Namespace` | deployment | Isolation and one-command teardown |
 | `Secret att-tokens` | deployment | Control, app and bootstrap tokens, read through `secretKeyRef` |
-| `Secret att-pki-<service>` | service, mTLS only | The CA plus that service's own certificate and key (mode 0440) |
+| `Secret att-pki-<service>` | service, mTLS only | Both CA certificates and that service's own post quantum and classical certificates and keys (mode 0440); no CA key |
 | `Deployment` (1 replica, `Recreate`) | service | `att-node <role>`; probes on `/healthz` (`att-node probe` under mTLS) |
 | `Service` (ClusterIP) | service | Stable DNS name: `apf`, `relay`, `qrng`, `<agent>` |
 | `PersistentVolumeClaim` (256 Mi) | APF and each agent | Adapter state; agent identity, MLS state and bookkeeping |
