@@ -1,0 +1,180 @@
+\documentclass[aps,prx,reprint,superscriptaddress,nofootinbib,floatfix]{revtex4-2}
+
+\usepackage[T1]{fontenc}
+\usepackage[sc]{mathpazo}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\newcommand{\gce}{\textsf{gce}}
+\newcommand{\ext}{\mathsf{ext}}
+\newcommand{\F}{\mathcal F_{\rm ECGKA}}
+\newcommand{\Fx}{\mathcal F^{\,\rm ext}_{\rm ECGKA}}
+
+\begin{document}
+
+\title{Opaque group-context extensions in ETK:\\ a proof sketch}
+
+\author{Daniel Sobral}
+\affiliation{Quside Technologies, Barcelona, Spain}
+
+\date{23 October 2026}
+
+\begin{abstract}
+MLS lets members change the extensions of the group context through a GroupContextExtensions proposal. Applications use this proposal to carry their own data, such as an authorization binding. The ETK analysis of RFC~9420 does not model the proposal. We sketch why ETK's main theorem should extend, with the same safety and injection predicates, to proposals that change only \emph{opaque} extensions, meaning extensions that no MLS processing rule reads. In ETK's abstraction such a proposal has three visible effects: it forces a rekeying path, it updates a public field, and it appears in the committed proposal list. The first is already part of ETK's healing structure. The second carries no secret. The third is covered by ETK's consistency argument. Along the way we observe that a \emph{constant} extension, fixed at group creation, is outside ETK's model in exactly the way every other group-context field is. This note is a sketch, not a proof. It was written against the conference version of ETK and lists what must be checked against the full proof. It is meant as a basis for discussion with ETK's authors.
+\end{abstract}
+
+\maketitle
+
+%=====================================================================
+\section{The question}
+%=====================================================================
+
+Every MLS epoch carries a \emph{group context}~\cite{rfc9420}: the protocol version, cipher suite, group identifier, epoch number, tree hash, confirmed transcript hash and a list of extensions. Applications often need to attach their own data to an epoch. RFC~9420 provides a way: a GroupContextExtensions proposal, committed like any other, replaces the extension list. In our own construction~\cite{coherence}, an earlier design used it to write the current authorization revision into each repair commit, so that MLS would confirm the revision cryptographically.
+
+ETK~\cite{etk} proves that the core of RFC~9420, including external operations, realizes an ideal group-key functionality $\F$. In the safe epochs, defined by a predicate \textsf{safe}, application secrets are random. Its proposal actions are update, add, remove, external self-add and pre-shared key. GroupContextExtensions is not among them. A protocol that uses it therefore falls, strictly speaking, outside the theorem.
+
+The question is whether this is a real gap or an artifact of scope. We argue that it is an artifact, for a well-delimited class of extensions.
+
+%=====================================================================
+\section{What the proposal does}
+%=====================================================================
+
+RFC~9420 fixes the following facts.
+\begin{enumerate}
+\item \emph{Wholesale replacement} (Sec.~12.1.7). The proposal carries a list $E'$, and the new group context has exactly $E'$ as its extensions. Extensions not listed again disappear.
+\item \emph{At most one per commit} (Sec.~12.2). A commit with two GroupContextExtensions proposals is invalid.
+\item \emph{A path is required} (Sec.~12.4). A commit's path may be omitted only if every proposal it covers is of a type that does not require a path. Only add, psk and reinit are such types. A commit covering a GroupContextExtensions proposal therefore always carries an UpdatePath.
+\item \emph{Validity} (Sec.~12.1.7). The proposal is invalid if it sets required capabilities that some current member does not support.
+\item \emph{Where the context enters} (Secs.~6.1, 8). The group context is an input to the derivation of the joiner secret and of the epoch secret. It is also part of the content that members sign.
+\end{enumerate}
+
+ETK's model is more abstract than RFC~9420 in one relevant respect. Its key schedule (Fig.~2 of Ref.~\cite{etk}) derives the joiner and epoch secrets from the init secret, the commit secret and the pre-shared keys, with no context input. The conference text never mentions the group context. We read this as a deliberate abstraction, also applied to the group identifier, cipher suite and version. The reading must be confirmed against the full protocol specification of Ref.~\cite{etk}.
+
+%=====================================================================
+\section{Scope: opaque extensions}
+%=====================================================================
+
+Two kinds of extension change \emph{who may do what} in MLS. These are \texttt{external\_senders}, which decides who may send external proposals, and \texttt{required\_capabilities}, which decides which members are valid. Changing either affects ETK's authenticity or correctness predicates, not just public bookkeeping. We exclude both.
+
+\begin{definition}[Opaque proposal]
+An extension type is \emph{opaque} if no processing rule of RFC~9420 reads extensions of that type. A GroupContextExtensions proposal with new list $E'$, applied to old list $E$, is \emph{opaque} if three conditions hold. First, $E$ and $E'$ differ only in entries of opaque types. Second, \texttt{required\_capabilities} and \texttt{external\_senders} are unchanged. Third, the proposal is sent by a current member.
+\end{definition}
+
+Application-defined extensions, such as an authorization binding in a private-use code point, are opaque. The last condition matches ETK, which has no external senders.
+
+%=====================================================================
+\section{The static case}
+%=====================================================================
+
+The simplest case needs no extension of ETK at all.
+
+\begin{lemma}[Constant extensions]\label{lem:static}
+Consider a group whose extension list $E_0$ is fixed at creation and never changed. In ETK's abstraction $E_0$ does not occur, because the group context does not. ETK's Theorem~1 therefore covers such a group to exactly the same extent as it covers the group identifier and every other group-context field.
+\end{lemma}
+
+The lemma is a statement about modeling fidelity, not a reduction. It says that a constant application extension introduces no new modeling gap. This is the situation after correction R-11 in our construction, where the extension only names the authority's key and the group. A model that \emph{did} include the group context as a key-derivation and signature input would need the argument of Sec.~\ref{sec:refined}.
+
+%=====================================================================
+\section{Extending ETK}
+%=====================================================================
+
+\subsection{Protocol and functionality}
+
+Let ETK$^{\rm ext}$ be ETK with one more proposal type.
+\begin{itemize}
+\item \emph{Create} takes an initial list $E_0$.
+\item \emph{Propose}$(\gce\text{-}E')$ produces a proposal carrying $E'$.
+\item \emph{Commit} and \emph{Process} apply $E'$ after the other proposals. They refuse a commit with two \gce\ proposals or with a non-opaque one. A commit covering a \gce\ proposal always rekeys the committer's path, as RFC~9420 requires.
+\item \emph{Join} reads the extension list from the group information in the Welcome.
+\end{itemize}
+
+Let $\Fx$ be $\F$ with these changes:
+\begin{itemize}
+\item The proposal action set $\{\textsf{up}, \textsf{add}, \textsf{rem}, \textsf{extAdd}, \textsf{psk}\}$ gains $\gce\text{-}E'$.
+\item Each commit node $c$ stores a public value $\ext(c)$, computed deterministically: $\ext(c)=E'$ if $c$ commits $\gce\text{-}E'$, and $\ext(c)=\ext(\text{parent of }c)$ otherwise. Roots take $E_0$.
+\item \emph{Process} and \emph{Join} additionally output $\ext(c)$. The consistency invariant gains one clause: parties at the same node agree on $\ext$, which holds by construction because $\ext$ is a function of the node.
+\item The predicates \textsf{safe} and \textsf{inj-allowed} are unchanged, \emph{textually}.
+\end{itemize}
+
+The last point deserves a check. ETK's \textsf{secrets-replaced}$(c,id)$, clause a), holds when $id$ is the sender of $c$ and $c$ commits some proposal outside $\{\textsf{add-}\ast, \textsf{extAdd-}\ast, \textsf{psk-}\ast\}$, or commits nothing. A \gce\ proposal lies outside that set, so the clause fires for its committer. This matches the protocol, which rekeys the committer's path whenever a \gce\ proposal is committed. The healing structure of the functionality is therefore unchanged.
+
+\subsection{The claim}
+
+\begin{proposition}[Sketch]\label{prop:ext}
+Under the assumptions of Theorem~1 of Ref.~\cite{etk} (IND-CCA public-key encryption, SUF-CMA signatures, and key derivation in the random-oracle model), ETK$^{\rm ext}$ restricted to opaque proposals realizes $\Fx$ with the predicates \textsf{safe} and \textsf{inj-allowed} of Ref.~\cite{etk}, Fig.~7. The advantage is the same as in that theorem.
+\end{proposition}
+
+\subsection{Why it should hold}
+
+The argument re-runs ETK's simulation proof with one more proposal type. It cannot be a black-box corollary of ETK's theorem. In the real protocol the \gce\ proposal's bytes enter the confirmed transcript hash and the signed commit content, so real ETK$^{\rm ext}$ transcripts are not a function of real ETK transcripts. A wrapper would have to forge signatures to translate between the two. We therefore go through the four properties the proof establishes.
+
+\emph{Secrecy.} In ETK's abstraction the extension list is input to no secret computation. The new value $\ext(c)$ is public, chosen by the environment, and determined by the history graph, so the simulator can compute it for every node. In a \gce-only commit the key derivation is that of a commit with an empty proposal list, which ETK already treats: a path is required, the committer's secrets are replaced, and nothing else changes. In a mixed commit (\gce\ together with adds or removes), the derivation is that of the same commit without the \gce\ proposal, which ETK treats. The hybrids for the tree secrets (ETK's selective-decryption step) and for the key schedule (random-oracle programming) see the same secret inputs as in ETK. They therefore carry over, with the same query bounds.
+
+\emph{Healing.} By Sec.~12.4 of RFC~9420, a commit covering a \gce\ proposal rekeys its committer. The functionality's \textsf{secrets-replaced} clause a) records exactly this. So corruption and healing are tracked as in ETK, and \textsf{safe} needs no new case.
+
+\emph{Consistency.} Two parties that process the same commit compute the same $\ext$, because it is a deterministic function of the parent's list and the committed proposals. The committed proposals are bound by the confirmed transcript hash and the committer's signature. Disagreement on $\ext$ therefore implies disagreement on the commit content, which ETK's consistency argument already excludes, using SUF-CMA signatures and collision resistance.
+
+\emph{Authenticity.} A \gce\ proposal is a regular member proposal. ETK's injection rule for regular proposals (inj-allowed, case b) applies unchanged: injecting one on behalf of a member requires that member's signature key \emph{and} the parent epoch's secrets.
+
+\subsection{A refined model}\label{sec:refined}
+
+Suppose ETK's model is refined to include the group context, as RFC~9420 does, in two places: as the context of the joiner and epoch secret derivations, and as part of every member's signed content. The argument changes in two places.
+\begin{itemize}
+\item \emph{Random-oracle steps.} The extra input is public and computable by the simulator. Programming the oracle in a safe epoch relies only on the secret input being unknown to the adversary, so the steps still go through. The only added cost is bookkeeping for the longer query strings.
+\item \emph{Signatures.} Honest parties sign longer messages. In a white-box proof the reduction obtains those signatures from the signing oracle of the SUF-CMA game like any other, so nothing changes. This is also why a black-box translation fails while a re-proof does not.
+\end{itemize}
+In this refined model a constant extension list (Lemma~\ref{lem:static}) is covered by the same argument, as the special case with no \gce\ proposals.
+
+%=====================================================================
+\section{What must be checked}
+%=====================================================================
+
+This sketch was written against the conference version of ETK. The full proof is in the appendices of the full version~\cite{etk}, which we have not read. The following points must be verified there.
+\begin{enumerate}
+\item The protocol specification omits the group context from key derivation and signature inputs, or, if it includes it, treats it as public input to random-oracle calls.
+\item The proof treats commits with an empty proposal list exactly as described here, since \gce-only commits reduce to them.
+\item The formal consistency invariant can take the $\ext$ clause without other changes.
+\item The simulator's construction of commits and group information can include public data taken from the history graph.
+\item The tree-secret reduction does not depend on the shape of the proposal list beyond adds, removes and updates.
+\end{enumerate}
+One point is already settled by the conference text. $\F$ forbids corrupting an epoch once it has been created securely. A static coalition fits this rule: its keys are exposed before its members are added, so their epochs are never created securely.
+
+%=====================================================================
+\section{Outside the opaque class}
+%=====================================================================
+
+Three cases need more than this sketch.
+\begin{itemize}
+\item \emph{Changing \texttt{external\_senders}} changes who may inject external proposals. ETK models no external senders, so both the protocol and \textsf{inj-allowed} would need a new case.
+\item \emph{Changing \texttt{required\_capabilities}} changes which members remain valid. It affects correctness and, through member validation, possibly authenticity.
+\item \emph{A GroupContextExtensions proposal sent by an external sender} needs the external-sender extension first.
+\end{itemize}
+
+%=====================================================================
+\section{Questions for ETK's authors}
+%=====================================================================
+
+\begin{enumerate}
+\item Is the omission of the group context from ETK's model deliberate, and does the full protocol specification confirm it?
+\item Does the proof of Theorem~1 go through, as sketched, when opaque GroupContextExtensions proposals are added as a sixth proposal action?
+\item Would the authors consider external senders, which several deployments use for policy services, as a natural next extension of ETK?
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{rfc9420} R.~Barnes, B.~Beurdouche, R.~Robert, J.~Millican, E.~Omara, and K.~Cohn-Gordon, \emph{The Messaging Layer Security (MLS) Protocol}, RFC 9420 (IETF, 2023).
+
+\bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229.
+
+\bibitem{coherence} D.~Sobral, Authorization--capability coherence: revocation that survives retained keys in dynamic secure groups, manuscript (2026).
+
+\end{thebibliography}
+
+\end{document}

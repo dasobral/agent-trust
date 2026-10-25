@@ -1,0 +1,174 @@
+{
+  "bounds": {
+    "parties": [
+      "A",
+      "B",
+      "C"
+    ],
+    "facts": [
+      "rA",
+      "rB",
+      "dBC",
+      "wA",
+      "wC",
+      "iAC"
+    ],
+    "max_policy_changes": 3,
+    "max_generation": 1,
+    "max_epoch": 3,
+    "max_read_releases": 2,
+    "max_write_releases": 2,
+    "max_accepts": 3
+  },
+  "good_model": {
+    "reachable_states": 1556555,
+    "transitions": 4104565,
+    "exhaustive": true,
+    "states_with_read_release": 1457995,
+    "states_with_accept": 1503996,
+    "violations": [],
+    "repair_always_possible": true,
+    "witnesses": {
+      "read_release_after_repair": [
+        "revoke(rA)",
+        "repair_commit(B)",
+        "release_read(B,epoch=1)"
+      ],
+      "cascade_repaired": [
+        "revoke(rB)",
+        "repair_commit(A)"
+      ],
+      "readmitted_after_revocation": [
+        "revoke(rA)",
+        "reissue(rA)",
+        "repair_commit(B)",
+        "admit(A)"
+      ],
+      "invocation_write_accepted": [
+        "release_write(C,for-A)",
+        "accept(w0,A)"
+      ],
+      "revoked_reader_holds_old_key": [
+        "revoke(rA)",
+        "repair_commit(B)"
+      ]
+    }
+  },
+  "mutants": {
+    "no_fence": {
+      "deleted_rule": "a read revocation does not close the fence (rule F)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rA)",
+        "release_read(A,epoch=0)"
+      ],
+      "also_failed": [
+        "fence_lemma"
+      ]
+    },
+    "no_cascade": {
+      "deleted_rule": "the fence and the repair look only at a member's own direct fact, not its delegation chain (rule F)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rB)",
+        "repair_commit(A)",
+        "release_read(A,epoch=1)"
+      ],
+      "also_failed": [
+        "fence_lemma"
+      ]
+    },
+    "no_update_path": {
+      "deleted_rule": "the removal commit carries no fresh path secret, so removed members derive the new key (rule C)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rA)",
+        "repair_commit(B)",
+        "release_read(B,epoch=1)"
+      ],
+      "also_failed": [
+        "key_confinement"
+      ]
+    },
+    "remove_without_commit": {
+      "deleted_rule": "the ledger drops members from the roster without a new epoch (rule C)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rA)",
+        "drop_members_without_commit",
+        "release_read(B,epoch=0)"
+      ],
+      "also_failed": []
+    },
+    "stale_epoch": {
+      "deleted_rule": "a sender may protect a released message under an older epoch it still holds (rule R)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rA)",
+        "repair_commit(B)",
+        "release_read(B,epoch=0)"
+      ],
+      "also_failed": []
+    },
+    "confused_deputy": {
+      "deleted_rule": "an invocation release checks the executor's facts but not the origin's (rule R)",
+      "safety_violated": [
+        "write_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(wA)",
+        "release_write(C,for-A)",
+        "accept(w0,A)"
+      ],
+      "also_failed": []
+    },
+    "no_one_shot": {
+      "deleted_rule": "a receiver may accept the same release twice (rule A)",
+      "safety_violated": [
+        "write_coherence"
+      ],
+      "shortest_counterexample": [
+        "release_write(A,self)",
+        "accept(w0,A)",
+        "accept(w0,A)"
+      ],
+      "also_failed": []
+    },
+    "no_certificate": {
+      "deleted_rule": "a receiver accepts a write on MLS sender authentication alone (rule A)",
+      "safety_violated": [
+        "write_coherence"
+      ],
+      "shortest_counterexample": [
+        "inject_write(A->B)"
+      ],
+      "also_failed": []
+    },
+    "external_rejoin": {
+      "deleted_rule": "the sequencer accepts an external commit, so a removed party rejoins with its retained signature key (condition K2)",
+      "safety_violated": [
+        "read_coherence"
+      ],
+      "shortest_counterexample": [
+        "revoke(rA)",
+        "repair_commit(B)",
+        "external_commit(A)",
+        "release_read(A,epoch=2)"
+      ],
+      "also_failed": [
+        "fence_lemma"
+      ]
+    }
+  },
+  "accepted": true
+}

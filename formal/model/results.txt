@@ -1,0 +1,29 @@
+good model: 1556555 states, 4104565 transitions, exhaustive within bounds
+  states with a read release: 1457995, with an accepted write: 1503996
+  violations: none
+  repair always possible: True
+  witness read_release_after_repair: revoke(rA) -> repair_commit(B) -> release_read(B,epoch=1)
+  witness cascade_repaired: revoke(rB) -> repair_commit(A)
+  witness readmitted_after_revocation: revoke(rA) -> reissue(rA) -> repair_commit(B) -> admit(A)
+  witness invocation_write_accepted: release_write(C,for-A) -> accept(w0,A)
+  witness revoked_reader_holds_old_key: revoke(rA) -> repair_commit(B)
+mutant no_fence: read_coherence
+    revoke(rA) -> release_read(A,epoch=0)
+mutant no_cascade: read_coherence
+    revoke(rB) -> repair_commit(A) -> release_read(A,epoch=1)
+mutant no_update_path: read_coherence
+    revoke(rA) -> repair_commit(B) -> release_read(B,epoch=1)
+mutant remove_without_commit: read_coherence
+    revoke(rA) -> drop_members_without_commit -> release_read(B,epoch=0)
+mutant stale_epoch: read_coherence
+    revoke(rA) -> repair_commit(B) -> release_read(B,epoch=0)
+mutant confused_deputy: write_coherence
+    revoke(wA) -> release_write(C,for-A) -> accept(w0,A)
+mutant no_one_shot: write_coherence
+    release_write(A,self) -> accept(w0,A) -> accept(w0,A)
+mutant no_certificate: write_coherence
+    inject_write(A->B)
+mutant external_rejoin: read_coherence
+    revoke(rA) -> repair_commit(B) -> external_commit(A) -> release_read(A,epoch=2)
+ACCEPTED
+exit=0
