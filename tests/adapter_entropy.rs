@@ -486,7 +486,7 @@ fn genesis<P: OpenMlsProvider>(
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root_signer = root_identity.signer().clone();
     let root = ClientEndpoint::found(
         GROUP,
@@ -495,7 +495,7 @@ fn genesis<P: OpenMlsProvider>(
         root_identity,
         root_provider,
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");
@@ -821,10 +821,10 @@ fn repair<P: OpenMlsProvider>(
         .map(|name| name.as_str().expect("removed name").to_owned())
         .collect();
     assert_eq!(planned, removed);
-    let acc_context =
-        hex::decode(plan["acc_context"].as_str().expect("acc_context hex")).expect("acc hex");
+    let apf_anchor =
+        hex::decode(plan["apf_anchor"].as_str().expect("apf_anchor hex")).expect("anchor hex");
     let staged = committer
-        .stage_repair(&planned, &acc_context)
+        .stage_repair(&planned, &apf_anchor)
         .expect("stage the planned repair");
     let (frontier, ack) = w.submit(&actor, "repair", &staged.parent, &staged.commit);
     for member in [&mut *committer, &mut *confirmer] {
@@ -1152,12 +1152,12 @@ fn failing_rand_fails_closed_without_kernel_mutation() {
     root_mls.set_failing(true);
     let plan = w.ok(ROOT, &json!({"command":"repair_plan"}));
     let after_plan = w.snapshot();
-    let acc_context =
-        hex::decode(plan["acc_context"].as_str().expect("acc_context hex")).expect("acc hex");
+    let apf_anchor =
+        hex::decode(plan["apf_anchor"].as_str().expect("apf_anchor hex")).expect("anchor hex");
     let refused = root_mls.refused();
     let err = fails(
         "stage_repair",
-        root.stage_repair(&["carol".to_owned()], &acc_context)
+        root.stage_repair(&["carol".to_owned()], &apf_anchor)
             .map(|_| ()),
     );
     assert!(
@@ -1214,7 +1214,7 @@ fn mock_qrng_provider_runs_genesis_admission_and_release() {
     assert_eq!(pending.apf_public_key(), dalek_public(&apf_seed));
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root_signer = root_identity.signer().clone();
     let mark = mock.log().len();
     let mut root = ClientEndpoint::found(
@@ -1224,7 +1224,7 @@ fn mock_qrng_provider_runs_genesis_admission_and_release() {
         root_identity,
         qrng_provider(&qrng),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group on the QRNG provider");

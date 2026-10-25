@@ -2,6 +2,8 @@
 
 11 September 2026 · Revision 0.1 · Awaiting Daniel’s confirmation
 
+> **Note, 25 October 2026.** This is the original specification and keeps its words. The theory source is now [`formal/`](../formal/README.md), which replaces the Third Edition. Authorization–Capability Coherence (ACC) is now *may–can concordance*, LAP-MLS is *the construction* (Rules F, C, R, A), and `Bridge_remove^ETK` is computational key confinement, Proposition 3 of the paper. [`formal/LEXICON.md`](../formal/LEXICON.md) has the full table. Delegation is no longer only an engineering extension: the paper covers it through the locality property, Eq. (2).
+
 ## 1. Goal and implementation boundary
 
 Build an experimental realization of Authorization–Capability Coherence (ACC), using the LAP-MLS construction from the **Third Edition Study Notes, 5 September 2026**, particularly chapters 7–11. The second edition remains a historical checkpoint. The accompanying Article Draft, sections 5–7, supports the mapping. Theory remains an independent research artifact; implementation findings feed back as evidence or counterexamples.

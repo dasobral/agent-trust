@@ -41,8 +41,8 @@ failed gate, or a gate that executes no tests must fail.
 - Record genuine command output and exit codes. Distinguish a behavioral
   failure from a build or setup failure.
 - Do not present simulated MLS as real MLS, or treat a boolean flag as a
-  security proof. `full_lap_mls` remains `false` until the durable authority
-  kernel is actually coupled to the complete qualifying MLS policy binding.
+  security proof. `full_construction_mls` is `true` only under the claim gate
+  of [`docs/adapter-contract.md`](docs/adapter-contract.md) §11.
 
 ## Pull requests
 

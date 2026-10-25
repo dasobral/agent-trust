@@ -32,4 +32,4 @@ The staged-KeyPackage milestone is enabled because all of the following pass aga
 - qualifying removal with retained-key exclusion;
 - complete `agent-trust` Rust and Python verification.
 
-`full_lap_mls` remains `false` because this milestone does not yet implement the complete durable APF adapter, `acc_context`, `authz_incarnation`, or policy-bound repair coupling. (Milestone record. The current claim is in the README: `full_lap_mls` was recorded `true` on 2026-10-24 under the claim gate of `docs/adapter-contract.md` §11.) The OpenMLS fork remains a separate repository and is consumed only through the exact Git revision.
+`full_lap_mls` (now `full_construction_mls`, C-43) remains `false` because this milestone does not yet implement the complete durable APF adapter, `acc_context`, `authz_incarnation`, or policy-bound repair coupling. (Milestone record. The current claim is in the README: `full_lap_mls` was recorded `true` on 2026-10-24 under the claim gate of `docs/adapter-contract.md` §11.) The OpenMLS fork remains a separate repository and is consumed only through the exact Git revision.

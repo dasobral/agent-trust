@@ -2,7 +2,7 @@
 //! adversary and read rejoin (`docs/adapter-contract.md` §4.7, §4.12 C-20 to C-25, §5.4,
 //! the read part of §5.5; `docs/authority-contract.md` `revoke`, D-3, R-3).
 //!
-//! The `acc_context` payload, the confirmation TBS and `epoch_authenticator_hash` are
+//! The `apf_anchor` payload, the confirmation TBS and `epoch_authenticator_hash` are
 //! encoded, decoded or recomputed here with `tls_codec` and `sha2`, independently of
 //! `src/wire.rs`. Raw OpenMLS state is used through `ClientEndpoint::mls_parts_mut`,
 //! which honest code never uses, to build non-canonical repair commits, to read epoch
@@ -48,7 +48,7 @@ const CONTENT_TYPE: &[u8] = b"text/plain";
 
 // Spelled out here independently of `src/wire.rs`.
 const T_CONFIRM_LABEL: &[u8] = b"agent-trust/confirm/v1";
-const ACC_EXT: u16 = 0xf043;
+const ANCHOR_EXT: u16 = 0xf043;
 const INC_EXT: u16 = 0xf044;
 /// C-9 right code of `read`.
 const READ_CODE: u8 = 1;
@@ -109,9 +109,9 @@ impl<'a> TlsReader<'a> {
     }
 }
 
-/// §4.2 `AccContext`, as plain test data.
+/// §4.2 `ApfAnchor`, as plain test data.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct TestAcc {
+struct TestAnchor {
     version: u8,
     apf_key_id: Vec<u8>,
     group: Vec<u8>,
@@ -119,9 +119,9 @@ struct TestAcc {
     policy_digest: Vec<u8>,
 }
 
-fn decode_acc(bytes: &[u8]) -> TestAcc {
+fn decode_anchor(bytes: &[u8]) -> TestAnchor {
     let mut reader = TlsReader::new(bytes);
-    let acc = TestAcc {
+    let anchor = TestAnchor {
         version: reader.u8(),
         apf_key_id: reader.opaque(),
         group: reader.opaque(),
@@ -129,15 +129,15 @@ fn decode_acc(bytes: &[u8]) -> TestAcc {
         policy_digest: reader.opaque(),
     };
     reader.finish();
-    acc
+    anchor
 }
 
-fn encode_acc(acc: &TestAcc) -> Vec<u8> {
-    let mut out = vec![acc.version];
-    out.extend(vl(&acc.apf_key_id));
-    out.extend(vl(&acc.group));
-    out.extend(tls_u64(acc.policy_revision));
-    out.extend(vl(&acc.policy_digest));
+fn encode_anchor(anchor: &TestAnchor) -> Vec<u8> {
+    let mut out = vec![anchor.version];
+    out.extend(vl(&anchor.apf_key_id));
+    out.extend(vl(&anchor.group));
+    out.extend(tls_u64(anchor.policy_revision));
+    out.extend(vl(&anchor.policy_digest));
     out
 }
 
@@ -298,26 +298,26 @@ fn leaf_index(client: &mut Client, subject: &str) -> LeafNodeIndex {
         .unwrap_or_else(|| panic!("{subject} is in the tree"))
 }
 
-/// The client's single `acc_context` payload.
-fn current_acc_bytes(client: &mut Client) -> Vec<u8> {
+/// The client's single `apf_anchor` payload.
+fn current_anchor_bytes(client: &mut Client) -> Vec<u8> {
     let (group, _, _) = client.mls_parts_mut();
     let payloads = unknown_payloads(
         group.public_group().group_context().extensions().iter(),
-        ACC_EXT,
+        ANCHOR_EXT,
     );
-    assert_eq!(payloads.len(), 1, "exactly one acc_context");
+    assert_eq!(payloads.len(), 1, "exactly one apf_anchor");
     payloads[0].clone()
 }
 
-/// The member's current GroupContext extensions with `acc_context` replaced by `acc`.
-fn extensions_with_acc(client: &mut Client, acc: &[u8]) -> Extensions<GroupContext> {
+/// The member's current GroupContext extensions with `apf_anchor` replaced by `anchor`.
+fn extensions_with_anchor(client: &mut Client, anchor: &[u8]) -> Extensions<GroupContext> {
     let (group, _, _) = client.mls_parts_mut();
     let current = group.public_group().group_context().extensions().clone();
     let replaced: Vec<Extension> = current
         .iter()
         .map(|extension| match extension {
-            Extension::Unknown(t, _) if *t == ACC_EXT => {
-                Extension::Unknown(ACC_EXT, UnknownExtension(acc.to_vec()))
+            Extension::Unknown(t, _) if *t == ANCHOR_EXT => {
+                Extension::Unknown(ANCHOR_EXT, UnknownExtension(anchor.to_vec()))
             }
             _ => extension.clone(),
         })
@@ -327,15 +327,15 @@ fn extensions_with_acc(client: &mut Client, acc: &[u8]) -> Extensions<GroupConte
 
 /// Builds and stages, without merging, a commit through the raw OpenMLS group: one
 /// Remove per name in `removed`, a GroupContextExtensions proposal replacing
-/// `acc_context` when `acc` is given, and `force_self_update(force_path)`.
+/// `apf_anchor` when `anchor` is given, and `force_self_update(force_path)`.
 fn raw_repair(
     client: &mut Client,
     removed: &[&str],
-    acc: Option<&[u8]>,
+    anchor: Option<&[u8]>,
     force_path: bool,
 ) -> Vec<u8> {
     let indices: Vec<LeafNodeIndex> = removed.iter().map(|s| leaf_index(client, s)).collect();
-    let extensions = acc.map(|acc| extensions_with_acc(client, acc));
+    let extensions = anchor.map(|anchor| extensions_with_anchor(client, anchor));
     let (group, provider, signer) = client.mls_parts_mut();
     let mut builder = group.commit_builder().propose_removals(indices);
     if let Some(extensions) = extensions {
@@ -456,7 +456,7 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
 }
@@ -523,7 +523,7 @@ fn genesis(tag: &str) -> (World, Client) {
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root = ClientEndpoint::found(
         GROUP,
         ROOT,
@@ -531,7 +531,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         client_provider(&format!("{tag}/root")),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");
@@ -782,12 +782,12 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            acc_context: hex::decode(
-                response["acc_context"]
+            apf_anchor: hex::decode(
+                response["apf_anchor"]
                     .as_str()
-                    .expect("acc_context hex string"),
+                    .expect("apf_anchor hex string"),
             )
-            .expect("acc_context is hex"),
+            .expect("apf_anchor is hex"),
             policy_revision: response["policy_revision"]
                 .as_u64()
                 .expect("plan policy_revision"),
@@ -1029,7 +1029,7 @@ fn commit_repair_with(
 ) -> Repaired {
     let actor = committer.subject().to_owned();
     let staged = committer
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
     let accepted = w
@@ -1210,8 +1210,8 @@ fn read_revocation_fences_release_until_confirmed_repair() {
     )
     .expect("policy_digest is hex");
     assert_eq!(
-        decode_acc(&plan.acc_context),
-        TestAcc {
+        decode_anchor(&plan.apf_anchor),
+        TestAnchor {
             version: 1,
             apf_key_id: w.apf_key_id(),
             group: GROUP.as_bytes().to_vec(),
@@ -1227,7 +1227,7 @@ fn read_revocation_fences_release_until_confirmed_repair() {
 
     // The canonical repair commit.
     let staged = root
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .expect("stage repair");
     assert_eq!(staged.parent, parent);
     let accepted = w
@@ -1266,7 +1266,7 @@ fn read_revocation_fences_release_until_confirmed_repair() {
             accepted.frontier
         );
         assert_eq!(tree_members(member), vec!["carol", "dave", ROOT]);
-        assert_eq!(current_acc_bytes(member), plan.acc_context);
+        assert_eq!(current_anchor_bytes(member), plan.apf_anchor);
     }
 
     // Canonical but unconfirmed: still fenced.
@@ -1309,7 +1309,7 @@ fn repair_missing_one_revoked_reader_is_noncanonical() {
     assert_eq!(plan.removed, vec!["bob", "carol"]);
 
     // Only bob removed.
-    let commit = raw_repair(&mut root, &["bob"], Some(&plan.acc_context), true);
+    let commit = raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
     let checkpoint = w.checkpoint();
     assert_eq!(checkpoint["roster"], json!([ROOT, "bob", "carol", "dave"]));
@@ -1337,7 +1337,7 @@ fn repair_removing_a_continuing_reader_is_noncanonical() {
     let plan = w.plan(ROOT);
     assert_eq!(plan.removed, vec!["bob"]);
 
-    let commit = raw_repair(&mut root, &["bob", "dave"], Some(&plan.acc_context), true);
+    let commit = raw_repair(&mut root, &["bob", "dave"], Some(&plan.apf_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
     assert_eq!(w.roster(), vec![ROOT, "bob", "carol", "dave"]);
 
@@ -1347,32 +1347,35 @@ fn repair_removing_a_continuing_reader_is_noncanonical() {
 }
 
 #[test]
-fn repair_without_acc_context_update_is_noncanonical() {
+fn repair_without_apf_anchor_update_is_noncanonical() {
     let Setup {
         mut w,
         mut root,
         mut carol,
         mut dave,
         ..
-    } = setup("no-acc");
+    } = setup("no-anchor");
     w.revoke("bob", "read");
     let plan = w.plan(ROOT);
-    let parent_acc = current_acc_bytes(&mut root);
-    assert_ne!(parent_acc, plan.acc_context, "the plan changes acc_context");
+    let parent_anchor = current_anchor_bytes(&mut root);
+    assert_ne!(
+        parent_anchor, plan.apf_anchor,
+        "the plan changes apf_anchor"
+    );
 
     // Remove-only commit: no GroupContextExtensions proposal.
     let commit = raw_repair(&mut root, &["bob"], None, true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
-    // A GroupContextExtensions proposal that keeps the parent acc_context.
-    let commit = raw_repair(&mut root, &["bob"], Some(&parent_acc), true);
+    // A GroupContextExtensions proposal that keeps the parent apf_anchor.
+    let commit = raw_repair(&mut root, &["bob"], Some(&parent_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
     // The planned revision with a stale policy digest (the parent group's).
-    let mut stale = decode_acc(&plan.acc_context);
-    stale.policy_digest = decode_acc(&parent_acc).policy_digest;
-    let stale = encode_acc(&stale);
-    assert_ne!(stale, plan.acc_context);
+    let mut stale = decode_anchor(&plan.apf_anchor);
+    stale.policy_digest = decode_anchor(&parent_anchor).policy_digest;
+    let stale = encode_anchor(&stale);
+    assert_ne!(stale, plan.apf_anchor);
     let commit = raw_repair(&mut root, &["bob"], Some(&stale), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
@@ -1383,7 +1386,7 @@ fn repair_without_acc_context_update_is_noncanonical() {
         plan.clone(),
         &mut [&mut carol, &mut dave],
     );
-    assert_eq!(current_acc_bytes(&mut carol), plan.acc_context);
+    assert_eq!(current_anchor_bytes(&mut carol), plan.apf_anchor);
     open_fence(&mut w, &mut root, &mut dave);
 }
 
@@ -1404,9 +1407,9 @@ fn repair_with_policy_revision_older_than_fence_is_noncanonical() {
     assert_eq!(plan.policy_revision, fence_revision);
 
     // A forged plan below the fence revision.
-    let mut forged = decode_acc(&plan.acc_context);
+    let mut forged = decode_anchor(&plan.apf_anchor);
     forged.policy_revision = fence_revision - 1;
-    let forged = encode_acc(&forged);
+    let forged = encode_anchor(&forged);
     let commit = raw_repair(&mut root, &["bob"], Some(&forged), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
@@ -1421,17 +1424,17 @@ fn repair_with_policy_revision_older_than_fence_is_noncanonical() {
     );
     assert_eq!(checkpoint["fence_revision"], json!(fence_revision));
 
-    // The old plan's acc_context no longer matches.
-    let commit = raw_repair(&mut root, &["bob"], Some(&plan.acc_context), true);
+    // The old plan's apf_anchor no longer matches.
+    let commit = raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
     // A fresh plan succeeds.
     let fresh = w.plan(ROOT);
     assert_eq!(fresh.removed, plan.removed);
     assert_eq!(fresh.policy_revision, plan.policy_revision + 1);
-    assert_ne!(fresh.acc_context, plan.acc_context);
+    assert_ne!(fresh.apf_anchor, plan.apf_anchor);
     assert_eq!(
-        decode_acc(&fresh.acc_context).policy_revision,
+        decode_anchor(&fresh.apf_anchor).policy_revision,
         fresh.policy_revision
     );
     commit_repair_with(
@@ -1440,7 +1443,7 @@ fn repair_with_policy_revision_older_than_fence_is_noncanonical() {
         fresh.clone(),
         &mut [&mut carol, &mut dave],
     );
-    assert_eq!(current_acc_bytes(&mut dave), fresh.acc_context);
+    assert_eq!(current_anchor_bytes(&mut dave), fresh.apf_anchor);
     open_fence(&mut w, &mut root, &mut dave);
 }
 
@@ -1461,7 +1464,7 @@ fn repair_without_update_path_is_noncanonical() {
     let plan = w.plan(ROOT);
 
     // OpenMLS adds a path without `force_self_update`.
-    raw_repair(&mut root, &["bob"], Some(&plan.acc_context), false);
+    raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), false);
     assert!(
         pending_has_path(&mut root),
         "Remove + GroupContextExtensions commit carries an UpdatePath"
@@ -1475,12 +1478,12 @@ fn repair_without_update_path_is_noncanonical() {
     root.discard_pending().expect("discard");
 
     // A repair from the removed member itself (it cannot remove its own leaf).
-    let commit = raw_repair(&mut bob, &[], Some(&plan.acc_context), true);
+    let commit = raw_repair(&mut bob, &[], Some(&plan.apf_anchor), true);
     refused_repair(&mut w, "bob", &mut bob, &commit, "noncanonical_commit");
 
     // The honest commit bytes submitted by a non-member and by another member.
     let staged = root
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .expect("stage repair");
     assert!(pending_has_path(&mut root));
     rejected(

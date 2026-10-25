@@ -24,7 +24,7 @@ use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 
 const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
-const ACC_CONTEXT: u16 = 0xf043;
+const APF_ANCHOR: u16 = 0xf043;
 const AUTHZ_INCARNATION: u16 = 0xf044;
 
 // ---------------------------------------------------------------------------
@@ -202,12 +202,12 @@ fn base_capabilities() -> Capabilities {
 }
 
 /// Leaf capabilities declaring the adapter's unknown extension types.
-fn acc_capabilities() -> Capabilities {
+fn anchor_capabilities() -> Capabilities {
     Capabilities::builder()
         .ciphersuites(vec![CIPHERSUITE])
         .credentials(vec![CredentialType::Basic])
         .extensions(vec![
-            ExtensionType::Unknown(ACC_CONTEXT),
+            ExtensionType::Unknown(APF_ANCHOR),
             ExtensionType::Unknown(AUTHZ_INCARNATION),
         ])
         .build()
@@ -659,7 +659,7 @@ fn leaf_node_extensions_survive_key_package_into_ratchet_tree() {
         OpenMlsRustCrypto::default(),
         "alice",
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
-        acc_capabilities(),
+        anchor_capabilities(),
         vec![],
     );
     let mut observer = Observer::from_member(&alice);
@@ -668,7 +668,7 @@ fn leaf_node_extensions_survive_key_package_into_ratchet_tree() {
     let bob_candidate = candidate(
         OpenMlsRustCrypto::default(),
         "bob",
-        acc_capabilities(),
+        anchor_capabilities(),
         Some(
             Extensions::single(unknown(AUTHZ_INCARNATION, &incarnation))
                 .expect("leaf extension valid"),
@@ -721,17 +721,17 @@ fn leaf_node_extensions_survive_key_package_into_ratchet_tree() {
 #[test]
 fn one_commit_carries_removals_gce_and_forced_path() {
     // Catches an inability to express the repair commit (Remove + new
-    // acc_context + UpdatePath) as one commit visible to the sequencer.
-    let acc_v0 = b"acc_context policy_revision=0".to_vec();
-    let acc_v1 = b"acc_context policy_revision=1".to_vec();
+    // apf_anchor + UpdatePath) as one commit visible to the sequencer.
+    let anchor_v0 = b"apf_anchor policy_revision=0".to_vec();
+    let anchor_v1 = b"apf_anchor policy_revision=1".to_vec();
     let mut alice = found_group(
         OpenMlsRustCrypto::default(),
         "alice",
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
-        acc_capabilities(),
+        anchor_capabilities(),
         vec![
-            required_capabilities(&[ACC_CONTEXT]),
-            unknown(ACC_CONTEXT, &acc_v0),
+            required_capabilities(&[APF_ANCHOR]),
+            unknown(APF_ANCHOR, &anchor_v0),
         ],
     );
     let bob = admit(
@@ -740,7 +740,7 @@ fn one_commit_carries_removals_gce_and_forced_path() {
         candidate(
             OpenMlsRustCrypto::default(),
             "bob",
-            acc_capabilities(),
+            anchor_capabilities(),
             None,
         ),
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
@@ -749,7 +749,7 @@ fn one_commit_carries_removals_gce_and_forced_path() {
     let carol_candidate = candidate(
         OpenMlsRustCrypto::default(),
         "carol",
-        acc_capabilities(),
+        anchor_capabilities(),
         None,
     );
     let (commit, welcome) = stage_add(&mut alice, vec![carol_candidate.key_package.clone()]);
@@ -758,14 +758,14 @@ fn one_commit_carries_removals_gce_and_forced_path() {
     let mut carol = join(carol_candidate, welcome, PURE_PLAINTEXT_WIRE_FORMAT_POLICY);
     let mut observer = Observer::from_member(&alice);
     assert_eq!(
-        observer.context().extensions().unknown(ACC_CONTEXT),
-        Some(&UnknownExtension(acc_v0.clone()))
+        observer.context().extensions().unknown(APF_ANCHOR),
+        Some(&UnknownExtension(anchor_v0.clone()))
     );
 
     let bob_index = bob.index();
     let new_extensions = Extensions::from_vec(vec![
-        required_capabilities(&[ACC_CONTEXT]),
-        unknown(ACC_CONTEXT, &acc_v1),
+        required_capabilities(&[APF_ANCHOR]),
+        unknown(APF_ANCHOR, &anchor_v1),
     ])
     .expect("valid GC extensions");
     let bundle = alice
@@ -811,18 +811,18 @@ fn one_commit_carries_removals_gce_and_forced_path() {
     );
     let successor = staged.group_context().clone();
     assert_eq!(
-        successor.extensions().unknown(ACC_CONTEXT),
-        Some(&UnknownExtension(acc_v1.clone())),
-        "successor context carries the new acc_context"
+        successor.extensions().unknown(APF_ANCHOR),
+        Some(&UnknownExtension(anchor_v1.clone())),
+        "successor context carries the new apf_anchor"
     );
     assert_eq!(
         successor
             .extensions()
             .iter()
-            .filter(|e| e.extension_type() == ExtensionType::Unknown(ACC_CONTEXT))
+            .filter(|e| e.extension_type() == ExtensionType::Unknown(APF_ANCHOR))
             .count(),
         1,
-        "exactly one acc_context"
+        "exactly one apf_anchor"
     );
 
     observer.merge(staged);
@@ -835,15 +835,15 @@ fn one_commit_carries_removals_gce_and_forced_path() {
 }
 
 #[test]
-fn required_capabilities_reject_key_package_without_acc_extensions() {
+fn required_capabilities_reject_key_package_without_anchor_extensions() {
     // Catches required_capabilities that are not enforced on Add, which would
-    // let a client that ignores acc_context / authz_incarnation join.
+    // let a client that ignores apf_anchor / authz_incarnation join.
     let mut alice = found_group(
         OpenMlsRustCrypto::default(),
         "alice",
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
-        acc_capabilities(),
-        vec![required_capabilities(&[ACC_CONTEXT, AUTHZ_INCARNATION])],
+        anchor_capabilities(),
+        vec![required_capabilities(&[APF_ANCHOR, AUTHZ_INCARNATION])],
     );
     assert_eq!(
         alice
@@ -852,7 +852,7 @@ fn required_capabilities_reject_key_package_without_acc_extensions() {
             .expect("required capabilities set")
             .extension_types(),
         &[
-            ExtensionType::Unknown(ACC_CONTEXT),
+            ExtensionType::Unknown(APF_ANCHOR),
             ExtensionType::Unknown(AUTHZ_INCARNATION)
         ]
     );
@@ -864,7 +864,7 @@ fn required_capabilities_reject_key_package_without_acc_extensions() {
         candidate(
             OpenMlsRustCrypto::default(),
             "bob",
-            acc_capabilities(),
+            anchor_capabilities(),
             None,
         ),
         PURE_PLAINTEXT_WIRE_FORMAT_POLICY,
@@ -885,7 +885,7 @@ fn required_capabilities_reject_key_package_without_acc_extensions() {
         Capabilities::builder()
             .ciphersuites(vec![CIPHERSUITE])
             .credentials(vec![CredentialType::Basic])
-            .extensions(vec![ExtensionType::Unknown(ACC_CONTEXT)])
+            .extensions(vec![ExtensionType::Unknown(APF_ANCHOR)])
             .build(),
         None,
     );

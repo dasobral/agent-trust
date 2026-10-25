@@ -2,10 +2,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A research laboratory for **Authorization–Capability Coherence (ACC)**: keeping
-an agent's authorization and its cryptographic capability in one consistent
-state when the agent is a member of an [OpenMLS](https://github.com/openmls/openmls)
-group.
+A research laboratory for **may–can concordance**: an authority decides who
+*may* act on a group, MLS decides who *can*, and the two must agree at the
+instant each action is released. Here the actors are agents, each a member of
+an [OpenMLS](https://github.com/openmls/openmls) group. The theory is in
+[`formal/`](formal/): the paper *Two clocks, one cut: may–can concordance and
+revocation in MLS groups* and its exhaustive model check.
 
 Authorization (who may read or write) and MLS group membership (who holds the
 keys) usually change independently, so they can drift apart: a revoked agent can
@@ -23,13 +25,13 @@ messaging system.
 
 | Claim | Result |
 | --- | --- |
-| `full_lap_mls` | **`true`**, recorded 2026-10-25 with the integration gate run in both suites, `pq` and `classical` ([log](evidence/verify-2026-10-25-pq.txt)) |
+| `full_construction_mls` | **`true`**, recorded 2026-10-25 with the integration gate run in both suites, `pq` and `classical` ([log](evidence/verify-2026-10-25-c43.txt)) |
 | Post quantum suite | **Default** in the lab: MLS `0x0052`, X-Wing key exchange (ML-KEM-768 with X25519) and ML-DSA-44 signatures for every identity and the APF ([C-42](docs/adapter-contract.md#83-post-quantum-suite-c-42-d-13)); `classical` (`0x0001`) stays available |
-| `Bridge_remove^ETK` | **Open** cryptographic proof obligation |
+| Key confinement, computational ([Proposition 3](formal/README.md#status-of-each-claim); the Third Edition's `Bridge_remove^ETK`) | **Conditional.** Derived from ETK Theorem 1 under K1–K5. Three items are open: R-11 is not implemented, so the result covers the construction but not the code's repair commit; ETK was matched against its conference text, not its full proof; and for the post-quantum suite, the strong case of the corrected ML-DSA proof is unchecked and ETK's proof holds against classical adversaries only. |
 | Live Entropy Core run | **Not yet run** |
 | HPKE encapsulation randomness | **Derived** from the selected source: HMAC-DRBG output seeded from it ([§8](docs/adapter-contract.md#8-entropy-seam)) |
 
-`full_lap_mls` is `true` because one recorded run of `python3 scripts/verify.py`
+`full_construction_mls` is `true` because one recorded run of `python3 scripts/verify.py`
 passed every gate of the claim gate
 ([`docs/adapter-contract.md`](docs/adapter-contract.md) §11): the build, every
 Rust and Python test, and the lab integration run, once in each suite. In that run the independent
@@ -128,6 +130,7 @@ fallback to another source.
 | `tests/` | Rust contract, adversarial and recovery tests |
 | `harness/` | Python oracle and black-box tests of the CLI and lab |
 | `scripts/verify.py` | Fail-closed public verifier |
+| `formal/` | Paper, finite-state model, alignment notes |
 | `docs/` | Specification and contracts |
 | `evidence/` | Recorded red/green runs, verifier logs and the claim manifest |
 | `examples/`, `config/` | A sample lab session and an entropy configuration |
@@ -136,6 +139,8 @@ fallback to another source.
 
 | Document | Contents |
 | --- | --- |
+| [`formal/README.md`](formal/README.md) | The paper, the model check and the status of each claim |
+| [`formal/LEXICON.md`](formal/LEXICON.md) | Names used by the theory and the code |
 | [`docs/adapter-contract.md`](docs/adapter-contract.md) | Adapter, client and lab contract; entropy seam; claim gate |
 | [`docs/authority-contract.md`](docs/authority-contract.md) | APF kernel commands |
 | [`docs/trace-contract.md`](docs/trace-contract.md) | Trace format the oracle checks |

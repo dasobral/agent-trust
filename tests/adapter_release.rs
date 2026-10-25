@@ -434,7 +434,7 @@ fn genesis(tag: &str) -> (World, Client) {
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root = ClientEndpoint::found(
         GROUP,
         ROOT,
@@ -442,7 +442,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         client_provider(&format!("{tag}/root")),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");

@@ -34,9 +34,9 @@ use crate::authority::Authority;
 use crate::client::{context_frontier, unknown_payloads, ADAPTER_EXTENSIONS, ZERO_HASH};
 use crate::suite::{Suite, SEED_LEN};
 use crate::wire::{
-    AccContext, AckKind, AdmissionCertificate, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
+    AckKind, AdmissionCertificate, ApfAnchor, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
     Envelope, FounderCertificate, Frontier, ReleaseCertificate, RepairConfirmation, Right,
-    SignedStructure, ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE,
+    SignedStructure, ADMISSION_EXTENSION_TYPE, APF_ANCHOR_EXTENSION_TYPE,
     AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
@@ -451,11 +451,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             if sequencer.frontier()? != checkpoint_frontier(&checkpoint)? {
                 return Err("binding_mismatch: sequencer frontier".into());
             }
-            let acc = sequencer.acc_context()?;
-            if acc.apf_key_id != Sha256::digest(adapter.apf.public()).as_slice()
-                || acc.group != adapter.group
+            let anchor = sequencer.apf_anchor()?;
+            if anchor.apf_key_id != Sha256::digest(adapter.apf.public()).as_slice()
+                || anchor.group != adapter.group
             {
-                return Err("binding_mismatch: sequencer acc_context".into());
+                return Err("binding_mismatch: sequencer apf_anchor".into());
             }
         }
         Ok(adapter)
@@ -1673,17 +1673,17 @@ impl Sequencer {
         context_frontier(self.group.group_context())
     }
 
-    fn acc_payloads(&self) -> Vec<Vec<u8>> {
+    fn anchor_payloads(&self) -> Vec<Vec<u8>> {
         unknown_payloads(
             self.group.group_context().extensions(),
-            ACC_CONTEXT_EXTENSION_TYPE,
+            APF_ANCHOR_EXTENSION_TYPE,
         )
     }
 
-    fn acc_context(&self) -> Result<AccContext, String> {
-        match self.acc_payloads().as_slice() {
-            [acc] => AccContext::decode(acc),
-            _ => Err("binding_mismatch: acc_context count".into()),
+    fn apf_anchor(&self) -> Result<ApfAnchor, String> {
+        match self.anchor_payloads().as_slice() {
+            [anchor] => ApfAnchor::decode(anchor),
+            _ => Err("binding_mismatch: apf_anchor count".into()),
         }
     }
 
@@ -1872,7 +1872,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             signature_key: root_key.to_vec(),
         }
         .sign(&apf)?;
-        let acc_context = AccContext {
+        let apf_anchor = ApfAnchor {
             version: 1,
             apf_key_id,
             group: group.to_owned(),
@@ -1893,7 +1893,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             seed,
             apf,
             founder_certificate,
-            acc_context,
+            apf_anchor,
             crash: None,
         })
     }
@@ -1987,17 +1987,17 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let (subject, certificate) = self.check_admission(&key_package, now)?;
 
         // Step 6.
-        let parent_accs = self
+        let parent_anchors = self
             .sequencer
             .as_ref()
             .ok_or("uninitialized: no group")?
-            .acc_payloads();
-        let successor_accs = unknown_payloads(
+            .anchor_payloads();
+        let successor_anchors = unknown_payloads(
             staged.group_context().extensions(),
-            ACC_CONTEXT_EXTENSION_TYPE,
+            APF_ANCHOR_EXTENSION_TYPE,
         );
-        if parent_accs.len() != 1 || successor_accs != parent_accs {
-            return Err(noncanonical("acc_context changed"));
+        if parent_anchors.len() != 1 || successor_anchors != parent_anchors {
+            return Err(noncanonical("apf_anchor changed"));
         }
 
         // Step 7: the kernel CAS and authorization; its errors pass through.
@@ -2105,7 +2105,7 @@ impl Drop for Seed {
 }
 
 /// Genesis in progress (C-8): the APF key, founder certificate and genesis
-/// `acc_context` exist in memory only; nothing is written until `complete`.
+/// `apf_anchor` exist in memory only; nothing is written until `complete`.
 pub struct GenesisPending<P: OpenMlsProvider, C: Clock> {
     provider: P,
     clock: C,
@@ -2120,7 +2120,7 @@ pub struct GenesisPending<P: OpenMlsProvider, C: Clock> {
     seed: Seed,
     apf: SignatureKeyPair,
     founder_certificate: Vec<u8>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     /// The crash point armed by `crash_after` (C-33).
     crash: Option<CrashPoint>,
 }
@@ -2140,9 +2140,9 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
         &self.founder_certificate
     }
 
-    /// Encoded genesis `acc_context` payload for the root client.
-    pub fn acc_context(&self) -> &[u8] {
-        &self.acc_context
+    /// Encoded genesis `apf_anchor` payload for the root client.
+    pub fn apf_anchor(&self) -> &[u8] {
+        &self.apf_anchor
     }
 
     /// Validates the root's group, writes the adapter files and initializes the kernel
@@ -2163,11 +2163,11 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             seed,
             apf,
             founder_certificate,
-            acc_context,
+            apf_anchor,
             crash,
             ..
         } = self;
-        let acc = AccContext::decode(&acc_context)?;
+        let anchor = ApfAnchor::decode(&apf_anchor)?;
         let paths = AdapterPaths::new(&dir);
         let mut claimed = Claimed::default();
         let mut crashed = false;
@@ -2184,7 +2184,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             drop(key_file);
 
             // §5.1 step 5: the kernel starts at the genesis frontier, with the policy
-            // the group's acc_context already commits to.
+            // the group's apf_anchor already commits to.
             let mut kernel = Authority::open(&paths.authority)?;
             kernel.execute(
                 json!({"command":"init", "group":group, "root":root, "branch":frontier.branch}),
@@ -2195,8 +2195,8 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 return Err(CRASHED.to_string());
             }
             let checkpoint = kernel.execute(json!({"command":"checkpoint"}))?;
-            if checkpoint["policy_revision"] != json!(acc.policy_revision)
-                || checkpoint["policy_digest"] != json!(hex::encode(&acc.policy_digest))
+            if checkpoint["policy_revision"] != json!(anchor.policy_revision)
+                || checkpoint["policy_digest"] != json!(hex::encode(&anchor.policy_digest))
             {
                 return Err("binding_mismatch: genesis policy digest".to_string());
             }
@@ -2256,7 +2256,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
 
     /// §5.1 step 4: builds a throwaway `PublicGroup` in memory and checks the group id,
     /// epoch, ciphersuite, the single root leaf, its key and `authz_incarnation`, the
-    /// required capabilities and the exact genesis `acc_context`. Returns the frontier.
+    /// required capabilities and the exact genesis `apf_anchor`. Returns the frontier.
     fn validate(&self, group_info: &[u8], ratchet_tree: &[u8]) -> Result<Frontier, String> {
         let mismatch = |detail: &str| format!("binding_mismatch: genesis {detail}");
         let storage = MemoryStorage::default();
@@ -2276,9 +2276,9 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
         {
             return Err(mismatch("group id, epoch or ciphersuite"));
         }
-        let accs = unknown_payloads(context.extensions(), ACC_CONTEXT_EXTENSION_TYPE);
-        if accs != [self.acc_context.clone()] {
-            return Err(mismatch("acc_context"));
+        let anchors = unknown_payloads(context.extensions(), APF_ANCHOR_EXTENSION_TYPE);
+        if anchors != [self.apf_anchor.clone()] {
+            return Err(mismatch("apf_anchor"));
         }
         let required = context
             .required_capabilities()
@@ -2713,8 +2713,8 @@ fn insert_confirmation(store: &Connection, record: &ConfirmationRecord) -> rusql
 struct RepairPlan {
     /// Sorted roster members whose read grant is inactive.
     removed: Vec<String>,
-    /// The planned `acc_context` payload at the current policy revision and digest.
-    acc_context: Vec<u8>,
+    /// The planned `apf_anchor` payload at the current policy revision and digest.
+    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
     roster: Vec<String>,
@@ -2779,7 +2779,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             .as_str()
             .and_then(|digest| hex::decode(digest).ok())
             .ok_or("malformed: kernel policy_digest")?;
-        let acc_context = AccContext {
+        let apf_anchor = ApfAnchor {
             version: 1,
             apf_key_id: self.apf_key_id(),
             group: self.group.clone(),
@@ -2789,7 +2789,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         .encode()?;
         Ok(RepairPlan {
             removed,
-            acc_context,
+            apf_anchor,
             policy_revision,
             parent: checkpoint_frontier(checkpoint)?,
             roster,
@@ -2805,7 +2805,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let plan = self.plan_from(&checkpoint)?;
         Ok(json!({
             "removed": plan.removed,
-            "acc_context": hex::encode(&plan.acc_context),
+            "apf_anchor": hex::encode(&plan.apf_anchor),
             "policy_revision": plan.policy_revision,
             "parent_epoch": plan.parent.epoch,
             "parent_branch": plan.parent.branch,
@@ -2880,24 +2880,24 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         // Defense in depth: RFC 9420 §12.4.2 already requires the path for these proposals.
         check_path_leaf(&staged, &sender)?;
 
-        // Step 5: the successor extensions are the parent's with exactly the acc_context
+        // Step 5: the successor extensions are the parent's with exactly the apf_anchor
         // replaced by the planned bytes.
-        let mut accs = 0;
+        let mut anchors = 0;
         let mut planned = Vec::new();
         for extension in sequencer.group.group_context().extensions().iter() {
             match extension {
-                Extension::Unknown(t, _) if *t == ACC_CONTEXT_EXTENSION_TYPE => {
-                    accs += 1;
+                Extension::Unknown(t, _) if *t == APF_ANCHOR_EXTENSION_TYPE => {
+                    anchors += 1;
                     planned.push(Extension::Unknown(
-                        ACC_CONTEXT_EXTENSION_TYPE,
-                        UnknownExtension(plan.acc_context.clone()),
+                        APF_ANCHOR_EXTENSION_TYPE,
+                        UnknownExtension(plan.apf_anchor.clone()),
                     ));
                 }
                 other => planned.push(other.clone()),
             }
         }
-        if accs != 1 {
-            return Err(noncanonical("parent acc_context count"));
+        if anchors != 1 {
+            return Err(noncanonical("parent apf_anchor count"));
         }
         let successor_extensions: Vec<Extension> = staged
             .group_context()
@@ -3344,13 +3344,13 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if other_leaf_extensions(path_leaf) != other_leaf_extensions(&sender) {
             return Err(noncanonical("UpdatePath leaf extensions"));
         }
-        let parent_accs = sequencer.acc_payloads();
-        let successor_accs = unknown_payloads(
+        let parent_anchors = sequencer.anchor_payloads();
+        let successor_anchors = unknown_payloads(
             staged.group_context().extensions(),
-            ACC_CONTEXT_EXTENSION_TYPE,
+            APF_ANCHOR_EXTENSION_TYPE,
         );
-        if parent_accs.len() != 1 || successor_accs != parent_accs {
-            return Err(noncanonical("acc_context changed"));
+        if parent_anchors.len() != 1 || successor_anchors != parent_anchors {
+            return Err(noncanonical("apf_anchor changed"));
         }
 
         // Step 6: the kernel applies the offered grant with fresh keys, proven above, and

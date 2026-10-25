@@ -75,7 +75,7 @@ fn run_mls_demo() -> i32 {
             "removed_reader_rejected": removed_reader_rejected,
             "continuing_reader_decrypts": continuing_reader_decrypts,
             "epoch_advanced": epoch_advanced,
-            "full_lap_mls": false,
+            "full_construction_mls": false,
             "staged_keypackage_binding_verified": staged_keypackage_binding_verified,
         });
         if old_snapshot_decrypts

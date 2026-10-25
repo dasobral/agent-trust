@@ -1,7 +1,7 @@
 //! Phase 4.2 contract tests: canonical frontier, public sequencer, genesis and admission
 //! (`docs/adapter-contract.md` §4.1–§4.6, §4.10 C-7 to C-12, §5.1, §5.2).
 //!
-//! The frontier, `acc_context`, `authz_incarnation` and the founder and admission
+//! The frontier, `apf_anchor`, `authz_incarnation` and the founder and admission
 //! certificate layouts are decoded or recomputed here with `tls_codec` and `sha2`,
 //! independently of `src/wire.rs`. Raw OpenMLS state is read through
 //! `ClientEndpoint::mls_parts_mut`, which honest code never uses.
@@ -49,7 +49,7 @@ const T_FRONTIER_LABEL: &[u8] = b"agent-trust/frontier/v1";
 const T_FOUNDER_LABEL: &[u8] = b"agent-trust/founder/v1";
 const T_ADMISSION_MAGIC: &[u8] = b"AT-APF-KP";
 const CERT_EXT: u16 = 0xf042;
-const ACC_EXT: u16 = 0xf043;
+const ANCHOR_EXT: u16 = 0xf043;
 const INC_EXT: u16 = 0xf044;
 const ZERO_HASH: [u8; 32] = [0; 32];
 
@@ -172,7 +172,7 @@ fn codes(rights: &[(Right, u64)]) -> Vec<(u8, u64)> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct TestAcc {
+struct TestAnchor {
     version: u8,
     apf_key_id: Vec<u8>,
     group: Vec<u8>,
@@ -180,9 +180,9 @@ struct TestAcc {
     policy_digest: Vec<u8>,
 }
 
-fn decode_acc(bytes: &[u8]) -> TestAcc {
+fn decode_anchor(bytes: &[u8]) -> TestAnchor {
     let mut reader = TlsReader::new(bytes);
-    let acc = TestAcc {
+    let anchor = TestAnchor {
         version: reader.u8(),
         apf_key_id: reader.opaque(),
         group: reader.opaque(),
@@ -190,15 +190,15 @@ fn decode_acc(bytes: &[u8]) -> TestAcc {
         policy_digest: reader.opaque(),
     };
     reader.finish();
-    acc
+    anchor
 }
 
-fn encode_acc(acc: &TestAcc) -> Vec<u8> {
-    let mut out = vec![acc.version];
-    out.extend(vl(&acc.apf_key_id));
-    out.extend(vl(&acc.group));
-    out.extend(tls_u64(acc.policy_revision));
-    out.extend(vl(&acc.policy_digest));
+fn encode_anchor(anchor: &TestAnchor) -> Vec<u8> {
+    let mut out = vec![anchor.version];
+    out.extend(vl(&anchor.apf_key_id));
+    out.extend(vl(&anchor.group));
+    out.extend(tls_u64(anchor.policy_revision));
+    out.extend(vl(&anchor.policy_digest));
     out
 }
 
@@ -393,13 +393,13 @@ struct World {
     clock: FixedClock,
     apf_public: Vec<u8>,
     founder_certificate: Vec<u8>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     seqs: HashMap<String, u64>,
     providers: u64,
 }
 
 /// Full genesis (§5.1): the root founds the group from the pending founder certificate
-/// and `acc_context`; the adapter completes from the root's GroupInfo and tree.
+/// and `apf_anchor`; the adapter completes from the root's GroupInfo and tree.
 fn genesis(tag: &str) -> (World, Client) {
     let dir = adapter_dir();
     let (provider, _) = scripted_provider(format!("admission-apf/{tag}").as_bytes());
@@ -416,7 +416,7 @@ fn genesis(tag: &str) -> (World, Client) {
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root = ClientEndpoint::found(
         GROUP,
         ROOT,
@@ -424,7 +424,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         client_provider(&format!("{tag}/root")),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");
@@ -441,7 +441,7 @@ fn genesis(tag: &str) -> (World, Client) {
             clock,
             apf_public,
             founder_certificate,
-            acc_context,
+            apf_anchor,
             seqs: HashMap::new(),
             providers: 0,
         },
@@ -768,7 +768,7 @@ fn leaf_capabilities() -> Capabilities {
         .credentials(vec![CredentialType::Basic])
         .extensions(vec![
             ExtensionType::Unknown(CERT_EXT),
-            ExtensionType::Unknown(ACC_EXT),
+            ExtensionType::Unknown(ANCHOR_EXT),
             ExtensionType::Unknown(INC_EXT),
         ])
         .build()
@@ -878,15 +878,18 @@ fn raw_commit(
         .expect("serialize commit")
 }
 
-/// The member's current GroupContext extensions with `acc_context` replaced by `acc`.
-fn extensions_with_acc(client: &mut Client, acc: Option<&TestAcc>) -> Extensions<GroupContext> {
+/// The member's current GroupContext extensions with `apf_anchor` replaced by `anchor`.
+fn extensions_with_anchor(
+    client: &mut Client,
+    anchor: Option<&TestAnchor>,
+) -> Extensions<GroupContext> {
     let (group, _, _) = client.mls_parts_mut();
     let current = group.public_group().group_context().extensions().clone();
     let replaced: Vec<Extension> = current
         .iter()
-        .map(|extension| match (extension, acc) {
-            (Extension::Unknown(t, _), Some(acc)) if *t == ACC_EXT => {
-                Extension::Unknown(ACC_EXT, UnknownExtension(encode_acc(acc)))
+        .map(|extension| match (extension, anchor) {
+            (Extension::Unknown(t, _), Some(anchor)) if *t == ANCHOR_EXT => {
+                Extension::Unknown(ANCHOR_EXT, UnknownExtension(encode_anchor(anchor)))
             }
             _ => extension.clone(),
         })
@@ -894,14 +897,14 @@ fn extensions_with_acc(client: &mut Client, acc: Option<&TestAcc>) -> Extensions
     Extensions::from_vec(replaced).expect("valid GroupContext extensions")
 }
 
-fn current_acc(client: &mut Client) -> TestAcc {
+fn current_anchor(client: &mut Client) -> TestAnchor {
     let (group, _, _) = client.mls_parts_mut();
     let payloads = unknown_payloads(
         group.public_group().group_context().extensions().iter(),
-        ACC_EXT,
+        ANCHOR_EXT,
     );
-    assert_eq!(payloads.len(), 1, "exactly one acc_context");
-    decode_acc(&payloads[0])
+    assert_eq!(payloads.len(), 1, "exactly one apf_anchor");
+    decode_anchor(&payloads[0])
 }
 
 /// The leaf of the member whose credential identity is `subject`, as `viewer` sees it.
@@ -948,7 +951,7 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
         root_identity,
         client_provider("genesis-frontier/root"),
         pending.founder_certificate(),
-        pending.acc_context(),
+        pending.apf_anchor(),
         &apf_public,
     )
     .expect("root founds the group");
@@ -1038,7 +1041,7 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
     // `complete` with another group's state, or tampered state, fails and leaves nothing.
     /// Picks the GroupInfo and ratchet tree to complete with, from the new root.
     type Choose<'a> = &'a dyn Fn(&Client, &[u8]) -> (Vec<u8>, Vec<u8>);
-    let attempt = |tag: &str, choose: Choose<'_>, acc: &dyn Fn(&[u8]) -> Vec<u8>| {
+    let attempt = |tag: &str, choose: Choose<'_>, anchor: &dyn Fn(&[u8]) -> Vec<u8>| {
         let dir = adapter_dir();
         let root_name = format!("root@{tag}");
         let root_identity = identity(&root_name);
@@ -1053,7 +1056,7 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
         )
         .expect("begin_genesis");
         let apf = pending.apf_public_key().to_vec();
-        let acc_context = acc(pending.acc_context());
+        let apf_anchor = anchor(pending.apf_anchor());
         let founded = ClientEndpoint::found(
             GROUP,
             ROOT,
@@ -1061,7 +1064,7 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
             root_identity,
             client_provider(&format!("genesis-frontier/{tag}/root")),
             pending.founder_certificate(),
-            &acc_context,
+            &apf_anchor,
             &apf,
         );
         if let Ok(other_root) = founded {
@@ -1075,18 +1078,18 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
             "{tag}: a failed genesis leaves no file"
         );
     };
-    let identity_acc = |acc: &[u8]| acc.to_vec();
+    let identity_anchor = |anchor: &[u8]| anchor.to_vec();
     // Another group's GroupInfo and tree (other APF key, other root key).
     attempt(
         "other-group",
         &|_, _| (group_info.clone(), ratchet_tree.clone()),
-        &identity_acc,
+        &identity_anchor,
     );
     // The right GroupInfo with another group's ratchet tree.
     attempt(
         "other-tree",
         &|_, own_info| (own_info.to_vec(), ratchet_tree.clone()),
-        &identity_acc,
+        &identity_anchor,
     );
     // Tampered GroupInfo signature.
     attempt(
@@ -1097,7 +1100,7 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
                 root.export_ratchet_tree().expect("tree"),
             )
         },
-        &identity_acc,
+        &identity_anchor,
     );
     // Tampered ratchet tree.
     attempt(
@@ -1108,22 +1111,22 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
             tree[middle] ^= 0x01;
             (own_info.to_vec(), tree)
         },
-        &identity_acc,
+        &identity_anchor,
     );
-    // A group created with an `acc_context` other than the pending one.
+    // A group created with an `apf_anchor` other than the pending one.
     attempt(
-        "wrong-acc",
+        "wrong-anchor",
         &|root, own_info| (own_info.to_vec(), root.export_ratchet_tree().expect("tree")),
-        &|acc: &[u8]| {
-            let mut decoded = decode_acc(acc);
+        &|anchor: &[u8]| {
+            let mut decoded = decode_anchor(anchor);
             decoded.policy_revision += 7;
-            encode_acc(&decoded)
+            encode_anchor(&decoded)
         },
     );
 }
 
 #[test]
-fn genesis_group_carries_acc_context_and_required_capabilities() {
+fn genesis_group_carries_apf_anchor_and_required_capabilities() {
     let (mut w, mut root) = genesis("gc-extensions");
     let checkpoint = w.checkpoint();
     let apf_key_id = w.apf_key_id();
@@ -1134,21 +1137,24 @@ fn genesis_group_carries_acc_context_and_required_capabilities() {
         let (group, _, signer) = root.mls_parts_mut();
         let context = group.public_group().group_context();
 
-        // Exactly one acc_context, equal to the pending payload.
-        let accs = unknown_payloads(context.extensions().iter(), ACC_EXT);
-        assert_eq!(accs.len(), 1, "exactly one acc_context");
-        assert_eq!(accs[0], w.acc_context);
-        let acc = decode_acc(&accs[0]);
-        assert_eq!(acc.version, 1);
-        assert_eq!(acc.apf_key_id, apf_key_id, "apf_key_id = SHA-256(APF key)");
-        assert_eq!(acc.group, GROUP.as_bytes());
-        assert_eq!(acc.policy_revision, 0);
+        // Exactly one apf_anchor, equal to the pending payload.
+        let anchors = unknown_payloads(context.extensions().iter(), ANCHOR_EXT);
+        assert_eq!(anchors.len(), 1, "exactly one apf_anchor");
+        assert_eq!(anchors[0], w.apf_anchor);
+        let anchor = decode_anchor(&anchors[0]);
+        assert_eq!(anchor.version, 1);
+        assert_eq!(
+            anchor.apf_key_id, apf_key_id,
+            "apf_key_id = SHA-256(APF key)"
+        );
+        assert_eq!(anchor.group, GROUP.as_bytes());
+        assert_eq!(anchor.policy_revision, 0);
         assert_eq!(checkpoint["policy_revision"], json!(0));
         assert_eq!(
-            acc.policy_digest,
+            anchor.policy_digest,
             hex::decode(checkpoint["policy_digest"].as_str().expect("policy_digest"))
                 .expect("hex policy digest"),
-            "acc_context digest equals the kernel policy digest"
+            "apf_anchor digest equals the kernel policy digest"
         );
 
         // Required capabilities.
@@ -1156,7 +1162,7 @@ fn genesis_group_carries_acc_context_and_required_capabilities() {
             .required_capabilities()
             .expect("required capabilities")
             .extension_types();
-        for extension_type in [CERT_EXT, ACC_EXT, INC_EXT] {
+        for extension_type in [CERT_EXT, ANCHOR_EXT, INC_EXT] {
             assert!(
                 required.contains(&ExtensionType::Unknown(extension_type)),
                 "required capabilities include {extension_type:#x}: {required:?}"
@@ -1176,7 +1182,7 @@ fn genesis_group_carries_acc_context_and_required_capabilities() {
                 admission_cert_hash: sha256(&w.founder_certificate),
             }
         );
-        for extension_type in [CERT_EXT, ACC_EXT, INC_EXT] {
+        for extension_type in [CERT_EXT, ANCHOR_EXT, INC_EXT] {
             assert!(leaf
                 .capabilities()
                 .extensions()
@@ -1268,7 +1274,7 @@ fn genesis_group_carries_acc_context_and_required_capabilities() {
             identity(key_name),
             client_provider(&format!("gc-extensions/{tag}/root")),
             &founder_bytes(pending.founder_certificate()),
-            pending.acc_context(),
+            pending.apf_anchor(),
             &apf,
         );
         if let Ok(bad_root) = founded {
@@ -1587,8 +1593,8 @@ fn admitted_frontier_matches_kernel_branch_at_every_member() {
             );
         }
     }
-    // The acc_context is unchanged by admission.
-    assert_eq!(current_acc(&mut carol), decode_acc(&w.acc_context));
+    // The apf_anchor is unchanged by admission.
+    assert_eq!(current_anchor(&mut carol), decode_anchor(&w.apf_anchor));
 
     // A reopened adapter keeps the admitted frontier.
     let World { dir, adapter, .. } = w;
@@ -1882,21 +1888,21 @@ fn commit_with_unexpected_extra_proposal_is_noncanonical() {
     let dave = w.candidate("dave");
     let carol_kp = parse_key_package(carol.key_package());
     let dave_kp = parse_key_package(dave.key_package());
-    let acc = current_acc(&mut root);
-    let mut raised = acc.clone();
+    let anchor = current_anchor(&mut root);
+    let mut raised = anchor.clone();
     raised.policy_revision += 1;
-    let changed = extensions_with_acc(&mut root, Some(&raised));
-    let same = extensions_with_acc(&mut root, None);
+    let changed = extensions_with_anchor(&mut root, Some(&raised));
+    let same = extensions_with_anchor(&mut root, None);
 
     type Case<'a> = (&'a str, Vec<KeyPackage>, Option<Extensions<GroupContext>>);
     let cases: Vec<Case<'_>> = vec![
         (
-            "add plus acc_context change",
+            "add plus apf_anchor change",
             vec![carol_kp.clone()],
             Some(changed.clone()),
         ),
         ("two adds", vec![carol_kp.clone(), dave_kp], None),
-        ("acc_context change alone", vec![], Some(changed)),
+        ("apf_anchor change alone", vec![], Some(changed)),
         ("add plus unchanged extensions", vec![carol_kp], Some(same)),
     ];
     for (case, adds, extensions) in cases {
@@ -1911,7 +1917,7 @@ fn commit_with_unexpected_extra_proposal_is_noncanonical() {
         root.discard_pending().expect("discard pending");
         assert_eq!(root.frontier().expect("root"), parent, "{case}: {err}");
         assert_eq!(raw_frontier(&mut root), parent, "{case}");
-        assert_eq!(current_acc(&mut root), acc, "{case}");
+        assert_eq!(current_anchor(&mut root), anchor, "{case}");
     }
     assert_eq!(w.frontier(), parent);
 
@@ -1921,7 +1927,7 @@ fn commit_with_unexpected_extra_proposal_is_noncanonical() {
     let mut carol = carol
         .join(&staged.welcome, &admitted.ack)
         .expect("carol joins");
-    assert_eq!(current_acc(&mut carol), acc);
+    assert_eq!(current_anchor(&mut carol), anchor);
     assert_eq!(carol.frontier().expect("carol"), w.frontier());
 }
 
@@ -2231,7 +2237,7 @@ fn joiner_rejects_welcome_whose_frontier_differs_from_ack() {
     assert_eq!(admitted.frontier.epoch, 8);
     assert_eq!(ivy.frontier().expect("ivy"), w.frontier());
     assert_eq!(raw_frontier(&mut ivy), w.frontier());
-    assert_eq!(current_acc(&mut ivy), decode_acc(&w.acc_context));
+    assert_eq!(current_anchor(&mut ivy), decode_anchor(&w.apf_anchor));
 }
 
 #[test]

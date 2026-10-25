@@ -39,8 +39,8 @@
     "status": "pass"
   },
   "claim_boundary": {
-    "full_lap_mls": true,
-    "bridge_remove_etk": "open",
+    "full_construction_mls": true,
+    "key_confinement_computational": "conditional",
     "live_entropy_core": "unmet",
     "hpke_randomness": "drbg_seeded_from_source",
     "gates": {
@@ -54,6 +54,6 @@
       "pq",
       "classical"
     ],
-    "reason": "every gate passed in this run, the integration gate in the pq and classical suites; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is DRBG output seeded from the selected source"
+    "reason": "every gate passed in this run, the integration gate in the pq and classical suites; computational key confinement (formal/ Proposition 3) is conditional, see formal/README.md, and HPKE randomness is DRBG output seeded from the selected source"
   }
 }

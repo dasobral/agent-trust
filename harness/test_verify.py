@@ -2,8 +2,8 @@
 
 The phase 4.7b claim gate is ``docs/adapter-contract.md`` C-38 and section 11:
 ``scripts/verify.py`` runs ``cargo test --locked --all-targets``, every Python
-harness test and the integration harness, and records ``full_lap_mls`` in the
-evidence manifest. ``full_lap_mls`` is ``true`` only when every gate passed in
+harness test and the integration harness, and records ``full_construction_mls`` in the
+evidence manifest. ``full_construction_mls`` is ``true`` only when every gate passed in
 that run, including the integration harness's oracle acceptance and
 broken-control tests. Any unmet or failed gate records ``false`` and exits
 nonzero.
@@ -20,8 +20,8 @@ Interface pinned here (C-38, resolved by the test author):
   read at call time. Tests patch it, so a fake run never touches
   ``evidence/manifest.json``.
 - The manifest keeps its other top-level records. Its ``claim_boundary`` object
-  carries ``full_lap_mls`` (a boolean) and the fixed fields
-  ``bridge_remove_etk: "open"``, ``live_entropy_core: "unmet"`` and
+  carries ``full_construction_mls`` (a boolean) and the fixed fields
+  ``key_confinement_computational: "conditional"``, ``live_entropy_core: "unmet"`` and
   ``hpke_randomness: "drbg_seeded_from_source"``, on every run, passing or not.
 - The integration harness counts as passed only when its run reports both
   ``test_lab_scenario_trace_is_accepted_by_oracle ... ok`` and
@@ -61,7 +61,7 @@ NAMED_INTEGRATION_TESTS = (
     "test_broken_controls_are_rejected_by_oracle",
 )
 BOUNDARY_FIELDS = {
-    "bridge_remove_etk": "open",
+    "key_confinement_computational": "conditional",
     "live_entropy_core": "unmet",
     "hpke_randomness": "drbg_seeded_from_source",
 }
@@ -221,7 +221,7 @@ def seed_manifest():
         "schema_version": 1,
         "project": "agent-trust",
         "recovery": {"historical_objects_available": False},
-        "claim_boundary": {"full_lap_mls": True, "reason": "stale value from an earlier run"},
+        "claim_boundary": {"full_construction_mls": True, "reason": "stale value from an earlier run"},
     }
 
 
@@ -249,11 +249,11 @@ def run_sandboxed(test, runner, *, which=lambda _: CARGO):
 
 
 class ManifestAssertions:
-    def assert_boundary(self, manifest, full_lap_mls):
+    def assert_boundary(self, manifest, full_construction_mls):
         self.assertIsInstance(manifest, dict, "the verifier must write a JSON manifest on every run")
         boundary = manifest.get("claim_boundary")
         self.assertIsInstance(boundary, dict, manifest)
-        self.assertIs(boundary.get("full_lap_mls"), full_lap_mls, boundary)
+        self.assertIs(boundary.get("full_construction_mls"), full_construction_mls, boundary)
         for field, value in BOUNDARY_FIELDS.items():
             self.assertEqual(boundary.get(field), value, f"claim_boundary.{field}: {boundary}")
         self.assertEqual(manifest.get("project"), "agent-trust", "unrelated records must be kept")
@@ -353,7 +353,7 @@ class ClaimGateTests(ManifestAssertions, unittest.TestCase):
 
     maxDiff = None
 
-    def test_full_lap_mls_is_true_only_when_every_gate_passes(self):
+    def test_full_construction_mls_is_true_only_when_every_gate_passes(self):
         status, output, manifest = run_sandboxed(self, FakeGates())
         self.assertEqual(status, 0, output)
         self.assert_boundary(manifest, True)

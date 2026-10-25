@@ -24,4 +24,4 @@ Recovered executable coverage includes:
 - fail-closed public verification;
 - authenticated invocation provenance and confused-deputy prevention.
 
-Known boundary: `full_lap_mls` remains `false`. Canonical staged KeyPackage construction and the embedded APF admission binding are now verified against pinned fork commit `6daabe33ddb616a6ed54b511d333e691db18a99f`; the complete durable APF-to-MLS context/incarnation/repair coupling remains future work. (Milestone record. The current claim is in the README: `full_lap_mls` was recorded `true` on 2026-10-24 under the claim gate of `docs/adapter-contract.md` §11.)
+Known boundary: `full_lap_mls` (now `full_construction_mls`, C-43) remains `false`. Canonical staged KeyPackage construction and the embedded APF admission binding are now verified against pinned fork commit `6daabe33ddb616a6ed54b511d333e691db18a99f`; the complete durable APF-to-MLS context/incarnation/repair coupling remains future work. (Milestone record. The current claim is in the README: `full_lap_mls` was recorded `true` on 2026-10-24 under the claim gate of `docs/adapter-contract.md` §11.)

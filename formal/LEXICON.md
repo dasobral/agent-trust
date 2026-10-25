@@ -60,6 +60,7 @@ reads from JSON. Each Class B row is listed in correction C-43
 | A | `acc_context` (Rust locals, methods) | `apf_anchor` | same |
 | B | `acc_context` (lab repair plan field) | `apf_anchor` | `src/lab.rs:717`, lab clients |
 | B | `full_lap_mls` | `full_construction_mls` | `evidence/manifest.json`, `scripts/verify.py`, `src/main.rs`, `harness/` |
+| B | `bridge_remove_etk: "open"` | `key_confinement_computational: "conditional"` | `evidence/manifest.json`, `scripts/verify.py`, `harness/test_verify.py` |
 | file | `formal/paper/coherence.tex` | `formal/paper/concordance.tex` | |
 | file | `formal/model/coherence_model.py` | `formal/model/concordance_model.py` | |
 

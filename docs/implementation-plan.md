@@ -2,7 +2,7 @@
 
 > For agentic workers: use superpowers:subagent-driven-development. Read only your assigned task and the interface contract.
 
-**Goal:** Implement and verify the approved experimental ACC/LAP-MLS design, then ship a reproducible source package.
+**Goal:** Implement and verify the approved experimental may–can concordance design (formerly ACC/LAP-MLS), then ship a reproducible source package.
 **Architecture:** A durable single authority orders release, policy, and consumption. Real MLS adapters enforce cryptographic membership; an independent model checks traces and a broker demonstrates resource mediation.
 **Tech Stack:** Rust/OpenMLS/SQLite; Python acceptance harness; container demo.
 **Spec:** docs/specification.md (approved by Daniel on 11 September 2026).

@@ -360,7 +360,7 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     parent: Frontier,
 }
 
@@ -419,7 +419,7 @@ fn genesis(tag: &str) -> (World, Client) {
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root = ClientEndpoint::found(
         GROUP,
         ROOT,
@@ -427,7 +427,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         client_provider(&format!("{tag}/root")),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");
@@ -715,12 +715,12 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            acc_context: hex::decode(
-                response["acc_context"]
+            apf_anchor: hex::decode(
+                response["apf_anchor"]
                     .as_str()
-                    .expect("acc_context hex string"),
+                    .expect("apf_anchor hex string"),
             )
-            .expect("acc_context is hex"),
+            .expect("apf_anchor is hex"),
             parent: Frontier {
                 epoch: response["parent_epoch"].as_u64().expect("parent_epoch"),
                 branch: response["parent_branch"]
@@ -1079,7 +1079,7 @@ fn commit_repair(w: &mut World, committer: &mut Client, others: &mut [&mut Clien
     let actor = committer.subject().to_owned();
     let plan = w.plan(&actor);
     let staged = committer
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
     let response = w

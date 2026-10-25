@@ -10,7 +10,7 @@ Key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 The adapter replaces caller-supplied MLS facts with facts that the adapter derives from real OpenMLS processing. After Task 4, the kernel's `epoch`, `branch`, admission and repair inputs come only from validated MLS commits. Every protected application message is bound to an APF-signed release certificate.
 
-This contract does not discharge the open `Bridge_remove^ETK` cryptographic proof obligation. Tests show behavior in the executed schedules only. `full_lap_mls` changes to `true` only under the gate in §11. A gate never changes it because a boolean field says so.
+This contract does not discharge the cryptographic proof obligation that the Third Edition called `Bridge_remove^ETK`. The formal companion (`formal/`) states it as computational key confinement, Proposition 3, conditional on the open items listed in `formal/README.md`. Tests show behavior in the executed schedules only. `full_construction_mls` changes to `true` only under the gate in §11. A gate never changes it because a boolean field says so.
 
 The adapter is in-process in Task 4. Network transport, mTLS and containers are Task 5. The interfaces below are transport-agnostic: every message between parties is an opaque byte string plus a signed request envelope (§4.8).
 
@@ -29,7 +29,7 @@ These are verified source facts at commit `3e332a2`:
 | Lab owns the APF key | `MlsLab::new` generates `apf_signer` (`src/mls.rs:218`) |
 | Fixed generation, uncertified founder | Admission certificates always carry generation 0 (`src/mls.rs:248`); the founder has no admission evidence (`src/mls.rs:232-233`) |
 | Memory-only, stock randomness | `MemoryStorage` and `RustCrypto` rand (`src/mls.rs:33-36`, `57-58`) |
-| No ACC extensions | Only the KeyPackage binding type `0xf042` exists (`src/mls.rs:23`) |
+| No anchor or incarnation extensions | Only the KeyPackage binding type `0xf042` exists (`src/mls.rs:23`) |
 | Convenience commits | `add_members` and `remove_members` (`src/mls.rs:271`, `386`); no policy-binding proposal in the same commit |
 | No receive-side binding | `decrypt` returns payload and AAD without checks (`src/mls.rs:334-350`) |
 
@@ -78,7 +78,7 @@ struct {
 
 The kernel stores the frontier as `(epoch, branch)`. A 64-character hex string fits the kernel identifier bound (`MAX_ID`, `src/authority.rs:9`).
 
-### 4.2 `acc_context` (GroupContext extension, proposed type `0xf043`)
+### 4.2 `apf_anchor` (GroupContext extension, proposed type `0xf043`)
 
 ```text
 struct {
@@ -87,11 +87,11 @@ struct {
   opaque group<V>;            // kernel group identifier
   uint64 policy_revision;     // R-3
   opaque policy_digest<V>;    // R-3, SHA-256 of the kernel policy snapshot
-} AccContext;
+} ApfAnchor;
 ```
 
-- The group MUST be created with exactly one `acc_context` and MUST list `0xf043` in `required_capabilities`. Every member and every KeyPackage then has to declare support.
-- After every canonical commit, the successor `GroupContext` MUST contain exactly one well-formed `acc_context` with the configured `apf_key_id` and `group`. Its `policy_revision` MUST NOT decrease.
+- The group MUST be created with exactly one `apf_anchor` and MUST list `0xf043` in `required_capabilities`. Every member and every KeyPackage then has to declare support.
+- After every canonical commit, the successor `GroupContext` MUST contain exactly one well-formed `apf_anchor` with the configured `apf_key_id` and `group`. Its `policy_revision` MUST NOT decrease.
 - A repair commit (§5.4) MUST carry a GroupContextExtensions proposal that sets `policy_revision ≥ fence_revision` (the policy revision of the read denial that closed the fence). `policy_digest` MUST equal the kernel digest at that revision.
 - OpenMLS preserves unknown extension bytes but does not interpret them. Every rule above is an adapter check.
 
@@ -239,8 +239,8 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
   - It changes neither `revision` nor `policy_revision`, and appends no history event. A worker request for it is `unauthorized`.
 - **C-8, two constructors.**
   - `Adapter::create` (phase 4.1) stays a policy-only adapter with no MLS group. On it, `admission_certificate` and `submit_commit` are `uninitialized: no group`.
-  - The full adapter comes from `Adapter::begin_genesis`, which returns a `GenesisPending`, followed by `GenesisPending::complete`. `begin_genesis` writes no file: it refuses an existing file as `create` does, draws the APF seed, and computes the founder certificate and the genesis `acc_context`.
-  - `policy_digest` comes from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel `policy_digest` equals the digest in `acc_context`. On any failure nothing remains.
+  - The full adapter comes from `Adapter::begin_genesis`, which returns a `GenesisPending`, followed by `GenesisPending::complete`. `begin_genesis` writes no file: it refuses an existing file as `create` does, draws the APF seed, and computes the founder certificate and the genesis `apf_anchor`.
+  - `policy_digest` comes from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel `policy_digest` equals the digest in `apf_anchor`. On any failure nothing remains.
   - `Adapter::open` reloads either kind.
 - **C-9, encodings** (`src/wire.rs`; signature length amended by C-42).
   - Every structure in §4.1–§4.6 is encoded with the TLS presentation language: `VLBytes` for each `opaque<V>`, big-endian fixed-width integers, and a vector of structs as a `VLBytes` of their concatenation.
@@ -265,7 +265,7 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
      - the certified `read_generation` and `admit_generation` equal the current kernel generations, and those grants are effective at `now`;
      - `not_after ≥ now`;
      - the leaf has exactly one `authz_incarnation`, whose `subject` equals the certificate subject, whose `rights` equal the subject's active kernel generations exactly, and whose `admission_cert_hash` is 32 zero bytes.
-  6. The successor `GroupContext` must carry the same `acc_context` bytes as the parent.
+  6. The successor `GroupContext` must carry the same `apf_anchor` bytes as the parent.
 
   Failures at steps 2–6 are `noncanonical_commit`.
   7. Kernel `admit {actor, subject, parent_branch, new_branch, epoch}`, with the successor frontier from `StagedCommit::group_context()`. Kernel errors pass through, for example `unauthorized` for a sender without `admin`, or `stale_frontier`.
@@ -277,7 +277,7 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
     - An invalid APF signature is `unauthenticated`.
     - If `commit_hash` differs from `SHA-256(commit)`, or the parent differs from the client's frontier, the result is `binding_mismatch`.
     - The client merges its own pending commit when the bytes match. Otherwise it processes the commit, and a computed successor frontier that differs from the ack is `binding_mismatch`.
-  - `JoinCandidate::join(welcome, ack)` verifies the ack. It requires `kind` = admit, a joined frontier equal to the ack, and exactly one `acc_context` whose `apf_key_id` matches the pinned APF key. Otherwise it returns `binding_mismatch`, or `unauthenticated` for a bad signature.
+  - `JoinCandidate::join(welcome, ack)` verifies the ack. It requires `kind` = admit, a joined frontier equal to the ack, and exactly one `apf_anchor` whose `apf_key_id` matches the pinned APF key. Otherwise it returns `binding_mismatch`, or `unauthenticated` for a bad signature.
   - `mls_parts_mut` exposes the raw OpenMLS group, provider and signer. It exists for adversarial tests only, and honest code never uses it.
 - **C-13, resolved while authoring the phase 4.2 tests.**
   - In every TLS structure, a `branch` field is the 64-character lowercase hex string as ASCII bytes. This applies to `CanonicalAck` parent and successor and to `ConfirmationTBS`.
@@ -351,9 +351,9 @@ These fill in §4.5 and §5.3 for plan phase 4.3. C-15 adds a signed consume rec
 These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-read re-authorization of a current member (§5.5, the second bullet) waits for phase 4.4b and the open correction R-10 (D-9). C-21 and C-25 are flagged to Daniel.
 
 - **C-20, repair plan.** `repair_plan {}` is a routed request that any current roster member may send.
-  - When the kernel is read-fenced and no repair is pending, it returns `{removed, acc_context, policy_revision, parent_epoch, parent_branch}`.
+  - When the kernel is read-fenced and no repair is pending, it returns `{removed, apf_anchor, policy_revision, parent_epoch, parent_branch}`.
     - `removed` is the sorted list of roster members whose read grant is inactive.
-    - `acc_context` is the hex payload `{1, apf_key_id, group, current policy_revision, current policy_digest}`.
+    - `apf_anchor` is the hex payload `{1, apf_key_id, group, current policy_revision, current policy_digest}`.
   - Otherwise it is `invalid_repair`.
 - **C-21, repair committer.** Any continuing member may commit the repair: a roster member that is not in `removed`. The commit's content is fixed exactly by the APF plan, so the committer has no discretion. This replaces "designated", which the specification leaves unspecified.
 - **C-22, sequencer checks for `submit_commit {kind: "repair", parent_epoch, parent_branch, commit}`**, in this order. Failures at steps 1–5 leave the sequencer and the kernel unchanged.
@@ -361,7 +361,7 @@ These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-r
   2. The commit must be a `PublicMessage` that `PublicGroup::process_message` accepts.
   3. The sender must be the actor's leaf with its registered key, and the actor must be a continuing member.
   4. The commit must contain exactly one Remove for each leaf whose credential is in `removed`, no other Remove, exactly one GroupContextExtensions proposal, no other proposal, and an UpdatePath.
-  5. The successor `GroupContext` extensions must equal the parent's, with `acc_context` replaced by exactly the planned bytes.
+  5. The successor `GroupContext` extensions must equal the parent's, with `apf_anchor` replaced by exactly the planned bytes.
 
   Failures at steps 2–5 are `noncanonical_commit`.
   6. The adapter calls kernel `repair_stage` with the successor frontier, the current `policy_revision`, `removed`, `update_path: true` (proven in step 4) and `durable: true`. Kernel errors pass through.
@@ -402,7 +402,7 @@ These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-r
        - it declares `0xf042`–`0xf044`;
        - it has exactly one `authz_incarnation` with subject = actor, rights = the actor's active kernel rights with the offered `(right, generation)` set, and `admission_cert_hash` = the previous leaf's value.
 
-       The successor `acc_context` must also be unchanged. Failures 2–5 are `noncanonical_commit`.
+       The successor `apf_anchor` must also be unchanged. Failures 2–5 are `noncanonical_commit`.
     6. The adapter calls kernel `rekey` (R-10) with the offer's admin as `actor`. Kernel errors pass through, and the offer stays pending.
     7. The sequencer merges. The subject's registered key is replaced by the new key, so the old key no longer authenticates. The offer is cleared, and the adapter signs an ack with `kind` = update and returns `{epoch, branch, ack}`.
   - **Client.** After applying its own ack, the subject's `identity()` is the new identity.
@@ -436,11 +436,11 @@ Genesis is one adapter transaction. Nothing is persisted unless every step succe
 1. The adapter generates the APF key (§7).
 2. The root client generates its signature key (§8) and sends a signed founder request. The adapter issues a founder certificate. It has label `"agent-trust/founder/v1"` and binds the group, the root, the generation-0 rights that kernel `init` will create, and the root signature public key.
 3. The root creates the group with `MlsGroup::builder()`:
-   - `acc_context` at `policy_revision` 0;
+   - `apf_anchor` at `policy_revision` 0;
    - `required_capabilities` that include `0xf042`, `0xf043` and `0xf044`;
    - a leaf `authz_incarnation` that carries the founder certificate hash;
    - `PURE_PLAINTEXT_WIRE_FORMAT_POLICY` for outgoing handshake messages (fork `openmls/src/group/mls_group/config.rs:670`). Application messages remain `PrivateMessage`.
-4. The root exports GroupInfo and the ratchet tree. The adapter builds the sequencer with `PublicGroup::from_external` (fork `openmls/src/group/public_group/mod.rs:125`), validates the root leaf and `acc_context`, and computes the epoch-0 frontier.
+4. The root exports GroupInfo and the ratchet tree. The adapter builds the sequencer with `PublicGroup::from_external` (fork `openmls/src/group/public_group/mod.rs:125`), validates the root leaf and `apf_anchor`, and computes the epoch-0 frontier.
 5. The adapter calls kernel `init` with `group`, `root`, and `branch` set to that frontier (R-2). Then it persists the sequencer and the APF key.
 
 ### 5.2 Admission
@@ -453,12 +453,12 @@ Genesis is one adapter transaction. Nothing is persisted unless every step succe
    - the sender is the requesting admin's leaf;
    - the commit contains only Add proposals, each with a v2 certificate that verifies against the independently recomputed preimage (existing `verify_admission_key_package` logic, `src/mls.rs:476-552`);
    - each joiner's `authz_incarnation` matches the certificate and its zero placeholder;
-   - the successor `acc_context` is unchanged.
+   - the successor `apf_anchor` is unchanged.
 
    The successor frontier is taken from `StagedCommit::group_context()` (fork `openmls/src/group/mls_group/staged_commit.rs:1002`).
 6. **Kernel:** `admit` with `parent_branch`, `new_branch` and `epoch` (R-1). The kernel performs the CAS and the authorization checks it already has.
 7. **Adapter:** merges the staged commit into the sequencer (fork `openmls/src/group/public_group/staged_commit.rs:439`), persists the sequencer, and signs the canonical ack.
-8. **Clients:** existing members merge under §4.6. The candidate joins from the Welcome and MUST check that its joined frontier and `acc_context` equal the ack.
+8. **Clients:** existing members merge under §4.6. The candidate joins from the Welcome and MUST check that its joined frontier and `apf_anchor` equal the ack.
 
 If step 6 fails, the adapter discards the staged commit, the committer clears its pending commit (`MlsGroup::clear_pending_commit`, fork `openmls/src/group/mls_group/mod.rs:445`), and no client merges.
 
@@ -488,11 +488,11 @@ A pre-cut release whose envelope arrives after a denial is still a valid release
 1. `revoke(read)` on a roster reader or an affected descendant closes the central fence. The adapter records `fence_revision = policy_revision` after the revoke.
 2. **Designated continuing repair member R:** builds one commit through `CommitBuilder` with:
    - `propose_removals` for the exact leaves of every reader the kernel reports as removed;
-   - `propose_group_context_extensions` (fork `openmls/src/group/mls_group/commit_builder.rs:316`) with the new `acc_context`;
+   - `propose_group_context_extensions` (fork `openmls/src/group/mls_group/commit_builder.rs:316`) with the new `apf_anchor`;
    - `force_self_update(true)`.
 
    R stages it and submits it.
-3. **Sequencer:** checks that the sender is R, the Remove set equals the kernel's required set exactly (no more, no less), an UpdatePath is present (`update_path_leaf_node`, fork `openmls/src/group/public_group/staged_commit.rs:39`), and the `acc_context` satisfies §4.2. It computes the successor frontier.
+3. **Sequencer:** checks that the sender is R, the Remove set equals the kernel's required set exactly (no more, no less), an UpdatePath is present (`update_path_leaf_node`, fork `openmls/src/group/public_group/staged_commit.rs:39`), and the `apf_anchor` satisfies §4.2. It computes the successor frontier.
 4. **Kernel, canonical step:** the repair commit becomes canonical under CAS, but the central fence stays closed. This needs R-1/R-3 changes to `repair`, or a two-step `repair` (stage then open; open decision D-3). The adapter persists the sequencer and signs the canonical ack.
 5. **Confirmation step:** a designated continuing member C ≠ R processes the acked commit and sends a confirmation (§4.7). R reports its own `epoch_authenticator_hash`. The adapter requires the two hashes to be equal and both signatures to be valid. Only then does the kernel open the central fence. The kernel's `update_path`, `confirmed` and `durable` inputs are set from these checked facts and from the adapter's durable write. If only one member continues, R alone confirms. The trace records this weaker evidence explicitly.
 6. **Clients:** every other client stays locally fenced until it merges the acked commit and durably saves its storage. An offline client does not block the central transition.
@@ -613,7 +613,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - `LabEntropy::durable_provider(path)` returns a `DurableLabProvider`: the shared lab crypto provider (§8), a rand over the selected source (C-40), and `openmls_sqlite_storage` storage in the one file at `path`. The file is created if missing and its migrations run. Opening draws nothing from the source. Reopening the same path gives the stored groups and keys back for `ClientEndpoint::load` (C-33). An unusable path is `malformed: client storage file`.
   - `ClientIdentity::restore(key_pair)` rebuilds a stored identity (amended by C-42 for ML-DSA-44). It accepts only an Ed25519 pair whose public key derives from its private seed, checked by a signature over a fixed probe verified with `verify_strict`; anything else is `binding_mismatch`. It creates no key: new keys still come only from `ClientIdentity::generate` (C-6).
   - The stored form of an identity is the application's choice. The testbed writes the key pair's serde JSON to an owner-only file. The key is outside the APF and the kernel, as for every client key (§3).
-  - Tests: `tests/lab_durable.rs`. Evidence: `evidence/durable-provider-red.txt` (interface build failure) and `evidence/durable-provider-green.txt` (the tests and the full verifier pass; `full_lap_mls` stays `true`).
+  - Tests: `tests/lab_durable.rs`. Evidence: `evidence/durable-provider-red.txt` (interface build failure) and `evidence/durable-provider-green.txt` (the tests and the full verifier pass; `full_construction_mls` stays `true`).
 
 ### 8.3 Post quantum suite (C-42, D-13)
 
@@ -642,7 +642,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - **Amendment to C-41.** `ClientIdentity::restore` accepts a pair of either suite whose public key derives from its seed: Ed25519 as before; ML-DSA-44 by deriving the public key from the seed again and comparing the bytes. Anything else is `binding_mismatch`.
   - **Hashes.** Values that agent-trust computes (branch, digests, `apf_key_id`, `epoch_authenticator_hash`) stay SHA-256. Values that MLS computes (tree hash, confirmed transcript hash, epoch authenticator) use the suite's hash, SHA-384 for `pq`, and are carried as `opaque<V>`.
   - **Lab (additive to C-36 and C-40).** `agent-trust lab` reads `AGENT_TRUST_SUITE` before any request: `pq` (the default) or `classical`. Any other value exits nonzero with `malformed: suite` on stderr and processes no request. Every lab identity uses the selected suite. A new request `suite {}` returns `{suite, ciphersuite}`, with the ciphersuite as a lowercase hex string such as `"0x0052"`. `run_lab_with` keeps the `classical` suite for existing callers; `run_lab_with_suite` takes the suite.
-  - **Amendment to C-38.** `scripts/verify.py` runs the integration gate once per suite, `pq` first, then `classical`. `full_lap_mls` is `true` only when both pass, and the manifest names the suites.
+  - **Amendment to C-38.** `scripts/verify.py` runs the integration gate once per suite, `pq` first, then `classical`. `full_construction_mls` is `true` only when both pass, and the manifest names the suites.
   - **The QRNG link (PQ-2).** The entropy that the `qrng` source fetches becomes key material, so its TLS key exchange is post quantum too. openmls-qrand `66026082` configures rustls with aws-lc-rs: `key_exchange = "pq-only"` (the default) offers only `X25519MLKEM768` over TLS 1.3 and refuses a server without it; `"pq-preferred"` offers it first and accepts X25519, P-256 or P-384. It is set by `[qrng] key_exchange` in the entropy file or `AGENT_TRUST_QRNG_KEY_EXCHANGE`; any other value is an error, never a classical fallback. `QrngSettings.key_exchange` carries it; plain HTTP ignores it. The handshake itself is tested in openmls-qrand (`tests/pq_tls.rs`).
   - **Amendment (D-14): `pq-preferred` is the default of the `qrng` source.** The `qrng` source is the Entropy Core link, and the TLS groups that a real Entropy Core offers are not known yet (E6). With neither `[qrng] key_exchange` nor `AGENT_TRUST_QRNG_KEY_EXCHANGE` set, `QrngSettings.key_exchange` is `PostQuantumPreferred`; `pq-only` stays available. The openmls-qrand library default stays `PostQuantumOnly`. A downgrade is visible: openmls-qrand `QrngClient::key_exchange()` reports the negotiated group (for `pq-preferred`, from one extra TLS handshake at connect), and the lab `entropy` report of a `qrng` source adds `key_exchange` (the group, for example `X25519MLKEM768` or `X25519`; `none (plain HTTP)`; or `unknown (reason)`) and `post_quantum` (true only for `X25519MLKEM768`). Tests: `tests/pq_suite.rs` (`the_qrng_key_exchange_is_post_quantum_preferred_unless_configured`) and `tests/lab_entropy.rs`. Evidence: `evidence/ec-pq-preferred-red.txt` and `evidence/ec-pq-preferred-green.txt`.
   - **Out of scope.** The legacy `MlsLab` (`agent-trust mls-demo`, `src/mls.rs`) stays `classical`; it is not on the adapter path. Composite signatures (Ed25519 and ML-DSA together) are not used: an MLS ciphersuite has one signature scheme, and the request key is the MLS key (C-1).
@@ -671,7 +671,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
     - `rekey {subject, right, generation}`: the offer by the root, `stage_rekey`, submit, every member applies the ack;
     - `export_trace {}`, which returns `{trace}` (C-37);
     - `summary {}`, which returns `{members, epoch, branch, delivered, duplicate_deliveries, deliveries_without_consume}`.
-  - The lab never reports `full_lap_mls`.
+  - The lab never reports `full_construction_mls`.
   - `agent-trust export-trace --dir PATH` prints the C-37 trace of an existing adapter directory as JSON.
 - **C-37, trace export.** `export_v2_trace(dir)` derives a trace contract v2 trace of accepted transitions only (V2.5). It reads only the persisted kernel history and the adapter store, never client state.
   - **Mapping from adapter and kernel records to v2 events:**
@@ -690,9 +690,9 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - **Recovery events.** Before a recipient's first `consume` at a frontier, the export emits `recover {client, epoch, branch}`. The evidence is that the client's consume was accepted at that frontier.
   - **Ordering.** Events follow the adapter trace order, which matches kernel history order because the adapter is the kernel's only writer.
 - **C-38, claim gate** (amended by C-42: one integration run per suite). `scripts/verify.py` runs every gate: `cargo test --locked --all-targets`, every Python harness test (not only `test_oracle*`), and the integration harness.
-  - `evidence/manifest.json` gets `full_lap_mls: true` only when every gate passed in that run, the integration harness's exported lab traces were accepted by the oracle, and its mutated broken controls were rejected. Any unmet or failed gate makes it `false` and makes the verifier exit nonzero.
-  - The manifest always records `bridge_remove_etk: "open"`, `live_entropy_core: "unmet"` and `hpke_randomness: "drbg_seeded_from_source"` (§8; `"excluded"` before phase 4.8).
-  - `mls-demo` (the legacy `MlsLab`) keeps reporting `full_lap_mls: false`, because its claim concerns only that lab.
+  - `evidence/manifest.json` gets `full_construction_mls: true` only when every gate passed in that run, the integration harness's exported lab traces were accepted by the oracle, and its mutated broken controls were rejected. Any unmet or failed gate makes it `false` and makes the verifier exit nonzero.
+  - The manifest always records `key_confinement_computational: "conditional"` (`bridge_remove_etk: "open"` before C-43), `live_entropy_core: "unmet"` and `hpke_randomness: "drbg_seeded_from_source"` (§8; `"excluded"` before phase 4.8).
+  - `mls-demo` (the legacy `MlsLab`) keeps reporting `full_construction_mls: false`, because its claim concerns only that lab.
 
 - **C-39, resolved while authoring the phase 4.7b tests.** These refine C-36 and C-38.
   - **Request encoding.** Every lab request is `{"op": "<request>", "args": {…}}`, so `send`'s own `op` field cannot collide with the request key.
@@ -706,7 +706,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
     - The gates run in this order: a cargo build or check, the `python-oracle` gate first among the Python gates, `cargo test --locked --all-targets`, a full harness discover, then `harness.test_integration` with a named-test check.
     - The integration gate counts as passed only if `test_lab_scenario_trace_is_accepted_by_oracle` and `test_broken_controls_are_rejected_by_oracle` ran and passed. A skipped or absent named test is a failure.
     - `verify.MANIFEST_PATH` is read at call time.
-    - `claim_boundary` in the manifest carries `full_lap_mls` and the three fixed boundary fields on every run, and a stale `true` is overwritten by `false`.
+    - `claim_boundary` in the manifest carries `full_construction_mls` and the three fixed boundary fields on every run, and a stale `true` is overwritten by `false`.
 
 ## 10. Requirement corrections
 
@@ -743,18 +743,28 @@ Amendment A-2 (coordinator, 2026-10-23): `tests/authority_resource_contract.rs`,
 
 Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` test `grant_to_a_current_member_requires_rekey` asserts that a grant to a current member is `unauthorized` (C-25). Under C-28 that grant becomes a pending offer, `{pending: true}`, with the kernel unchanged. A test author, not the implementer, updates that assertion and keeps the kernel-unchanged check.
 
-**R-11 (approved 2026-10-23, D-11): the policy binding moves from `acc_context` into the canonical ack.** The source is `formal/R-11-proposal.md`, from the formalization review session.
-- (a) `acc_context` becomes static: `{version = 2, apf_key_id, group}`, set at genesis and never changed by any commit. Every successor `GroupContext` contains the genesis `acc_context` byte for byte.
+**R-11 (approved 2026-10-23, D-11): the policy binding moves from `apf_anchor` into the canonical ack.** The source is `formal/R-11-proposal.md`, from the formalization review session.
+- (a) `apf_anchor` becomes static: `{version = 2, apf_key_id, group}`, set at genesis and never changed by any commit. Every successor `GroupContext` contains the genesis `apf_anchor` byte for byte.
 - (b) No commit carries a GroupContextExtensions proposal, and the sequencer rejects any commit that does. Admission, repair and rekey commits carry only Add or Remove proposals, or none, plus the update path their kind requires.
 - (c) `CanonicalAckTBS` (§4.6) gains `uint64 policy_revision; opaque policy_digest<V>;`, set from the kernel at the canonical step. For `kind` = repair the rule moves here unchanged: `policy_revision ≥ fence_revision`, and `policy_digest` equals the kernel digest at that revision.
 - Why: the formal companion derives key confinement from the ETK theorem for RFC 9420. ETK does not model GroupContextExtensions proposals, and no proof uses the group-context binding.
 - What is given up: MLS's confirmation tag no longer covers the policy revision. Members learn it from the APF-signed ack, which is already the source of truth for the parent compare-and-swap.
-- Effect on existing tests: assertions that read `policy_revision` or `policy_digest` from `acc_context`, or that expect a GroupContextExtensions proposal in a repair commit, are rewritten by their test authors against the ack, under a recorded amendment. The affected suites are `adapter_admission`, `adapter_compat`, `adapter_entropy`, `adapter_rekey`, `adapter_recovery`, `adapter_release`, `adapter_repair` and `adapter_repair_stacked`.
+- Effect on existing tests: assertions that read `policy_revision` or `policy_digest` from `apf_anchor`, or that expect a GroupContextExtensions proposal in a repair commit, are rewritten by their test authors against the ack, under a recorded amendment. The affected suites are `adapter_admission`, `adapter_compat`, `adapter_entropy`, `adapter_rekey`, `adapter_recovery`, `adapter_release`, `adapter_repair` and `adapter_repair_stacked`.
 - It is implemented test-first after the current phase (4.5 and 4.7b). It is not yet implemented.
 
-## 11. Claim gate for `full_lap_mls`
+**C-43 (D-15): names from may–can concordance.** The formal companion renamed authorization–capability coherence (ACC) to may–can concordance (`formal/LEXICON.md`). The code follows. No behavior, encoded byte, TLS label or code point changes.
+- Class A, names only: `AccContext` → `ApfAnchor`, `ACC_CONTEXT_EXTENSION_TYPE` → `APF_ANCHOR_EXTENSION_TYPE` (still `0xf043`), `acc_context` and `acc` locals → `apf_anchor` and `anchor`, in `src/` and `tests/`. Error details change with them (`binding_mismatch: apf_anchor …`, `noncanonical_commit: apf_anchor changed`); the error codes do not.
+- Class B, JSON fields:
+  - the repair plan response field `acc_context` → `apf_anchor` (§4.12, `src/adapter.rs`, read by `src/lab.rs`);
+  - the manifest and CLI field `full_lap_mls` → `full_construction_mls` (`evidence/manifest.json`, `scripts/verify.py`, `src/main.rs`, `harness/`). Consumers that pin an earlier revision, such as the testbed, keep the old name until they move their pin.
+  - the fixed manifest field `bridge_remove_etk: "open"` → `key_confinement_computational: "conditional"`, which matches the README and `formal/README.md`. The proof obligation itself is unchanged; the value names its status in the formal companion, where it is derived with three named open items.
+- The extension is named for its role after R-11: a constant genesis binding that names the APF key and the group. R-11 changes its contents, not its name.
+- Historical records keep their words: `evidence/*.txt`, quoted approvals in §13, `formal/baseline/` and dated plans.
+- Tests: the existing Rust and Python suites, renamed identically, with no assertion weakened. Evidence: `evidence/c43-rename.txt`.
 
-`full_lap_mls` MAY be reported `true` only when all of the following hold in one recorded run:
+## 11. Claim gate for `full_construction_mls`
+
+`full_construction_mls` MAY be reported `true` only when all of the following hold in one recorded run:
 
 - every kernel frontier came from the sequencer;
 - admission, release, delivery, revocation, repair, confirmation and reauthorization pass their positive and negative tests;
@@ -762,7 +772,7 @@ Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` tes
 - the crash barriers B1–B8 pass;
 - the oracle accepts the exported trace and rejects the named broken controls.
 
-Even then, the README states that `Bridge_remove^ETK` is an open proof obligation, and it states how HPKE randomness is covered (§8).
+Even then, the README states that computational key confinement (`formal/`, Proposition 3) is conditional and names its open items, and it states how HPKE randomness is covered (§8).
 
 ## 12. New error codes
 
@@ -790,6 +800,7 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.
   - The fix: a plan and a repair commit may now stack on a pending repair (C-27), and only the latest pending repair can be confirmed. It needs no kernel change, because `repair_stage` already stacks and `repair_open` requires the latest pending branch.
 - **D-8 (approved 2026-10-23):** R-9, with amendment A-2. The approval was relayed by the parent session, quoting Daniel: "I approve R-9 (D-8). Forward it to the adapter session to implement test-first."
+- **D-15 (approved 2026-10-25 by Daniel): may–can concordance.** In the formal review session Daniel chose "Concordance" as the name that replaces authorization–capability coherence, "Everything, code included" as the scope of the rename, and "Research and cite" for the post-quantum hypotheses of K4. C-43 implements the code part.
 - **D-14 (approved 2026-10-25 by Daniel): merge, C-41, and the Entropy Core key exchange.** Daniel answered three items with "Let's do this": merge `feat/post-quantum` (C-42, D-13; the merge also brings C-41), accept C-41, and merge openmls-qrand `feat/pq-tls` (0.2.0, default `pq-only`). For the Entropy Core link he chose "pq-preferred" over `pq-only`. The C-42 amendment above implements that choice as the default of the `qrng` source, with the negotiated group in the entropy report.
 - **D-13 (approved 2026-10-25 by Daniel): post quantum migration (C-42).** Daniel approved all four steps of testbed finding F-9: "All steps look reasonable and good to have. PQC is already an urgency for migration so there is no reason to not implement it from the start in New applications. Proceed with all the PQs". C-42 implements PQ-1 and PQ-3 here; PQ-2 and PQ-4 are in openmls-qrand and the testbed.
 - **D-12 (approved 2026-10-24 by Daniel, in the adapter session): lab entropy selection (C-40).** Runtime selection of the lab's entropy source returns as a test-infrastructure requirement on top of the provider-generic adapter, replacing the archived 2026-10-08 `MlsLab` version (tag `archive/lap-mls-coupling-2026-10-08`). Daniel chose to build the mock into openmls-qrand as a backend (`EntropyBackend`, `MockEntropy`) rather than as a separate fake HTTP server, because no alternative entropy provider is reachable yet.

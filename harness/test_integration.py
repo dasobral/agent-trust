@@ -15,7 +15,7 @@ Lab line protocol, as pinned by these tests (C-36, resolved by the test author):
   ``encode_request`` builds request lines.
 - One response line per request, exactly ``{"ok": ...}`` or ``{"error": "<code...>"}``.
   An error code may carry detail after the code (``"read_fenced: ..."``). The exit
-  status is 0 at end of input, and no response ever mentions ``full_lap_mls``.
+  status is 0 at end of input, and no response ever mentions ``full_construction_mls``.
 - ``send`` payloads are even-length lowercase hex strings, so they read the same as
   hex bytes or as text. A sent envelope is queued for every roster reader except
   the sender, which cannot decrypt its own MLS application message.
@@ -141,7 +141,7 @@ class LabSession:
         if line is None:
             self.process.wait(timeout=RESPONSE_TIMEOUT)
             self.test.fail(f"lab exited without answering {name!r}; {self._diagnostic()}")
-        self.test.assertNotIn("full_lap_mls", line, "the lab never reports full_lap_mls (C-36)")
+        self.test.assertNotIn("full_construction_mls", line, "the lab never reports full_construction_mls (C-36)")
         try:
             response = json.loads(line)
         except ValueError:

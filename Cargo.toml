@@ -11,7 +11,7 @@ homepage = "https://github.com/dasobral/agent-trust"
 authors = ["Daniel Sobral Blanco <dasobral93@gmail.com>"]
 keywords = ["mls", "authorization", "openmls", "capability", "delegation"]
 categories = ["cryptography"]
-description = "Experimental laboratory for authorization-capability coherence with MLS agent principals"
+description = "Experimental laboratory for may-can concordance with MLS agent principals"
 
 [lib]
 name = "agent_trust"

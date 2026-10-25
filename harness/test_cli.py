@@ -136,7 +136,7 @@ class AuthorityCliTests(unittest.TestCase):
                 "removed_reader_rejected": True,
                 "continuing_reader_decrypts": True,
                 "epoch_advanced": True,
-                "full_lap_mls": False,
+                "full_construction_mls": False,
                 "staged_keypackage_binding_verified": True,
             },
         )

@@ -1,0 +1,24 @@
+# C-43 (D-15): may–can concordance names, 2026-10-25, branch docs/concordance
+# A rename only. No red run: no behavior changes, so the existing suites are the check.
+
+cargo build --all-targets                       exit 0
+cargo fmt --check                               exit 0 (after cargo fmt; main was fmt-clean)
+cargo test                                      exit 0 (every suite ok, one test ignored as before)
+python3 -m unittest harness.test_verify         exit 0 (11 tests)
+python3 scripts/verify.py                       exit 0, every gate PASS in pq and classical
+                                                (log: evidence/verify-2026-10-25-c43.txt)
+python3 formal/model/concordance_model.py       exit 0, ACCEPTED, same counts as before
+                                                (1556555 states, 9 mutants found)
+
+# No assertion was weakened.
+# Check: each changed file under src/, tests/, harness/ and scripts/ was taken
+# from HEAD and from the working tree, both were formatted with the same wide
+# rustfmt settings, and the C-43 mapping was reversed on the new copy. diff -r
+# then showed only:
+#   - the verify.py reason text (Bridge_remove^ETK -> computational key
+#     confinement is conditional), an intended change;
+#   - import order chosen by rustfmt (ApfAnchor sorts differently from AccContext);
+#   - line wrapping chosen by rustfmt.
+# Every assertion, expected value and error code is otherwise byte-identical.
+# The fixed manifest value changes from "open" to "conditional" with its key
+# (bridge_remove_etk -> key_confinement_computational), as listed in C-43.

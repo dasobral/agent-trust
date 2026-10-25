@@ -256,7 +256,7 @@ impl Lab<'_> {
         )?;
         let apf_public = pending.apf_public_key().to_vec();
         let founder_certificate = pending.founder_certificate().to_vec();
-        let acc_context = pending.acc_context().to_vec();
+        let apf_anchor = pending.apf_anchor().to_vec();
         let endpoint = ClientEndpoint::found(
             &group,
             &root,
@@ -264,7 +264,7 @@ impl Lab<'_> {
             identity,
             root_provider,
             &founder_certificate,
-            &acc_context,
+            &apf_anchor,
             &apf_public,
         )?;
         let group_info = endpoint.export_group_info()?;
@@ -714,11 +714,11 @@ impl World {
             .map(|name| name.as_str().map(str::to_owned))
             .collect::<Option<_>>()
             .ok_or("malformed: repair plan removed")?;
-        let acc_context = hex_field(&plan, "acc_context")?;
+        let apf_anchor = hex_field(&plan, "apf_anchor")?;
         let parent_roster = roster_of(&self.adapter.checkpoint()?)?;
         let staged = self
             .endpoint_mut(&by)?
-            .stage_repair(&removed, &acc_context)?;
+            .stage_repair(&removed, &apf_anchor)?;
         let (frontier, ack) = self.submit(&by, "repair", &staged.parent, &staged.commit)?;
         self.endpoint_mut(&by)?.apply_ack(&staged.commit, &ack)?;
         let continuing: Vec<String> = parent_roster

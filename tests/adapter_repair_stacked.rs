@@ -5,7 +5,7 @@
 //! fence unable to reopen. A new plan and a new repair commit stack on the pending repair,
 //! and only the latest pending repair can be confirmed.
 //!
-//! The `acc_context` payload and the confirmation TBS are decoded here with `tls_codec`
+//! The `apf_anchor` payload and the confirmation TBS are decoded here with `tls_codec`
 //! and `sha2`, independently of `src/wire.rs`. Raw OpenMLS state is used through
 //! `ClientEndpoint::mls_parts_mut`, which honest code never uses, to model removed
 //! endpoints that keep their group secrets.
@@ -104,9 +104,9 @@ impl<'a> TlsReader<'a> {
     }
 }
 
-/// §4.2 `AccContext`, as plain test data.
+/// §4.2 `ApfAnchor`, as plain test data.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct TestAcc {
+struct TestAnchor {
     version: u8,
     apf_key_id: Vec<u8>,
     group: Vec<u8>,
@@ -114,9 +114,9 @@ struct TestAcc {
     policy_digest: Vec<u8>,
 }
 
-fn decode_acc(bytes: &[u8]) -> TestAcc {
+fn decode_anchor(bytes: &[u8]) -> TestAnchor {
     let mut reader = TlsReader::new(bytes);
-    let acc = TestAcc {
+    let anchor = TestAnchor {
         version: reader.u8(),
         apf_key_id: reader.opaque(),
         group: reader.opaque(),
@@ -124,7 +124,7 @@ fn decode_acc(bytes: &[u8]) -> TestAcc {
         policy_digest: reader.opaque(),
     };
     reader.finish();
-    acc
+    anchor
 }
 
 /// Decodes a signed C-23 confirmation, checks its signature under `public_key`, and
@@ -288,7 +288,7 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
 }
@@ -356,7 +356,7 @@ fn genesis(tag: &str) -> (World, Client) {
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
     let founder_certificate = pending.founder_certificate().to_vec();
-    let acc_context = pending.acc_context().to_vec();
+    let apf_anchor = pending.apf_anchor().to_vec();
     let root = ClientEndpoint::found(
         GROUP,
         ROOT,
@@ -364,7 +364,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         client_provider(&format!("{tag}/root")),
         &founder_certificate,
-        &acc_context,
+        &apf_anchor,
         &apf_public,
     )
     .expect("root founds the group");
@@ -626,12 +626,12 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            acc_context: hex::decode(
-                response["acc_context"]
+            apf_anchor: hex::decode(
+                response["apf_anchor"]
                     .as_str()
-                    .expect("acc_context hex string"),
+                    .expect("apf_anchor hex string"),
             )
-            .expect("acc_context is hex"),
+            .expect("apf_anchor is hex"),
             policy_revision: response["policy_revision"]
                 .as_u64()
                 .expect("plan policy_revision"),
@@ -834,7 +834,7 @@ fn commit_repair_with(
 ) -> Repaired {
     let actor = committer.subject().to_owned();
     let staged = committer
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
     let accepted = w
@@ -996,8 +996,8 @@ fn stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_co
     );
     assert_eq!(plan.policy_revision, policy_revision);
     assert_eq!(
-        decode_acc(&plan.acc_context),
-        TestAcc {
+        decode_anchor(&plan.apf_anchor),
+        TestAnchor {
             version: 1,
             apf_key_id: w.apf_key_id(),
             group: GROUP.as_bytes().to_vec(),

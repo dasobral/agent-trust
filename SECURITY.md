@@ -28,6 +28,6 @@ Do not attach private keys, live credentials, or real endpoint configuration.
 ## Claim boundary
 
 A green test run shows that the executed gates passed. It does not establish
-`full_lap_mls`, retained-key exclusion for untested schedules, or production
+`full_construction_mls`, retained-key exclusion for untested schedules, or production
 MLS authorization-domain coupling. See the README claim-boundary section and
-[`docs/specification.md`](docs/specification.md).
+[`formal/README.md`](formal/README.md).

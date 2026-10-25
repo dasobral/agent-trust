@@ -429,7 +429,7 @@ fn accepted_from(response: &Value) -> Accepted {
 #[derive(Clone, Debug)]
 struct Plan {
     removed: Vec<String>,
-    acc_context: Vec<u8>,
+    apf_anchor: Vec<u8>,
     parent: Frontier,
 }
 
@@ -721,12 +721,12 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            acc_context: hex::decode(
-                response["acc_context"]
+            apf_anchor: hex::decode(
+                response["apf_anchor"]
                     .as_str()
-                    .expect("acc_context hex string"),
+                    .expect("apf_anchor hex string"),
             )
-            .expect("acc_context is hex"),
+            .expect("apf_anchor is hex"),
             parent: Frontier {
                 epoch: response["parent_epoch"].as_u64().expect("parent_epoch"),
                 branch: response["parent_branch"]
@@ -954,7 +954,7 @@ fn genesis(tag: &str) -> (World, Client) {
         root_identity,
         root_provider,
         pending.founder_certificate(),
-        pending.acc_context(),
+        pending.apf_anchor(),
         &w.apf_public,
     )
     .expect("root founds the group");
@@ -1261,7 +1261,7 @@ fn crashed_repair(
     let plan = w.plan(ROOT);
     assert_eq!(plan.removed, vec!["carol".to_owned()]);
     let staged = root
-        .stage_repair(&plan.removed, &plan.acc_context)
+        .stage_repair(&plan.removed, &plan.apf_anchor)
         .expect("stage the planned repair");
     assert_eq!(staged.parent, plan.parent);
     let crashed = w.crash(
@@ -2252,7 +2252,7 @@ fn interrupted_genesis_can_restart() {
             ScriptedRand::new(b"recovery-provider/interrupted/first"),
         ),
         pending.founder_certificate(),
-        pending.acc_context(),
+        pending.apf_anchor(),
         pending.apf_public_key(),
     )
     .expect("root founds the first group");
@@ -2308,7 +2308,7 @@ fn interrupted_genesis_can_restart() {
         root_identity(),
         root_provider,
         pending.founder_certificate(),
-        pending.acc_context(),
+        pending.apf_anchor(),
         &w.apf_public,
     )
     .expect("root founds the group again");

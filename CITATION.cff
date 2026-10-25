@@ -12,7 +12,8 @@ repository-code: "https://github.com/dasobral/agent-trust"
 license: MIT
 version: 0.1.0
 abstract: >-
-  Experimental laboratory for Authorization–Capability Coherence (ACC) with
+  Experimental laboratory for may–can concordance (formerly
+  authorization–capability coherence) with
   cryptographic agent principals, attenuated delegation, revocation, frozen
   operation release, OpenMLS authorization domains, and authenticated
   invocation provenance.

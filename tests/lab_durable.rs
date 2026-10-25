@@ -81,7 +81,7 @@ fn found_durable_root(
         identity,
         provider,
         pending.founder_certificate(),
-        pending.acc_context(),
+        pending.apf_anchor(),
         &apf_public,
     )
     .expect("found");

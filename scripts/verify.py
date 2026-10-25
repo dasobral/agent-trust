@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed public verification and the ``full_lap_mls`` claim gate.
+"""Fail-closed public verification and the ``full_construction_mls`` claim gate.
 
 Normative source: ``docs/adapter-contract.md`` C-38, C-39 and section 11. The gates
 run in this order, and the first failing gate stops the run:
@@ -13,7 +13,7 @@ run in this order, and the first failing gate stops the run:
    oracle-acceptance and broken-control tests ran and passed in every suite.
 
 Every gate must also execute a nonzero number of tests. Each run writes
-``MANIFEST_PATH`` (read at call time): ``claim_boundary.full_lap_mls`` is ``true``
+``MANIFEST_PATH`` (read at call time): ``claim_boundary.full_construction_mls`` is ``true``
 only when every gate passed in this run, and the fixed boundary fields are recorded
 on every run. Other manifest records are kept.
 """
@@ -43,7 +43,7 @@ GATES = ("build", "python-oracle", "rust", "harness", "integration")
 SUITES = ("pq", "classical")
 SUITE_ENV = "AGENT_TRUST_SUITE"
 BOUNDARY_FIELDS = {
-    "bridge_remove_etk": "open",
+    "key_confinement_computational": "conditional",
     "live_entropy_core": "unmet",
     "hpke_randomness": "drbg_seeded_from_source",
 }
@@ -97,7 +97,7 @@ def _missing_named_tests(text):
     return missing
 
 
-def _write_manifest(gates, full_lap_mls, reason, out):
+def _write_manifest(gates, full_construction_mls, reason, out):
     """Record the claim boundary of this run in ``MANIFEST_PATH``, keeping other records."""
     path = Path(MANIFEST_PATH)
     manifest = {}
@@ -108,7 +108,7 @@ def _write_manifest(gates, full_lap_mls, reason, out):
     except (OSError, ValueError):
         manifest = {}
     manifest["claim_boundary"] = {
-        "full_lap_mls": bool(full_lap_mls),
+        "full_construction_mls": bool(full_construction_mls),
         **BOUNDARY_FIELDS,
         "gates": {gate: gates.get(gate, "not_run") for gate in GATES},
         "suites": list(SUITES),
@@ -201,11 +201,12 @@ def run_verification(*, runner=subprocess.run, which=shutil.which, out=sys.stdou
         failure = _gates(cargo, gates, runner=runner, out=out)
     passed = failure is None
     reason = ("every gate passed in this run, the integration gate in the pq and classical "
-              "suites; Bridge_remove^ETK remains an open proof obligation and HPKE randomness "
+              "suites; computational key confinement (formal/ Proposition 3) is conditional, "
+              "see formal/README.md, and HPKE randomness "
               "is DRBG output seeded from the selected source" if passed else failure)
     if not _write_manifest(gates, passed, reason, out):
         return 1
-    print(f"claim_boundary.full_lap_mls: {'true' if passed else 'false'}", file=out)
+    print(f"claim_boundary.full_construction_mls: {'true' if passed else 'false'}", file=out)
     return 0 if passed else 1
 
 

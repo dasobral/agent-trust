@@ -13,16 +13,16 @@ use crate::suite::Suite;
 
 use crate::adapter::ClientIdentity;
 use crate::wire::{
-    epoch_authenticator_hash, operation_digest, verify_without_provider, AccContext, AckKind,
+    epoch_authenticator_hash, operation_digest, verify_without_provider, AckKind, ApfAnchor,
     AuthzIncarnation, CanonicalAck, ConsumeReceipt, Envelope, FounderCertificate, Frontier,
     FrozenContent, ReleaseCertificate, RepairConfirmation, Right, SignedStructure,
-    ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
+    ADMISSION_EXTENSION_TYPE, APF_ANCHOR_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
 /// The three adapter extension types every leaf declares and the group requires.
 pub(crate) const ADAPTER_EXTENSIONS: [u16; 3] = [
     ADMISSION_EXTENSION_TYPE,
-    ACC_CONTEXT_EXTENSION_TYPE,
+    APF_ANCHOR_EXTENSION_TYPE,
     AUTHZ_INCARNATION_EXTENSION_TYPE,
 ];
 /// Length of the joiner's zero `admission_cert_hash` placeholder (§4.3).
@@ -81,7 +81,7 @@ pub struct JoinCandidate<P: OpenMlsProvider> {
 }
 
 impl<P: OpenMlsProvider> ClientEndpoint<P> {
-    /// Creates the group as founder (§5.1 step 3): group id = `group`, `acc_context`
+    /// Creates the group as founder (§5.1 step 3): group id = `group`, `apf_anchor`
     /// payload, required capabilities `0xf042`–`0xf044`, leaf `authz_incarnation`
     /// carrying `SHA-256(founder_certificate)` and the root's `rights`, and the
     /// pure-plaintext handshake wire format.
@@ -93,7 +93,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         identity: ClientIdentity,
         provider: P,
         founder_certificate: &[u8],
-        acc_context: &[u8],
+        apf_anchor: &[u8],
         apf_public_key: &[u8],
     ) -> Result<Self, String> {
         let rights = sorted_rights(rights)?;
@@ -110,9 +110,9 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         {
             return Err("binding_mismatch: founder certificate".into());
         }
-        let acc = AccContext::decode(acc_context)?;
-        if acc.apf_key_id != apf_key_id || acc.group != group {
-            return Err("binding_mismatch: acc_context".into());
+        let anchor = ApfAnchor::decode(apf_anchor)?;
+        if anchor.apf_key_id != apf_key_id || anchor.group != group {
+            return Err("binding_mismatch: apf_anchor".into());
         }
 
         let incarnation = AuthzIncarnation {
@@ -125,8 +125,8 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         let context_extensions = Extensions::from_vec(vec![
             required_capabilities(),
             Extension::Unknown(
-                ACC_CONTEXT_EXTENSION_TYPE,
-                UnknownExtension(acc_context.to_vec()),
+                APF_ANCHOR_EXTENSION_TYPE,
+                UnknownExtension(apf_anchor.to_vec()),
             ),
         ])
         .map_err(mls)?;
@@ -445,13 +445,13 @@ impl<P: OpenMlsProvider> JoinCandidate<P> {
         {
             return Err("binding_mismatch: joined frontier".into());
         }
-        let accs = unknown_payloads(context.extensions(), ACC_CONTEXT_EXTENSION_TYPE);
-        let [acc] = accs.as_slice() else {
-            return Err("binding_mismatch: acc_context count".into());
+        let anchors = unknown_payloads(context.extensions(), APF_ANCHOR_EXTENSION_TYPE);
+        let [anchor] = anchors.as_slice() else {
+            return Err("binding_mismatch: apf_anchor count".into());
         };
-        let acc = AccContext::decode(acc).map_err(|_| "binding_mismatch: acc_context")?;
-        if acc.apf_key_id != apf_key_id || acc.group != self.group {
-            return Err("binding_mismatch: acc_context".into());
+        let anchor = ApfAnchor::decode(anchor).map_err(|_| "binding_mismatch: apf_anchor")?;
+        if anchor.apf_key_id != apf_key_id || anchor.group != self.group {
+            return Err("binding_mismatch: apf_anchor".into());
         }
 
         let group = staged.into_group(&self.provider).map_err(mls)?;
@@ -839,21 +839,21 @@ pub struct StagedRepair {
 
 impl<P: OpenMlsProvider> ClientEndpoint<P> {
     /// Stages, without merging, one commit that removes exactly the leaves of `removed`,
-    /// replaces `acc_context` with the planned payload and forces an UpdatePath (C-22).
+    /// replaces `apf_anchor` with the planned payload and forces an UpdatePath (C-22).
     ///
     /// The plan comes from the APF (C-20), so the committer has no discretion (C-21). The
-    /// client checks only that the planned `acc_context` names its pinned APF key and
+    /// client checks only that the planned `apf_anchor` names its pinned APF key and
     /// group; the sequencer is the gate for everything else.
     pub fn stage_repair(
         &mut self,
         removed: &[String],
-        acc_context: &[u8],
+        apf_anchor: &[u8],
     ) -> Result<StagedRepair, String> {
-        let acc = AccContext::decode(acc_context).map_err(|_| "binding_mismatch: acc_context")?;
-        if acc.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
-            || acc.group.as_bytes() != self.group.group_id().as_slice()
+        let anchor = ApfAnchor::decode(apf_anchor).map_err(|_| "binding_mismatch: apf_anchor")?;
+        if anchor.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
+            || anchor.group.as_bytes() != self.group.group_id().as_slice()
         {
-            return Err("binding_mismatch: acc_context".into());
+            return Err("binding_mismatch: apf_anchor".into());
         }
         if removed.contains(&self.subject) {
             return Err("invalid_repair: the committer is removed".into());
@@ -877,7 +877,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             }
         }
 
-        // The current GroupContext extensions with exactly the acc_context replaced.
+        // The current GroupContext extensions with exactly the apf_anchor replaced.
         let mut replaced = 0;
         let mut extensions = Vec::new();
         for extension in self
@@ -888,18 +888,18 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             .iter()
         {
             match extension {
-                Extension::Unknown(t, _) if *t == ACC_CONTEXT_EXTENSION_TYPE => {
+                Extension::Unknown(t, _) if *t == APF_ANCHOR_EXTENSION_TYPE => {
                     replaced += 1;
                     extensions.push(Extension::Unknown(
-                        ACC_CONTEXT_EXTENSION_TYPE,
-                        UnknownExtension(acc_context.to_vec()),
+                        APF_ANCHOR_EXTENSION_TYPE,
+                        UnknownExtension(apf_anchor.to_vec()),
                     ));
                 }
                 other => extensions.push(other.clone()),
             }
         }
         if replaced != 1 {
-            return Err("binding_mismatch: acc_context count".into());
+            return Err("binding_mismatch: apf_anchor count".into());
         }
         let extensions = Extensions::from_vec(extensions).map_err(mls)?;
 
@@ -1058,7 +1058,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
     /// storage stays unready until the missing acks are applied in order (C-24).
     ///
     /// The stored leaf must carry `subject` and `identity`'s key, and the group must carry
-    /// exactly one `acc_context` for the pinned APF key. A supplied pending commit requires
+    /// exactly one `apf_anchor` for the pinned APF key. A supplied pending commit requires
     /// a staged commit in storage whose path leaf carries the key it will merge with:
     /// `pending_identity`'s for a rekey, otherwise `identity`'s. Mismatches are
     /// `binding_mismatch`.
@@ -1080,16 +1080,16 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             .ok_or("uninitialized: group missing from storage")?;
 
         let apf_key_id = Sha256::digest(apf_public_key).to_vec();
-        let accs = unknown_payloads(
+        let anchors = unknown_payloads(
             state.public_group().group_context().extensions(),
-            ACC_CONTEXT_EXTENSION_TYPE,
+            APF_ANCHOR_EXTENSION_TYPE,
         );
-        let [acc] = accs.as_slice() else {
-            return Err("binding_mismatch: acc_context count".into());
+        let [anchor] = anchors.as_slice() else {
+            return Err("binding_mismatch: apf_anchor count".into());
         };
-        let acc = AccContext::decode(acc).map_err(|_| "binding_mismatch: acc_context")?;
-        if acc.apf_key_id != apf_key_id || acc.group != group {
-            return Err("binding_mismatch: acc_context".into());
+        let anchor = ApfAnchor::decode(anchor).map_err(|_| "binding_mismatch: apf_anchor")?;
+        if anchor.apf_key_id != apf_key_id || anchor.group != group {
+            return Err("binding_mismatch: apf_anchor".into());
         }
 
         // A removed member's inactive state has no own leaf; it stays inactive.
