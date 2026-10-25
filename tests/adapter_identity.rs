@@ -836,24 +836,47 @@ fn request_body_actor_and_now_fields_cannot_override_adapter_values() {
         "malformed",
     );
 
-    // The kernel uses the adapter clock.
+    // The kernel uses the adapter clock; a body `now` is malformed whatever its value.
     f.clock.set(200);
-    reject(
-        &mut f.adapter,
-        &sign(child.signer(), GROUP, "child", 3, &invoke),
-        "unauthorized",
-    );
     let mut stale_now = invoke.clone();
     stale_now["now"] = json!(50);
     reject(
         &mut f.adapter,
-        &sign(child.signer(), GROUP, "child", 4, &stale_now),
+        &sign(child.signer(), GROUP, "child", 3, &stale_now),
         "malformed",
     );
+    // At adapter time 200 the child's delegation (until 100) has expired. R-12 (amendment
+    // A-5): the kernel records the expiry in the step's transaction and refuses the
+    // invocation, so the kernel changes by exactly that `expire` event.
+    let before = checkpoint(&mut f.adapter);
+    code(
+        f.adapter
+            .handle(&sign(child.signer(), GROUP, "child", 4, &invoke)),
+        "unauthorized",
+    );
+    let after = checkpoint(&mut f.adapter);
+    assert_eq!(
+        after["revision"],
+        json!(before["revision"].as_u64().expect("revision") + 1)
+    );
+    assert_eq!(
+        after["history"]
+            .as_array()
+            .and_then(|history| history.last())
+            .map(|entry| entry["event"]["kind"].clone()),
+        Some(json!("expire"))
+    );
+    assert!(after["grants"]
+        .as_array()
+        .expect("grants")
+        .iter()
+        .any(|g| g["subject"] == json!("child") && g["active"] == json!(false)));
+    // The expiry is a ledger event: moving the clock back does not restore the grant.
     f.clock.set(50);
-    accept(
+    reject(
         &mut f.adapter,
         &sign(child.signer(), GROUP, "child", 5, &invoke),
+        "unauthorized",
     );
 
     // C-3: adapter-only commands are unauthorized, even for the root.

@@ -1,0 +1,41 @@
+# R-12 (D-16) delegation expiry as a ledger event — RED (current code, no stub needed)
+# date: 2026-10-25T18:44:37Z
+# source revision: 7e90fa38a2bdb549d9494aa420d25d9a2a6fdb4c + uncommitted R-12 tests
+# toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+# the R-12 tests compile against the existing interface; every failure is an assertion or a wrong error code.
+# read_only_commands_never_record_expiry is a guard that already holds.
+
+## command: cargo test -q --test authority_expiry
+exit: 101
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+FAILED expiry_of_a_non_roster_subject_does_not_fence
+FAILED expiry_commits_even_when_the_triggering_step_fails
+FAILED expiry_cascades_to_descendants_and_is_idempotent
+FAILED expiry_is_recorded_at_the_first_step_after_expires_at_and_closes_the_fence
+assertion `left == right` failed
+  left: 0
+ right: 1
+expected read_fenced, got unauthorized
+
+---- expiry_cascades_to_descendants_and_is_idempotent stdout ----
+assertion `left == right` failed: one event for bob's delegation
+  left: 0
+ right: 1
+assertion `left == right` failed: one expire event, before the step's own event
+  left: ["grant", "grant"]
+ right: ["expire", "grant"]
+
+## command: cargo test -q --test adapter_repair expired_reader_is_removed_by_a_repair_once_expiry_is_recorded
+exit: 101
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.61s
+FAILED expired_reader_is_removed_by_a_repair_once_expiry_is_recorded
+expected read_fenced, got unauthorized
+
+
+## command: cargo test -q --test adapter_recovery crash_after_a_kernel_step_that_recorded_an_expiry_is_recovered
+exit: 101
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.54s
+FAILED crash_after_a_kernel_step_that_recorded_an_expiry_is_recovered
+assertion `left == right` failed: the expiry and the crashed request each advanced the kernel once
+  left: 8
+ right: 9

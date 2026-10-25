@@ -125,17 +125,78 @@ impl Authority {
             .ok_or_else(|| "malformed: request object".to_string())?;
         let command = req_id(obj, "command")?;
         self.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
-        let result = self.execute_inner(obj, &command);
-        match result {
+        // R-12: the expiry events come first, in the step's transaction. A failed step
+        // rolls back to the savepoint only, so the expiry is recorded whatever the step's
+        // outcome; a failed sweep rolls back everything.
+        let swept = self
+            .expire(obj, &command)
+            .and_then(|()| self.conn.execute_batch("SAVEPOINT step").map_err(db));
+        if let Err(error) = swept {
+            let _ = self.conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
+        match self.execute_inner(obj, &command) {
             Ok(value) => {
-                self.conn.execute_batch("COMMIT").map_err(db)?;
+                self.conn
+                    .execute_batch("RELEASE step; COMMIT")
+                    .map_err(db)?;
                 Ok(value)
             }
             Err(error) => {
-                let _ = self.conn.execute_batch("ROLLBACK");
+                let kept = self
+                    .conn
+                    .execute_batch("ROLLBACK TO step; RELEASE step; COMMIT");
+                if kept.is_err() {
+                    let _ = self.conn.execute_batch("ROLLBACK");
+                }
                 Err(error)
             }
         }
+    }
+
+    /// R-12 (D-16): before a mutating step that carries `now`, one `expire` event for each
+    /// delegation that is no longer valid at `now` (`now > expires_at`, as in the chain
+    /// check) while its subject or a descendant still holds an active grant of one of its
+    /// rights. Each event applies `revoke`'s cascade and fence rule to those rights and
+    /// advances `revision` and `policy_revision` by one. Delegations are taken in stored
+    /// order, so a parent's cascade usually leaves nothing for its children's own events.
+    /// A step without a valid `now`, and a kernel before `init`, records nothing.
+    fn expire(&mut self, o: &serde_json::Map<String, Value>, command: &str) -> Result<(), String> {
+        if !EXPIRY_COMMANDS.contains(&command) || self.get_meta("state")?.is_none() {
+            return Ok(());
+        }
+        let Some(now) = o.get("now").and_then(Value::as_u64) else {
+            return Ok(());
+        };
+        let mut s = self.load()?;
+        let expired: Vec<(String, Vec<String>)> = s
+            .delegations
+            .iter()
+            .filter(|d| now > d.expires_at)
+            .map(|d| (d.subject.clone(), d.rights.clone()))
+            .collect();
+        for (subject, delegated) in expired {
+            let targets = descendants(&s, &subject);
+            let mut changed = false;
+            let mut fences = false;
+            for g in &mut s.grants {
+                if g.active && targets.contains(&g.subject) && delegated.contains(&g.right) {
+                    g.active = false;
+                    changed = true;
+                    fences |= g.right == "read" && s.roster.contains(&g.subject);
+                }
+            }
+            if changed {
+                bump(&mut s);
+                bump_policy(&mut s);
+                if fences {
+                    s.read_fenced = true;
+                    s.fence_revision = Some(s.policy_revision);
+                }
+                self.save(&s, "expire")?;
+            }
+        }
+        Ok(())
     }
 
     fn execute_inner(
@@ -340,20 +401,7 @@ impl Authority {
         if grant_mut(s, &subject, &right).is_none() {
             return Err("invalid_transition".into());
         }
-        let mut targets = BTreeSet::new();
-        targets.insert(subject);
-        loop {
-            let mut changed = false;
-            for d in &s.delegations {
-                if targets.contains(&d.parent) && !targets.contains(&d.subject) {
-                    targets.insert(d.subject.clone());
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
+        let targets = descendants(s, &subject);
         let fences_current_reader =
             right == "read" && s.roster.iter().any(|reader| targets.contains(reader));
         let mut changed = false;
@@ -1131,6 +1179,31 @@ fn event_hash(seq: u64, previous: &str, event: &Value) -> Result<String, String>
     .map_err(|_| "corrupt_history".to_string())?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
+/// R-12: the mutating commands that carry `now`. `subject_status` also carries it but is
+/// read-only (C-7), so it never records an expiry.
+const EXPIRY_COMMANDS: &[&str] = &[
+    "grant", "delegate", "revoke", "admit", "invoke", "release", "consume", "rekey",
+];
+
+/// `subject` and every subject delegated from it, transitively: the cascade of `revoke`.
+fn descendants(s: &State, subject: &str) -> BTreeSet<String> {
+    let mut targets = BTreeSet::new();
+    targets.insert(subject.to_owned());
+    loop {
+        let mut changed = false;
+        for d in &s.delegations {
+            if targets.contains(&d.parent) && !targets.contains(&d.subject) {
+                targets.insert(d.subject.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    targets
+}
+
 fn bump(s: &mut State) {
     s.revision = s.revision.saturating_add(1);
 }

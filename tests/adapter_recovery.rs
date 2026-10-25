@@ -2426,3 +2426,51 @@ fn rekey_identity_survives_client_restart() {
     deliver_to(&mut w, &mut root, &published);
     deliver_to(&mut w, &mut carol, &published);
 }
+
+/// R-12 (D-16): a kernel step whose `now` is past a delegation's expiry records an
+/// `expire` event before its own event, in the same kernel transaction. A crash after
+/// that kernel call must still be recovered as applied: the kernel advanced by the expiry
+/// and the step, and the last event is the step's own (C-32, C-45).
+#[test]
+fn crash_after_a_kernel_step_that_recorded_an_expiry_is_recovered() {
+    let Setup { mut w, .. } = setup("expiry-crash");
+    // frank holds a short delegation and is not admitted, so his expiry does not fence.
+    let frank = identity("frank");
+    w.ok(
+        ROOT,
+        &json!({
+            "command":"delegate", "subject":"frank", "rights":["read"], "resources":[GROUP],
+            "expires_at":NOW + 10, "not_before":0, "depth":4,
+            "subject_key":lower_hex(frank.public_key())
+        }),
+    );
+    w.clock.set(NOW + 11);
+
+    let gina = identity("gina");
+    let crashed = w.crash(CrashPoint::AfterKernel, ROOT, &delegate_body("gina", &gina));
+    w.reopen();
+    let checkpoint = w.checkpoint();
+    assert_eq!(
+        revision(&checkpoint),
+        revision(&crashed.checkpoint) + 2,
+        "the expiry and the crashed request each advanced the kernel once"
+    );
+    let history = checkpoint["history"].as_array().expect("history");
+    let kinds: Vec<&str> = history[history.len() - 2..]
+        .iter()
+        .map(|entry| entry["event"]["kind"].as_str().expect("kind"))
+        .collect();
+    assert_eq!(kinds, ["expire", "delegate"]);
+    assert_eq!(last_kind(&checkpoint), "delegate");
+    assert_recovery_event(&mut w, &crashed, RECOVERED);
+    rejected_request(&mut w, &crashed.request, "unauthenticated");
+    assert_eq!(
+        w.grant_record("frank", "read").expect("frank read")["active"],
+        json!(false)
+    );
+    assert!(w.active("gina", "read"));
+    assert_eq!(checkpoint["read_fenced"], json!(false));
+    // gina's key registration was recovered with the request: she authenticates.
+    let response = w.ok("gina", &allocate_body("op-gina"));
+    assert_eq!(response["op"], json!("op-gina"));
+}

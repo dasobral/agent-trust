@@ -38,6 +38,7 @@ Version 2 extends the version 1 oracle for the real adapter, where every canonic
 - Version 2 has no state `revision`. It tracks `policy_revision` (R-3).
 - The version 1 event `repair` is not part of version 2. In a version 2 trace it is `malformed`.
 - Resources (R-8, R-9), delegations, invocations and expiry are out of scope for version 2. Every operation is implicitly on the group resource. A trace that carries a `resource` field is `malformed`.
+- R-12: a delegation expiry that the kernel recorded is exported as one `deny` per deactivated grant, in history order. It is an accepted kernel transition of its own, so it is exported even when the request whose step recorded it was refused; that request is not exported.
 
 ## V2.2 Oracle state
 

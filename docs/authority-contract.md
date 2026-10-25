@@ -30,7 +30,7 @@ Requests use `command` discriminator. Error strings begin a stable code followed
 
 Errors: `malformed`, `uninitialized`, `already_initialized`, `unauthorized`, `invalid_generation`, `invalid_delegation`, `duplicate_operation`, `invalid_transition`, `stale_frontier`, `read_fenced`, `unsound_cover`, `binding_mismatch`, `not_persisted`, `replay`, `invalid_repair`, `corrupt_history`.
 
-Expiry is evaluated from trusted adapter time `now` at release and consume. If any roster read grant's chain has expired, new content releases fail closed even before an explicit revoke. A later explicit revoke drives removal. Do not allow expired ancestor grants to authorize descendants. Production time-source trust and authentication are separate adapter gates.
+Expiry is evaluated from trusted adapter time `now` at release and consume. If any roster read grant's chain has expired, new content releases fail closed even before an explicit revoke. Since R-12, the first mutating step past the expiry also records it as a ledger event that drives removal (below). Do not allow expired ancestor grants to authorize descendants. Production time-source trust and authentication are separate adapter gates.
 
 ## Requirement corrections for the adapter (approved 2026-10-23)
 
@@ -79,3 +79,11 @@ Clarifications made during the phase 4.0 implementation. They only affect a stor
 - If `fence_revision` is null when `repair_stage` runs (a store fenced before the upgrade), only the check that `policy_revision` equals the current value applies.
 - Before R-6, envelopes were also limited by the shared 256-character identifier bound. `MAX_ENVELOPE` replaces that limit for `persist` and `emit` only.
 - Known cost: every history event stores a full state snapshot, envelopes included. Large envelopes therefore grow the history roughly quadratically. Phase 4.3 should keep exact envelope bytes in the adapter store and give the kernel only bounded data. This is a candidate follow-up correction; it does not affect the R-6 tests.
+
+## R-12: delegation expiry is a ledger event (D-16, 2026-10-25)
+
+- Before each `grant`, `delegate`, `revoke`, `admit`, `invoke`, `release`, `consume` and `rekey`, in the same transaction, the kernel records one history event of kind `expire` for each delegation with `now > expires_at` whose subject or a descendant still holds an active grant of one of the delegation's rights.
+- Each `expire` event deactivates those grants for the subject and its descendants, as `revoke` does for each right, and advances `revision` and `policy_revision` by one. If it deactivates the read grant of a roster member, it closes the fence and sets `fence_revision` to the new `policy_revision`.
+- The `expire` events stay recorded when the step itself fails: the step rolls back to a savepoint after them.
+- `subject_status` and `checkpoint` record nothing. The root delegation never expires.
+- The R-3 rule "nothing else advances `policy_revision`" gains this one exception.

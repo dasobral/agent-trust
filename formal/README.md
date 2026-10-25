@@ -101,5 +101,8 @@ fail, which is safe. But `revoke` never ran, so the fence never closed, and
 The group can stay blocked for read releases until an admin explicitly
 revokes the reader.
 
-This was inferred from reading the code. No test has run it. Recording expiry
-as a ledger revocation would restore Eq. (2).
+This was inferred from reading the code and then confirmed by a red test.
+R-12 (D-16, 25 October 2026) records expiry as a ledger revocation at the
+first mutating kernel step past `expires_at`, which restores Eq. (2): the
+fence closes and an ordinary repair removes the reader
+(`evidence/r12-red.txt`, `evidence/r12-green.txt`).

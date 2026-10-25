@@ -1167,6 +1167,9 @@ pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
     export.init(&current)?;
 
     for row in trace {
+        // R-12: an expiry belongs to no request; it precedes the step that recorded it,
+        // which may have failed.
+        current = export.expiries(&mut history, current)?;
         if row.outcome != "ok" && row.outcome != "recovered" {
             continue;
         }
@@ -1221,6 +1224,7 @@ pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
             export.offer_admins.push(actor.to_owned());
         }
     }
+    export.expiries(&mut history, current)?;
     if let Some((kind, _)) = history.next() {
         return Err(format!(
             "binding_mismatch: kernel event {kind} has no accepted trace event"
@@ -1248,6 +1252,21 @@ struct Export<'a> {
 }
 
 impl Export<'_> {
+    /// Exports every R-12 `expire` event at the head of `history` as `deny` events and
+    /// returns the snapshot after them.
+    fn expiries(
+        &mut self,
+        history: &mut std::iter::Peekable<std::vec::IntoIter<(String, Value)>>,
+        mut current: Value,
+    ) -> Result<Value, String> {
+        while history.peek().is_some_and(|(kind, _)| kind == "expire") {
+            let (kind, next) = history.next().ok_or("corrupt_history")?;
+            self.transition(&kind, "", &current, &next)?;
+            current = next;
+        }
+        Ok(current)
+    }
+
     fn push(&mut self, kind: &str, fields: Value) {
         let mut event = Map::new();
         event.insert(
@@ -1324,10 +1343,10 @@ impl Export<'_> {
                     );
                 }
             }
-            "revoke" => {
+            "revoke" | "expire" => {
                 let denied = deactivated(previous, next)?;
                 if denied.is_empty() {
-                    return Err("corrupt_history: revoke deactivated no grant".into());
+                    return Err(format!("corrupt_history: {kind} deactivated no grant"));
                 }
                 for grant in denied {
                     self.policy_events += 1;

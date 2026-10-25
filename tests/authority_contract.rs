@@ -378,8 +378,13 @@ fn attenuated_delegations_expire_and_revoke_cascades_only_the_affected_right() {
             ],
             16,
         ),
-        "unauthorized",
+        // R-12 (amendment A-5): bob's expiry at 15 is recorded at this step and, bob being
+        // a roster reader, closes the fence, so the release is refused as fenced.
+        "read_fenced",
     );
+    let expired = checkpoint(&mut authority);
+    assert!(!active(&expired, "bob", "read"), "the expiry is recorded");
+    assert_eq!(expired["read_fenced"], json!(true));
     request(
         &mut authority,
         json!({"command":"revoke", "actor":"root", "subject":"alice", "right":"read", "now":16}),

@@ -1,0 +1,40 @@
+# R-12 (D-16) delegation expiry as a ledger event — GREEN
+# date: 2026-10-25T18:50:31Z
+# source revision: 7e90fa38a2bdb549d9494aa420d25d9a2a6fdb4c + uncommitted R-12 implementation (C-45, amendment A-5)
+# toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+
+## command: cargo test -q --test authority_expiry
+exit: 0
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+## command: cargo test -q --test adapter_repair
+exit: 0
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.40s
+
+## command: cargo test -q --test adapter_recovery
+exit: 0
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.45s
+
+## command: cargo test -q --test adapter_identity
+exit: 0
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+## command: cargo test -q --test authority_contract
+exit: 0
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+## command: cargo test -q (whole crate)
+exit: 0
+test binaries ok: 26, failed: 0
+
+## command: python3 scripts/verify.py
+exit: 0
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (190 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+
+## command: cargo fmt --check && cargo clippy --all-targets -q
+exit: 0 (clippy output lines: 0)

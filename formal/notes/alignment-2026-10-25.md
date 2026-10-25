@@ -67,7 +67,7 @@ Daniel's call), **open** (tracked work).
   checks the conclusion of Lemma 2 directly at release. That is stricter
   than the model. Theorems 1 and 2 hold a fortiori.
 
-### A-5. Delegation expiry is not a ledger event (**open**: R-12, decision D-16 requested)
+### A-5. Delegation expiry is not a ledger event (**fixed** 2026-10-25: R-12, D-16)
 
 - Paper: Eq. (2) requires every change of authorization to be a ledger
   event (`coherence.tex:114`, `coherence.tex:407`).
@@ -80,9 +80,12 @@ Daniel's call), **open** (tracked work).
   That is safe. But no repair removes the reader, because `repair_stage`
   needs a closed fence. The group stops making progress until an admin
   revokes the reader.
-- No test has run this. Proposed correction: record expiry as a ledger
-  revocation at the first ledger step at or after `expires_at`. Test first,
-  as a numbered contract correction.
+- No test had run this. Correction R-12 (D-16): the first mutating kernel
+  step past `expires_at` records an `expire` event with `revoke`'s cascade
+  and fence rule, even when the step fails. The red test confirmed the
+  stall (`evidence/r12-red.txt`); after the fix the expired reader is
+  removed by an ordinary repair (`evidence/r12-green.txt`,
+  `docs/adapter-contract.md` C-45).
 
 ### A-6. R-11 is approved and not implemented (**fixed** 2026-10-25)
 
@@ -159,4 +162,4 @@ reader that they implement the paper's readers and canonical epoch.
 
 Nothing in the proofs changes. A-1 and B-1 change what may be claimed for
 the default post-quantum suite. A-4 makes the code stricter than the model.
-A-5 is a progress gap, not a safety gap, and the theory predicted it.
+A-5 was a progress gap, not a safety gap, and the theory predicted it; R-12 closes it.

@@ -3754,15 +3754,27 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let intents = self.intents()?;
         for intent in intents {
             let checkpoint = self.kernel_checkpoint()?;
-            let revision = checkpoint["revision"]
-                .as_u64()
-                .ok_or("malformed: kernel revision")?;
-            let last_kind = checkpoint["history"]
+            // The events after the intent's revision: R-12 `expire` events, which the
+            // kernel records in the step's transaction even when the step fails, then the
+            // step's own event if it was applied.
+            let later: Vec<&str> = checkpoint["history"]
                 .as_array()
-                .and_then(|history| history.last())
-                .and_then(|event| event["event"]["kind"].as_str());
-            let applied = intent.revision.checked_add(1) == Some(revision)
-                && last_kind == Some(intent.kernel_command.as_str());
+                .ok_or("malformed: kernel history")?
+                .iter()
+                .filter(|entry| {
+                    entry["event"]["snapshot"]["revision"]
+                        .as_u64()
+                        .is_some_and(|revision| revision > intent.revision)
+                })
+                .map(|entry| entry["event"]["kind"].as_str().unwrap_or_default())
+                .collect();
+            let applied = match later.split_last() {
+                Some((last, expiries)) => {
+                    *last == intent.kernel_command.as_str()
+                        && expiries.iter().all(|kind| *kind == "expire")
+                }
+                None => false,
+            };
             if applied {
                 self.finish_intent(intent, &checkpoint)?;
             } else {

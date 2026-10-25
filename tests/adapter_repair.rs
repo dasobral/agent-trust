@@ -506,6 +506,8 @@ struct World {
     apf_public: Vec<u8>,
     /// The genesis `apf_anchor` payload, constant for the group's life (R-11).
     genesis_anchor: Vec<u8>,
+    /// The adapter's clock, shared (R-12 tests move it past a delegation's expiry).
+    clock: FixedClock,
     seqs: HashMap<String, u64>,
     providers: u64,
 }
@@ -532,7 +534,7 @@ fn genesis(tag: &str) -> (World, Client) {
         ROOT,
         root_identity.public_key(),
         provider,
-        clock,
+        clock.clone(),
     )
     .expect("begin_genesis");
     let apf_public = pending.apf_public_key().to_vec();
@@ -561,6 +563,7 @@ fn genesis(tag: &str) -> (World, Client) {
             adapter,
             apf_public,
             genesis_anchor: apf_anchor,
+            clock,
             seqs: HashMap::new(),
             providers: 0,
         },
@@ -692,9 +695,13 @@ impl World {
     }
 
     fn delegate(&mut self, subject: &str, rights: &[&str]) {
+        self.delegate_until(subject, rights, EXPIRES);
+    }
+
+    fn delegate_until(&mut self, subject: &str, rights: &[&str], expires_at: u64) {
         let body = json!({
             "command":"delegate", "subject":subject, "rights":rights, "resources":[GROUP],
-            "expires_at":EXPIRES, "not_before":0, "depth":4,
+            "expires_at":expires_at, "not_before":0, "depth":4,
             "subject_key":lower_hex(identity(subject).public_key())
         });
         self.ok(ROOT, &body);
@@ -2089,4 +2096,136 @@ fn grant_to_a_current_member_requires_rekey() {
     w.ok(ROOT, &grant_body("erin", "read", 1, false));
     assert_eq!(w.generation("erin", "read"), 1);
     assert!(w.active("erin", "read"));
+}
+
+/// R-12 (D-16): delegation expiry is a ledger event. Before R-12, an expired delegated
+/// reader in the roster made every release fail, and no repair could remove it, because
+/// a repair needs a closed fence and expiry never closed it (alignment note A-5). Now the
+/// first kernel step past the expiry records it and closes the fence, even though that
+/// step (a release) fails; the plan removes the reader, and after the repair the group
+/// releases again with a cover that excludes it.
+#[test]
+fn expired_reader_is_removed_by_a_repair_once_expiry_is_recorded() {
+    let (mut w, mut root) = genesis("expiry");
+    let expires_at = NOW + 100;
+    w.delegate_until("bob", &["read", "write", "admit"], expires_at);
+    w.delegate("carol", &["read", "write", "admit"]);
+    let mut bob = admit(&mut w, &mut root, "bob", &mut []);
+    let mut carol = admit(&mut w, &mut root, "carol", &mut [&mut bob]);
+    let before = publish(&mut w, &mut root, "op-before");
+    deliver_to(&mut w, &mut carol, &before);
+    w.allocate(ROOT, "op-after");
+
+    // Time passes the expiry. A read-only request records nothing: no plan yet.
+    w.clock.set(expires_at + 1);
+    rejected(&mut w, ROOT, &repair_plan_body(), "invalid_repair");
+
+    // The root's release reaches the kernel: the expiry is recorded first and closes
+    // the fence, so the release is refused as fenced. The kernel changed, so this is
+    // checked directly rather than through `rejected`.
+    let parent = w.kernel_frontier();
+    let body = w.release_body(ROOT, "op-after", &payload_for("op-after"));
+    code(w.send(ROOT, &body), "read_fenced");
+    let checkpoint = w.checkpoint();
+    assert_eq!(
+        checkpoint["read_fenced"],
+        json!(true),
+        "the expiry closed the fence"
+    );
+    assert_eq!(checkpoint["fence_revision"], checkpoint["policy_revision"]);
+    let kinds: Vec<&str> = checkpoint["history"]
+        .as_array()
+        .expect("history")
+        .iter()
+        .map(|entry| entry["event"]["kind"].as_str().expect("kind"))
+        .collect();
+    assert_eq!(
+        kinds.last(),
+        Some(&"expire"),
+        "the failed release left only the expiry"
+    );
+    assert_eq!(
+        w.grant_record("bob", "read").expect("bob read")["active"],
+        json!(false)
+    );
+    assert_eq!(w.kernel_frontier(), parent, "no frontier change");
+
+    // The plan removes bob; the repair and its confirmation reopen the group.
+    let plan = w.plan(ROOT);
+    assert_eq!(plan.removed, vec!["bob"]);
+    commit_repair_with(&mut w, &mut root, plan, &mut [&mut carol]);
+    open_fence(&mut w, &mut root, &mut carol);
+    assert_eq!(w.roster(), vec![ROOT, "carol"]);
+
+    let released = w.release(ROOT, "op-after", &payload_for("op-after"));
+    assert_eq!(
+        certificate_readers(&w, &released.certificate),
+        vec![("carol".to_owned(), 0), (ROOT.to_owned(), 0)]
+    );
+    let after = finish(&mut w, &mut root, released);
+    deliver_to(&mut w, &mut carol, &after);
+
+    // The exported v2 trace (C-37) carries the expiry as bob's denials, after the last
+    // grant and before the repair, and the independent oracle accepts it.
+    let trace = agent_trust::lab::export_v2_trace(w._dir.path()).expect("export the trace");
+    let types: Vec<&str> = trace
+        .iter()
+        .map(|event| event["type"].as_str().expect("event type"))
+        .collect();
+    let repair = types
+        .iter()
+        .position(|t| *t == "repair_stage")
+        .expect("a repair_stage event");
+    let denials: Vec<(usize, &Value)> = trace
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| event["type"] == json!("deny"))
+        .collect();
+    let denied: Vec<(&str, &str)> = denials
+        .iter()
+        .map(|(_, event)| {
+            (
+                event["subject"].as_str().expect("subject"),
+                event["right"].as_str().expect("right"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        denied,
+        [("bob", "read"), ("bob", "write"), ("bob", "admit")],
+        "the expiry is exported as bob's denials"
+    );
+    assert!(denials.iter().all(|(index, _)| *index < repair));
+    assert_eq!(
+        oracle_violations(&trace),
+        json!([]),
+        "the oracle accepts the trace"
+    );
+}
+
+/// Runs the independent Python oracle (`harness/oracle.py`) on `trace` and returns its
+/// violations.
+fn oracle_violations(trace: &[Value]) -> Value {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("python3")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .args([
+            "-c",
+            "import json, sys; sys.path.insert(0, 'harness'); import oracle; \
+             print(json.dumps(oracle.check_trace(json.load(sys.stdin))))",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("python3 runs the oracle");
+    child
+        .stdin
+        .take()
+        .expect("oracle stdin")
+        .write_all(&serde_json::to_vec(trace).expect("trace JSON"))
+        .expect("write the trace");
+    let output = child.wait_with_output().expect("oracle output");
+    assert!(output.status.success(), "the oracle process failed");
+    serde_json::from_slice(&output.stdout).expect("oracle violations JSON")
 }
