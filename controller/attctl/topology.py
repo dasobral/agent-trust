@@ -136,9 +136,12 @@ def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None)
                         "AGENT_TRUST_QRNG_CA_PEM"):
                 if key in extra_env:
                     entropy_env[key] = extra_env[key]
-        # openmls-qrand: the TLS key exchange of the QRNG link (pq-only by default).
+        # openmls-qrand: the TLS key exchange of the QRNG link. The testbed's own qrng
+        # service is post quantum, so it gets pq-only; a real endpoint such as an Entropy
+        # Core gets pq-preferred (agent-trust D-14), and the entropy report shows the group.
+        default = "pq-only" if topology.qrng_mock else "pq-preferred"
         entropy_env["AGENT_TRUST_QRNG_KEY_EXCHANGE"] = topology.entropy.get(
-            "key_exchange", "pq-only")
+            "key_exchange", default)
     entropy_deps = ["qrng"] if topology.qrng_mock else []
 
     services.append(Service("apf", "apf", {

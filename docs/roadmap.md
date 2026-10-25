@@ -12,7 +12,7 @@
 | Agent persistence | Upstream (F-2) and sidecar | Done; upstream on branch `feat/durable-lab-provider`, waiting for merge |
 | mTLS between services | Services | Done, with transport identity bound to protocol identity |
 | Kubernetes backend | Backend | Done, tested on k3s, with NetworkPolicy checks (`experiments/k8s-isolation.toml`) |
-| E6 live Entropy Core | Topology | **Open**: needs a reachable Entropy Core. Set `entropy.url` (and the `AGENT_TRUST_QRNG_*` secrets) in a topology; no code change. |
+| E6 live Entropy Core | Topology | **Open**: needs a reachable Entropy Core. Set `entropy.url` (and the `AGENT_TRUST_QRNG_*` secrets) in a topology; no code change. The link uses `pq-preferred` (D-14); record `GET /control/entropy` to show whether the Entropy Core negotiates `X25519MLKEM768`. |
 | F-8 kernel history cost | Upstream | **Open**: proposal in `docs/findings.md`, needs approval before implementation. More urgent since F-9: ML-DSA makes every persisted envelope about seven times larger, and E5 in the `pq` suite exceeds its round bound |
 | F-1, F-3, F-4, F-5 | Upstream | Open proposals in `docs/findings.md` |
 | F-9 post quantum | Upstream and testbed | **Done** (D-13, 2026-10-25): PQ-1 and PQ-3 in agent-trust C-42 (`pq` suite, the default), PQ-2 in openmls-qrand and `att-node` (X25519MLKEM768 on every link), PQ-4 in `att-node pki` (ML-DSA-44 certificates). E8 compares both suites. E5 in the `pq` suite waits for F-8 |

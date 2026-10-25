@@ -44,6 +44,24 @@ class TopologyTests(unittest.TestCase):
         self.assertEqual(env["AGENT_TRUST_QRNG_BASE_URL"], "https://entropy.example")
         self.assertEqual(env["AGENT_TRUST_QRNG_API_KEY"], "k")
 
+    def test_a_real_entropy_core_defaults_to_pq_preferred(self):
+        # D-14: the Entropy Core link prefers X25519MLKEM768 and accepts a classical group
+        # from a server without it; the node's entropy report shows the group.
+        topo = topology.Topology.load(TOPOLOGY)
+        topo.entropy = {"source": "qrng", "url": "https://entropy.example"}
+        plan = topology.plan(topo, lambda name, role: f"http://{name}:1")
+        for name in ("apf", "alice"):
+            self.assertEqual(plan.service(name).env["AGENT_TRUST_QRNG_KEY_EXCHANGE"],
+                             "pq-preferred", name)
+        # An explicit choice wins.
+        topo.entropy["key_exchange"] = "pq-only"
+        plan = topology.plan(topo, lambda name, role: f"http://{name}:1")
+        self.assertEqual(plan.service("apf").env["AGENT_TRUST_QRNG_KEY_EXCHANGE"], "pq-only")
+        # The testbed's own qrng service stays post quantum only.
+        mock = topology.plan(topology.Topology.load(TOPOLOGY),
+                             lambda name, role: f"http://{name}:1")
+        self.assertEqual(mock.service("apf").env["AGENT_TRUST_QRNG_KEY_EXCHANGE"], "pq-only")
+
 
 class SuiteTests(unittest.TestCase):
     """agent-trust C-42 through the topology: `pq` unless `[mls] suite` says otherwise."""

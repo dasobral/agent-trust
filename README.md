@@ -54,10 +54,14 @@ classical stack. E6 (a live Entropy Core) is the one planned experiment not run:
 a reachable endpoint. In every run here the QRNG service is a **mock** (OS RNG bytes): no
 quantum origin is claimed.
 
-Stack under test: agent-trust `f69b7fa` (branch `feat/post-quantum`: the durable
-provider of `feat/durable-lab-provider`, C-41, plus the post quantum suite, C-42; neither
-is merged into `main` yet), OpenMLS fork `dd33278` with the feature
-`draft-ietf-mls-pq-ciphersuites`, openmls-qrand `66026082` (branch `feat/pq-tls`).
+Stack under test: agent-trust `c87cf85` (branch `feat/ec-pq-preferred`: `main` at
+`f69b7fa`, with the durable provider, C-41, and the post quantum suite, C-42, plus D-14,
+`pq-preferred` for a real Entropy Core), OpenMLS fork `dd33278` with the feature
+`draft-ietf-mls-pq-ciphersuites`, openmls-qrand `868f058` (branch `feat/kx-probe`:
+`main` at `6602608` plus the negotiated key exchange report). The recorded reports name
+testbed commit `b7e9fa3`, which pinned agent-trust `f69b7fa` and openmls-qrand
+`66026082`; D-14 changes only the link to a real Entropy Core, which no recorded
+experiment uses.
 
 Findings on the stack, with proposals: [`docs/findings.md`](docs/findings.md). The
 most important: the kernel's cost per request grows with the square of its history

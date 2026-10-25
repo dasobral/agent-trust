@@ -23,7 +23,7 @@ TCP or mutual TLS. Byte strings are lowercase hex.
 | `AGENT_TRUST_MOCK_SEED` | apf, agent | Seed of the `mock` source |
 | `AGENT_TRUST_QRNG_BASE_URL` | apf, agent | QRNG Open API base URL for `qrng` |
 | `AGENT_TRUST_QRNG_*` | apf, agent | TLS material and API secrets of a real endpoint (agent-trust `src/entropy.rs`) |
-| `AGENT_TRUST_QRNG_KEY_EXCHANGE` | apf, agent | TLS key exchange of the QRNG link: `pq-only` (default) or `pq-preferred` |
+| `AGENT_TRUST_QRNG_KEY_EXCHANGE` | apf, agent | TLS key exchange of the QRNG link: `pq-only` (default for the `qrng` service) or `pq-preferred` (default for an external `url`, agent-trust D-14) |
 | `AGENT_TRUST_SUITE` | apf, agent | `pq` (default) or `classical` (agent-trust C-42): the suite of every identity an agent creates. The APF takes the group's suite from the root's key |
 | `AGENT_TRUST_ENTROPY_CONFIG` | apf, agent | A TOML file instead of the variables above |
 | `ATT_TLS_DIR`, `ATT_TLS_NAME` | all | Mutual TLS: the directory with `ca.crt`, `<name>.crt`, `<name>.key` (post quantum, ML-DSA-44) and `classical-ca.crt`, `<name>.classical.crt`, `<name>.classical.key`, and this service's name. Every listener then requires TLS 1.3 and a client certificate from either CA, and every outgoing `https://` call presents `<name>.crt` over `X25519MLKEM768` only. Under TLS a forbidden peer gets `403 unauthenticated: transport identity`: a wrong name, a classical certificate for a service name, or a post quantum certificate over a classical key exchange. |
@@ -50,7 +50,7 @@ any request, with no fallback (C-40).
 | `GET /control/checkpoint` | control | Full kernel checkpoint, history included |
 | `GET /control/trace` | control | `{trace}`: the C-37 trace contract v2 export |
 | `GET /control/adapter-trace` | control | Raw adapter trace `{actor, sequence, command, outcome}` |
-| `GET /control/entropy` | control | `{source, requests, bytes, failures}` |
+| `GET /control/entropy` | control | `{source, requests, bytes, failures}`; a `qrng` source adds `key_exchange` (the negotiated TLS group) and `post_quantum` |
 | `GET /control/metrics` | control | `{requests, samples: [[history_length, handling_µs, command], ...]}` for the last 20 000 worker requests (E5) |
 
 Routed commands of `POST /v1/request` are the adapter's: `grant`, `delegate`,

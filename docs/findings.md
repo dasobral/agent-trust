@@ -110,8 +110,11 @@ Residual classical parts:
   In these runs this link also carries the decrypted messages that `attctl` reads from
   `/app/inbox` as the application, and the app token. A real application uses its own
   post quantum `<agent>-app` certificate.
-- The QRNG link to a real Entropy Core needs that server to offer `X25519MLKEM768`;
-  `key_exchange = "pq-preferred"` is the explicit, reported downgrade (E6).
+- The QRNG link to a real Entropy Core is post quantum only if that server offers
+  `X25519MLKEM768`. Daniel chose `pq-preferred` for that link (agent-trust D-14), so a
+  server without it is reached with a classical group. The downgrade is reported:
+  `GET /control/entropy` returns `key_exchange` and `post_quantum` (openmls-qrand
+  `868f058`). E6 shows which group a real Entropy Core gives.
 - The legacy `MlsLab` of agent-trust (`mls-demo`), which is not on the adapter path.
 - The pq code points come from `draft-ietf-mls-pq-ciphersuites` and can change before
   the RFC.

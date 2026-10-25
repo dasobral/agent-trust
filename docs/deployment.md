@@ -20,7 +20,7 @@ suite = "pq"             # pq (default) | classical: agent-trust C-42, see below
 source = "qrng"          # os | mock | qrng
 # url = "https://entropy.example.net"   # a real QRNG Open API endpoint instead of the mock
 # seed = 0                              # for source = "mock"
-# key_exchange = "pq-only"              # TLS of the QRNG link: pq-only (default) | pq-preferred
+# key_exchange = "pq-preferred"         # TLS of the QRNG link: pq-only (default for the qrng service) | pq-preferred (default for a url)
 
 [relay]
 seed = 7
@@ -69,10 +69,16 @@ From a topology, `attctl` plans these services:
 | `source = "qrng"` | The testbed's `qrng-mock` service over HTTP | Exercises the real QRNG client path; the bytes are OS RNG bytes |
 | `source = "qrng"`, `url = ...` | That endpoint, for example Quside Entropy Core | The live gate of agent-trust (`live_entropy_core`) |
 
-Over `https://`, the QRNG link offers only the hybrid key exchange `X25519MLKEM768`
-(`key_exchange = "pq-only"`, openmls-qrand). For an endpoint that cannot offer it yet,
-`key_exchange = "pq-preferred"` also accepts a classical group; that is a downgrade, and
-the report shows it.
+Over `https://`, the QRNG link uses the hybrid key exchange `X25519MLKEM768`
+(openmls-qrand). The link to the testbed's own `qrng` service offers only that group
+(`key_exchange = "pq-only"`). A link to a real endpoint (`url`), such as an Entropy Core,
+defaults to `key_exchange = "pq-preferred"` (agent-trust D-14): it offers the hybrid group
+first and also accepts a classical group from a server without it. That is a downgrade,
+and every node shows it: `GET /control/entropy` on the APF and on each agent returns
+`key_exchange` (the negotiated group, for example `X25519MLKEM768` or `X25519`) and
+`post_quantum`. openmls-qrand learns the group from one extra TLS handshake at connect,
+directly over TCP; through a proxy that check can fail, and the group is then
+`unknown (reason)`. Set `key_exchange = "pq-only"` to refuse a classical server.
 
 Secrets for a real endpoint never go in the topology. Export them before `attctl up`
 or `attctl run` (`AGENT_TRUST_QRNG_API_KEY`, `AGENT_TRUST_QRNG_BEARER_TOKEN`,
