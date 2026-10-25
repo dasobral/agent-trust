@@ -65,7 +65,7 @@ Daniel's call), **open** (tracked work).
   checks the conclusion of Lemma 2 directly at release. That is stricter
   than the model. Theorems 1 and 2 hold a fortiori.
 
-### A-5. Delegation expiry is not a ledger event (**open**, R-12 candidate)
+### A-5. Delegation expiry is not a ledger event (**open**: R-12, decision D-16 requested)
 
 - Paper: Eq. (2) requires every change of authorization to be a ledger
   event (`coherence.tex:114`, `coherence.tex:407`).
