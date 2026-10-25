@@ -1,0 +1,3 @@
+{"event":"listening","listen":"127.0.0.1:42823","mock":true,"role":"qrng-mock","ts":1792910396}
+{"available":false,"event":"outage","role":"qrng-mock","ts":1792910397}
+{"available":true,"event":"outage","role":"qrng-mock","ts":1792910397}

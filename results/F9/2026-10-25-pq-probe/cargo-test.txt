@@ -1,0 +1,74 @@
+# agent-trust 5cf724e with MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519 (0x004F), OpenMLS fork dd33278 with feature draft-ietf-mls-pq-ciphersuites
+# command: cargo test --release --no-fail-fast (toolchain: rustc 1.97.0 (2d8144b78 2026-07-07))
+# date: 2026-10-25
+
+     Running unittests src/lib.rs (/home/user/agent-trust/target-pq/release/deps/agent_trust-63e640e9b24d5564)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (/home/user/agent-trust/target-pq/release/deps/agent_trust-f8392f6276cae8bd)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/adapter_admission.rs (/home/user/agent-trust/target-pq/release/deps/adapter_admission-95ef179b8059034a)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+     Running tests/adapter_compat.rs (/home/user/agent-trust/target-pq/release/deps/adapter_compat-969d7a01c20da2d8)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+     Running tests/adapter_entropy.rs (/home/user/agent-trust/target-pq/release/deps/adapter_entropy-274f52435bc9eea6)
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.24s
+     Running tests/adapter_identity.rs (/home/user/agent-trust/target-pq/release/deps/adapter_identity-40a59224b4049ef4)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+     Running tests/adapter_recovery.rs (/home/user/agent-trust/target-pq/release/deps/adapter_recovery-c55dc6c48c001319)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.69s
+     Running tests/adapter_rekey.rs (/home/user/agent-trust/target-pq/release/deps/adapter_rekey-67e94c96815cfc49)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+     Running tests/adapter_release.rs (/home/user/agent-trust/target-pq/release/deps/adapter_release-917388a68f3c2531)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+     Running tests/adapter_repair.rs (/home/user/agent-trust/target-pq/release/deps/adapter_repair-8aef4692ebed8168)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.21s
+     Running tests/adapter_repair_stacked.rs (/home/user/agent-trust/target-pq/release/deps/adapter_repair_stacked-9d823f5f1e8b329b)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+     Running tests/authority_adversarial.rs (/home/user/agent-trust/target-pq/release/deps/authority_adversarial-1458479e02f0fe0f)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/authority_contract.rs (/home/user/agent-trust/target-pq/release/deps/authority_contract-4adfd00040aa46e8)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests/authority_corrections.rs (/home/user/agent-trust/target-pq/release/deps/authority_corrections-7b5933c593596fa2)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+     Running tests/authority_gap_contract.rs (/home/user/agent-trust/target-pq/release/deps/authority_gap_contract-2a9e48b0e9d52313)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/authority_invocation_resources.rs (/home/user/agent-trust/target-pq/release/deps/authority_invocation_resources-f1024443f06874be)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+     Running tests/authority_rekey_contract.rs (/home/user/agent-trust/target-pq/release/deps/authority_rekey_contract-80e938201d722180)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+     Running tests/authority_resource_contract.rs (/home/user/agent-trust/target-pq/release/deps/authority_resource_contract-2b0aa7addc6c1593)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+     Running tests/authority_subject_status.rs (/home/user/agent-trust/target-pq/release/deps/authority_subject_status-c3362e05cb7ba1c4)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests/confused_deputy_red.rs (/home/user/agent-trust/target-pq/release/deps/confused_deputy_red-b2690fa2cd645db2)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/lab_durable.rs (/home/user/agent-trust/target-pq/release/deps/lab_durable-9011a6ea2a0b7367)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+     Running tests/lab_entropy.rs (/home/user/agent-trust/target-pq/release/deps/lab_entropy-09e2beb32b4ecc3b)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.11s
+     Running tests/mls_contract.rs (/home/user/agent-trust/target-pq/release/deps/mls_contract-7be7a9b818986448)
+test other_current_members_decrypt_and_authenticated_data_round_trips ... FAILED
+test joining_member_uses_an_embedded_apf_binding_over_the_frozen_key_package ... FAILED
+test modified_protected_wire_is_rejected ... FAILED
+test embedded_apf_binding_cannot_be_substituted_for_another_subject ... FAILED
+test removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic ... FAILED
+thread 'other_current_members_decrypt_and_authenticated_data_round_trips' (7728) panicked at tests/mls_contract.rs:31:27:
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+thread 'joining_member_uses_an_embedded_apf_binding_over_the_frozen_key_package' (7725) panicked at tests/mls_contract.rs:58:10:
+bob should join through staged construction: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+thread 'modified_protected_wire_is_rejected' (7726) panicked at tests/mls_contract.rs:93:27:
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+thread 'embedded_apf_binding_cannot_be_substituted_for_another_subject' (7724) panicked at tests/mls_contract.rs:80:10:
+bob should join through staged construction: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+thread 'removal_rotates_group_and_blocks_a_pre_removal_snapshot_from_successor_traffic' (7729) panicked at tests/mls_contract.rs:111:27:
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+test result: FAILED. 1 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+error: test failed, to rerun pass `--test mls_contract`
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: 1 target failed:
+EXIT 101
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+bob should join through staged construction: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+bob should join through staged construction: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"
+bob should join: "OpenMLS error: CreateCommitError(ProposalValidationError(InvalidAddProposalCiphersuiteOrVersion))"

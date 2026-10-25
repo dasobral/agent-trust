@@ -14,6 +14,7 @@
 | E6 live Entropy Core | Topology | **Open**: needs a reachable Entropy Core. Set `entropy.url` (and the `AGENT_TRUST_QRNG_*` secrets) in a topology; no code change. |
 | F-8 kernel history cost | Upstream | **Open**: proposal in `docs/findings.md`, needs approval before implementation |
 | F-1, F-3, F-4, F-5 | Upstream | Open proposals in `docs/findings.md` |
+| F-9 post quantum | Upstream and testbed | **Open**: probe done (hybrid MLS suite `0x004F` passes 164 of 164 agent-trust tests and E1, E1-mtls, E2, E3, E4, E7). Steps PQ-1 to PQ-4 in `docs/findings.md` need a decision; E8 would compare both suites on all backends |
 
 Next experiments that the infrastructure supports without new code: larger groups
 (`scripts/make-topology.py N`) once F-8 is resolved, E1 to E7 on a multi-node k3s

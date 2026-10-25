@@ -50,7 +50,9 @@ Stack under test: agent-trust `5cf724e` (branch `feat/durable-lab-provider`: `ma
 Findings on the stack, with proposals: [`docs/findings.md`](docs/findings.md). The
 most important: the kernel's cost per request grows with the square of its history
 (F-8, measured by E5), and any epoch change makes not yet consumed messages
-undeliverable (F-7).
+undeliverable (F-7). F-9: every public key algorithm in the stack is classical; a probe
+shows that the hybrid post quantum MLS suite (ML-KEM-768 with X25519) already works
+([`results/F9/`](results/F9/README.md)).
 
 ## How the stack builds up
 

@@ -1,0 +1,77 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index d943141..f163fc5 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -23,14 +23,14 @@ serde_json = "1.0"
+ sha2 = "0.10"
+ hex = "0.4"
+ rusqlite = { version = "0.40", features = ["bundled"] }
+-openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+-openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+-openmls_rust_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
+-openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable"] }
++openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
++openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
++openmls_rust_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
++openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable", "draft-ietf-mls-pq-ciphersuites"] }
+ tls_codec = "0.5"
+-openmls_sqlite_storage = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
++openmls_sqlite_storage = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
+ # The lab crypto provider (C-40): its HMAC-DRBG is seeded from the selected entropy source.
+-openmls_libcrux_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
++openmls_libcrux_crypto = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
+ # `SysRng`, the OS entropy source of the lab crypto provider for the `os` source.
+ rand = "0.10"
+ ed25519-dalek = "2"
+diff --git a/src/client.rs b/src/client.rs
+index d6b8a81..52fadd7 100644
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -19,7 +19,7 @@ use crate::wire::{
+ 
+ /// The laboratory ciphersuite; its signature scheme is the Ed25519 of every identity.
+ pub(crate) const CIPHERSUITE: Ciphersuite =
+-    Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
++    Ciphersuite::MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519;
+ /// The three adapter extension types every leaf declares and the group requires.
+ pub(crate) const ADAPTER_EXTENSIONS: [u16; 3] = [
+     ADMISSION_EXTENSION_TYPE,
+diff --git a/src/mls.rs b/src/mls.rs
+index d677df9..3243654 100644
+--- a/src/mls.rs
++++ b/src/mls.rs
+@@ -18,7 +18,7 @@ use openmls_traits::{
+ use sha2::{Digest, Sha256};
+ use tls_codec::{Deserialize, Serialize};
+ 
+-const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
++const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519;
+ const GROUP_ID: &[u8] = b"agent-trust-mls-lab";
+ const APF_BINDING_EXTENSION_TYPE: u16 = 0xf042;
+ const APF_CERTIFICATE_MAGIC: &[u8] = b"AT-APF-KP";
+diff --git a/tests/adapter_admission.rs b/tests/adapter_admission.rs
+index 6af81c6..9c3c7f4 100644
+--- a/tests/adapter_admission.rs
++++ b/tests/adapter_admission.rs
+@@ -763,7 +763,7 @@ fn admit(
+ fn leaf_capabilities() -> Capabilities {
+     Capabilities::builder()
+         .ciphersuites(vec![
+-            Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519,
++            Ciphersuite::MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519,
+         ])
+         .credentials(vec![CredentialType::Basic])
+         .extensions(vec![
+diff --git a/tests/adapter_compat.rs b/tests/adapter_compat.rs
+index 19ce682..6c5f09f 100644
+--- a/tests/adapter_compat.rs
++++ b/tests/adapter_compat.rs
+@@ -23,7 +23,7 @@ use openmls_traits::{
+ use sha2::{Digest, Sha256};
+ use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
+ 
+-const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
++const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_MLKEM768X25519_AES128GCM_SHA256_Ed25519;
+ const ACC_CONTEXT: u16 = 0xf043;
+ const AUTHZ_INCARNATION: u16 = 0xf044;
+ 
