@@ -13,10 +13,14 @@ name = "three-agents"
 group = "lab"            # MLS group id and kernel group
 root = "alice"           # the founding agent
 
+[mls]
+suite = "pq"             # pq (default) | classical: agent-trust C-42, see below
+
 [entropy]
 source = "qrng"          # os | mock | qrng
 # url = "https://entropy.example.net"   # a real QRNG Open API endpoint instead of the mock
 # seed = 0                              # for source = "mock"
+# key_exchange = "pq-only"              # TLS of the QRNG link: pq-only (default) | pq-preferred
 
 [relay]
 seed = 7
@@ -30,8 +34,22 @@ name = "alice"
 name = "bob"
 ```
 
-Provided topologies: `three-agents` (E1 to E4), `three-agents-mtls` (E1 over mTLS),
-`four-agents` (E7), `scale-8` (E5; `scripts/make-topology.py N` makes others).
+Provided topologies: `three-agents` (E1 to E4, E8 `pq`), `three-agents-classical` (E8
+`classical`), `three-agents-mtls` (E1 over mTLS), `four-agents` (E7), `scale-8` (E5;
+`scripts/make-topology.py N` makes others).
+
+### Cryptographic suite
+
+`[mls] suite` selects the suite of agent-trust C-42 for every identity the deployment
+creates. The APF takes the suite from the root's key at genesis.
+
+| Suite | MLS ciphersuite | Key exchange | Signatures (identities, requests, APF) |
+|---|---|---|---|
+| `pq` (default) | `0x0052` | X-Wing: ML-KEM-768 with X25519 | ML-DSA-44 |
+| `classical` | `0x0001` | X25519 | Ed25519 |
+
+`attctl` passes it to the APF and the agents as `AGENT_TRUST_SUITE`. An agent that
+restarts with an identity of the other suite refuses to start.
 
 From a topology, `attctl` plans these services:
 
@@ -50,6 +68,11 @@ From a topology, `attctl` plans these services:
 | `source = "mock"` | openmls-qrand `MockEntropy`, seeded | **Not random.** Reproducible keys for debugging |
 | `source = "qrng"` | The testbed's `qrng-mock` service over HTTP | Exercises the real QRNG client path; the bytes are OS RNG bytes |
 | `source = "qrng"`, `url = ...` | That endpoint, for example Quside Entropy Core | The live gate of agent-trust (`live_entropy_core`) |
+
+Over `https://`, the QRNG link offers only the hybrid key exchange `X25519MLKEM768`
+(`key_exchange = "pq-only"`, openmls-qrand). For an endpoint that cannot offer it yet,
+`key_exchange = "pq-preferred"` also accepts a classical group; that is a downgrade, and
+the report shows it.
 
 Secrets for a real endpoint never go in the topology. Export them before `attctl up`
 or `attctl run` (`AGENT_TRUST_QRNG_API_KEY`, `AGENT_TRUST_QRNG_BEARER_TOKEN`,
@@ -105,15 +128,31 @@ through to the nodes.
 - Cluster setup, image import, multi-node notes and sandbox caveats:
   [`deploy/k3s/README.md`](../deploy/k3s/README.md).
 
-### Mutual TLS
+### Mutual TLS, post quantum
 
-With `[tls] enabled = true`, `attctl up` first creates a deployment CA and one
-certificate per service, per application (`<agent>-app`) and for itself
-(`att-node pki`, in `<run_dir>/pki`). Each backend gives each service its own
-certificate: local processes read `<run_dir>/pki`; compose mounts it read-only at
-`/etc/att/pki` (its keys are made readable by the container user: a lab tradeoff);
-Kubernetes mounts a per-service Secret with only the CA and that service's own
-certificate and key. Every URL becomes `https://`.
+With `[tls] enabled = true`, `attctl up` first creates the deployment PKI
+(`att-node pki`, in `<run_dir>/pki`):
+
+- a **post quantum CA** (ML-DSA-44) and, from it, one certificate per service, per
+  application (`<agent>-app`) and for `attctl`: `ca.crt`, `<name>.crt`, `<name>.key`;
+- a **classical CA** (ECDSA P-256) and, from it, the same names again:
+  `classical-ca.crt`, `<name>.classical.crt`, `<name>.classical.key`.
+
+Every link between services is TLS 1.3 with an ML-DSA-44 certificate over the hybrid key
+exchange `X25519MLKEM768`, the QRNG link included. Service clients offer only that group
+and trust only the post quantum CA. The classical chain exists for one client: the
+control plane, when its Python links an OpenSSL older than 3.5 (no `X25519MLKEM768`, no
+ML-DSA). A server presents its classical certificate only to a client that offers no
+ML-DSA signature scheme, and accepts a classical client certificate only for `attctl` and
+`<agent>-app`: a classical certificate that names a service is refused (`403`). With
+OpenSSL 3.5 or later, `attctl` uses its post quantum certificate instead; reports name
+the chain it used (`check.pq_tls`, `control_link`).
+
+Each backend gives each service its own certificates: local processes read
+`<run_dir>/pki`; compose mounts it read-only at `/etc/att/pki` (its keys are made
+readable by the container user: a lab tradeoff); Kubernetes mounts a per-service Secret
+with both CA certificates and that service's own two certificates and keys. The CA keys
+stay in the run directory. Every URL becomes `https://`.
 
 ### Service lifecycle
 

@@ -1,0 +1,168 @@
+# E8 (classical): the same scenario in each suite of agent-trust C-42, for comparison.
+#   ./attctl run experiments/e8-suite-classical.toml --backend local
+# The twin experiment experiments/e8-suite-pq.toml runs it in the pq suite.
+# Design and results: docs/experiments/E8-suites.md
+
+[experiment]
+id = "E8-classical"
+title = "Admission, revocation, repair and rekey in the classical suite"
+topology = "../topologies/three-agents-classical.toml"
+hypothesis = """(H1) Every node of the deployment runs the classical suite, with keys of \
+its size. (H2) Admission, delivery, revocation with repair and rekey behave exactly as \
+in the other suite, and the oracle accepts the trace and rejects every broken control. \
+(H3) The report records the size of every MLS object on the relay, for comparison."""
+
+# ---------------------------------------------------------------- A: bring-up
+[[step]]
+do = "genesis"
+name = "A1 alice founds the group"
+agent = "alice"
+
+[[step]]
+do = "delegate"
+name = "A2 delegate bob"
+by = "alice"
+subject = "bob"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "delegate"
+name = "A3 delegate carol"
+by = "alice"
+subject = "carol"
+rights = ["read", "write", "admit"]
+
+[[step]]
+do = "admit"
+name = "A4 admit bob"
+by = "alice"
+subject = "bob"
+
+[[step]]
+do = "admit"
+name = "A5 admit carol"
+by = "alice"
+subject = "carol"
+
+[[step]]
+do = "check.suite"
+name = "A6 the APF and every agent run the classical suite"
+suite = "classical"
+
+# ---------------------------------------------------------------- B: traffic
+[[step]]
+do = "send"
+name = "B1 alice sends m1"
+agent = "alice"
+label = "m1"
+text = "m1"
+
+[[step]]
+do = "send"
+name = "B2 bob sends m2"
+agent = "bob"
+label = "m2"
+text = "m2"
+
+[[step]]
+do = "quiesce"
+name = "B3 drain"
+
+[[step]]
+do = "check.complete"
+name = "B4 m1 and m2 reached every reader exactly once"
+
+# ---------------------------------------------------------------- C: revocation and repair
+[[step]]
+do = "revoke"
+name = "C1 alice revokes carol's read right"
+by = "alice"
+subject = "carol"
+right = "read"
+
+[[step]]
+do = "repair"
+name = "C2 alice commits the repair; bob confirms; the fence reopens"
+by = "alice"
+expect_removed = ["carol"]
+expect_evidence = "pair"
+
+[[step]]
+do = "send"
+name = "C3 alice sends m3 after the repair"
+agent = "alice"
+label = "m3"
+text = "m3"
+
+[[step]]
+do = "quiesce"
+name = "C4 drain"
+
+[[step]]
+do = "check.delivered"
+name = "C5 bob received m3"
+agent = "bob"
+ops = ["m3"]
+exact = false
+
+# ---------------------------------------------------------------- D: rekey
+[[step]]
+do = "revoke"
+name = "D1 alice revokes bob's write right"
+by = "alice"
+subject = "bob"
+right = "write"
+
+[[step]]
+do = "grant"
+name = "D2 alice re-grants write at generation 1: a rekey offer"
+by = "alice"
+subject = "bob"
+right = "write"
+generation = 1
+expect_result = { pending = true }
+
+[[step]]
+do = "rekey"
+name = "D3 bob commits a new signature key and incarnation"
+agent = "bob"
+right = "write"
+generation = 1
+
+[[step]]
+do = "send"
+name = "D4 bob sends m4 with his new key"
+agent = "bob"
+label = "m4"
+text = "m4"
+
+[[step]]
+do = "quiesce"
+name = "D5 drain"
+
+[[step]]
+do = "check.delivered"
+name = "D6 alice received m4"
+agent = "alice"
+ops = ["m4"]
+exact = false
+
+# ---------------------------------------------------------------- F: measurements and checks
+[[step]]
+do = "measure.sizes"
+name = "F1 sizes of KeyPackages, commits, acks and Welcome messages on the relay"
+
+[[step]]
+do = "check.oracle"
+name = "F2 the independent oracle accepts the exported APF trace"
+
+[[step]]
+do = "check.broken_controls"
+name = "F3 the oracle rejects every broken control derived from the trace"
+revoked_reader = "carol"
+writer = "alice"
+
+[[step]]
+do = "check.no_errors"
+name = "F4 the honest agents logged no processing error"
+agents = ["alice", "bob"]

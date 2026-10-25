@@ -110,7 +110,10 @@ fails the step.
 | `check.at_most_once` | `agent, prefix` | Labelled messages arrived at most once; reports losses |
 | `check.operation` | `op`, any of `actor, invocation, status` | The APF's record of an operation (executor, invocation) |
 | `check.metrics` | optional `max_send_p95, max_delivery_p95` | Send, delivery and admission latency; APF time per request against history length |
-| `check.mtls` | | Transport negative controls (no certificate, wrong peer, foreign CA) and one positive control |
+| `check.mtls` | | Transport negative controls with the Rust probe (no certificate, wrong peer, foreign CA, a post quantum certificate over classical key exchange, a classical certificate that names a service) and one positive control |
+| `check.pq_tls` | optional `expect_peers = ["service<-peer"]` | Every service-to-service connection each service accepted used an ML-DSA-44 certificate over `X25519MLKEM768`; reports the control plane's own chain (`control_link`) |
+| `check.suite` | `suite` | The APF and every agent run that suite (agent-trust C-42), with keys of its size |
+| `measure.sizes` | | Records the size in bytes of every KeyPackage, commit, ack and Welcome on the relay |
 | `check.network_policy` | `allowed, denied` (`"src->dst"`) | Kubernetes only: connectivity probed from inside the pods |
 
 ## Reports and evidence

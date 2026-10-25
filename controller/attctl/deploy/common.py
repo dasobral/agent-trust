@@ -36,6 +36,10 @@ def deployment_record(backend, plan, run_dir, endpoints, extra):
     }
 
 
+# The two CA keys stay in the run directory only; no service ever gets them.
+CA_KEYS = ("ca.key", "classical-ca.key")
+
+
 def make_pki(run_dir, topology, binary, namespace=None, world_readable=False):
     """Creates the deployment CA and certificates in ``<run_dir>/pki`` with
     ``att-node pki``. Returns the directory. ``world_readable`` makes the keys readable
@@ -48,6 +52,6 @@ def make_pki(run_dir, topology, binary, namespace=None, world_readable=False):
     if world_readable:
         pki.chmod(0o755)
         for path in pki.glob("*.key"):
-            if path.name != "ca.key":
+            if path.name not in CA_KEYS:
                 path.chmod(0o644)
     return pki

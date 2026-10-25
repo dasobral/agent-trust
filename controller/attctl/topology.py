@@ -1,7 +1,7 @@
 """Topology: the declarative description of one testbed deployment.
 
-A topology names the group, the root agent, the agents, the entropy source and the
-relay seed. ``plan`` turns it into concrete services (role, environment, port) that
+A topology names the group, the root agent, the agents, the cryptographic suite, the
+entropy source and the relay seed. ``plan`` turns it into concrete services (role, environment, port) that
 any deployment backend can start. Backends only decide *where* a service runs and
 *how* its address is written; the services and their configuration are identical.
 """
@@ -14,6 +14,10 @@ from pathlib import Path
 
 ROLES = ("qrng-mock", "apf", "relay", "agent")
 ENTROPY_SOURCES = ("os", "mock", "qrng")
+# agent-trust C-42: `pq` (MLS 0x0052, X-Wing and ML-DSA-44) or `classical` (0x0001).
+SUITES = ("pq", "classical")
+# openmls-qrand: TLS key exchange of the QRNG link.
+QRNG_KEY_EXCHANGES = ("pq-only", "pq-preferred")
 # Container ports; the local backend maps each service to its own host port instead.
 PORTS = {"qrng-mock": 7200, "apf": 7000, "relay": 7100, "agent": 7300}
 
@@ -27,6 +31,7 @@ class Topology:
     entropy: dict
     relay_seed: int
     tls: bool = False
+    suite: str = "pq"
     path: Path | None = None
 
     @classmethod
@@ -42,6 +47,7 @@ class Topology:
             entropy=dict(data.get("entropy", {"source": "os"})),
             relay_seed=int(data.get("relay", {}).get("seed", 0)),
             tls=bool(data.get("tls", {}).get("enabled", False)),
+            suite=str(data.get("mls", {}).get("suite", "pq")),
             path=path,
         )
         topology.validate()
@@ -57,6 +63,10 @@ class Topology:
             raise ValueError(f"entropy source must be one of {ENTROPY_SOURCES}")
         if source == "qrng" and "url" in self.entropy and self.entropy.get("mock_service"):
             raise ValueError("entropy: give either url (external QRNG) or mock_service, not both")
+        if self.suite not in SUITES:
+            raise ValueError(f"mls.suite must be one of {SUITES}")
+        if self.entropy.get("key_exchange", "pq-only") not in QRNG_KEY_EXCHANGES:
+            raise ValueError(f"entropy.key_exchange must be one of {QRNG_KEY_EXCHANGES}")
 
     @property
     def scheme(self) -> str:
@@ -110,6 +120,8 @@ def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None)
     entropy_env = {}
     source = topology.entropy.get("source", "os")
     entropy_env["AGENT_TRUST_ENTROPY_SOURCE"] = source
+    # agent-trust C-42: the suite of every identity the services create.
+    suite_env = {"AGENT_TRUST_SUITE": topology.suite}
     if source == "mock":
         entropy_env["AGENT_TRUST_MOCK_SEED"] = str(topology.entropy.get("seed", 0))
     if source == "qrng":
@@ -124,6 +136,9 @@ def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None)
                         "AGENT_TRUST_QRNG_CA_PEM"):
                 if key in extra_env:
                     entropy_env[key] = extra_env[key]
+        # openmls-qrand: the TLS key exchange of the QRNG link (pq-only by default).
+        entropy_env["AGENT_TRUST_QRNG_KEY_EXCHANGE"] = topology.entropy.get(
+            "key_exchange", "pq-only")
     entropy_deps = ["qrng"] if topology.qrng_mock else []
 
     services.append(Service("apf", "apf", {
@@ -133,6 +148,7 @@ def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None)
         "ATT_CONTROL_TOKEN": tokens["control"],
         "ATT_BOOTSTRAP_TOKEN": tokens["bootstrap"],
         **entropy_env,
+        **suite_env,
     }, PORTS["apf"], list(entropy_deps)))
     services.append(Service("relay", "relay", {
         "ATT_SEED": str(topology.relay_seed),
@@ -148,6 +164,7 @@ def plan(topology: Topology, address, tokens=None, extra_env=None, tls_dir=None)
             "ATT_APP_TOKEN": tokens["app"],
             "ATT_DATA_DIR": "/var/lib/att/agent",
             **entropy_env,
+            **suite_env,
         }
         if name == topology.root:
             env["ATT_BOOTSTRAP_TOKEN"] = tokens["bootstrap"]

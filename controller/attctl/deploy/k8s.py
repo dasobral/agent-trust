@@ -8,7 +8,8 @@ Objects per deployment (namespace ``att-<topology>``):
 
 - ``Secret att-tokens``: the control, app and bootstrap tokens. Pods read them with
   ``secretKeyRef``; no token appears in a Deployment.
-- ``Secret att-pki-<service>``: the CA and that service's own certificate and key, when
+- ``Secret att-pki-<service>``: both CA certificates and that service's own post quantum and
+  classical certificates and keys, when
   the topology enables mutual TLS.
 - One ``Deployment`` (one replica, ``Recreate``) and one ``ClusterIP Service`` per
   service, with readiness and liveness probes on ``/healthz`` (an ``exec`` probe
@@ -32,7 +33,7 @@ import time
 from pathlib import Path
 
 from .. import topology as topo
-from .common import deployment_record, load, make_pki, write
+from .common import CA_KEYS, deployment_record, load, make_pki, write
 from .local import free_port
 
 DEFAULT_IMAGE = "agent-trust-testbed/att-node:local"
@@ -47,6 +48,13 @@ def namespace_of(topology):
 def _labels(name, role):
     return {"app.kubernetes.io/name": name, "app.kubernetes.io/component": role,
             "app.kubernetes.io/part-of": "agent-trust-testbed"}
+
+
+def pki_files(name):
+    """The PKI files one service mounts: both CA certificates, and its post quantum and
+    classical certificate and key. Never a CA key."""
+    return ["ca.crt", "classical-ca.crt", f"{name}.crt", f"{name}.key",
+            f"{name}.classical.crt", f"{name}.classical.key"]
 
 
 def render(plan, namespace, image, pull_policy="IfNotPresent", pki=None, storage_class=None):
@@ -66,9 +74,7 @@ def render(plan, namespace, image, pull_policy="IfNotPresent", pki=None, storage
             items.append({"apiVersion": "v1", "kind": "Secret",
                           "metadata": {"name": f"att-pki-{service.name}", "namespace": namespace},
                           "type": "Opaque", "stringData": {
-                              "ca.crt": pki["ca.crt"],
-                              f"{service.name}.crt": pki[f"{service.name}.crt"],
-                              f"{service.name}.key": pki[f"{service.name}.key"]}})
+                              **{file: pki[file] for file in pki_files(service.name)}}})
         labels = _labels(service.name, service.role)
         env = []
         for key, value in sorted(service.env.items()):
@@ -201,7 +207,8 @@ def up(topology, run_dir, image=DEFAULT_IMAGE, extra_env=None, binary=None, pull
         _wait_namespace_gone(namespace, timeout=120)
     scheme = topology.scheme
     pki_dir = make_pki(run_dir, topology, binary, namespace=namespace) if topology.tls else None
-    pki = ({p.name: p.read_text() for p in pki_dir.iterdir() if p.name != "ca.key"}
+    pki = ({p.name: p.read_text() for p in pki_dir.iterdir()
+            if p.is_file() and p.name not in CA_KEYS}
            if pki_dir else None)
 
     def address(name, role):

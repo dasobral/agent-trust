@@ -23,8 +23,11 @@ TCP or mutual TLS. Byte strings are lowercase hex.
 | `AGENT_TRUST_MOCK_SEED` | apf, agent | Seed of the `mock` source |
 | `AGENT_TRUST_QRNG_BASE_URL` | apf, agent | QRNG Open API base URL for `qrng` |
 | `AGENT_TRUST_QRNG_*` | apf, agent | TLS material and API secrets of a real endpoint (agent-trust `src/entropy.rs`) |
+| `AGENT_TRUST_QRNG_KEY_EXCHANGE` | apf, agent | TLS key exchange of the QRNG link: `pq-only` (default) or `pq-preferred` |
+| `AGENT_TRUST_SUITE` | apf, agent | `pq` (default) or `classical` (agent-trust C-42): the suite of every identity an agent creates. The APF takes the group's suite from the root's key |
 | `AGENT_TRUST_ENTROPY_CONFIG` | apf, agent | A TOML file instead of the variables above |
-| `ATT_TLS_DIR`, `ATT_TLS_NAME` | all | Mutual TLS: the directory with `ca.crt`, `<name>.crt`, `<name>.key`, and this service's name. Every listener then requires a client certificate from the CA, and every outgoing `https://` call presents `<name>.crt`. Under TLS a forbidden peer gets `403 unauthenticated: transport identity`. |
+| `ATT_TLS_DIR`, `ATT_TLS_NAME` | all | Mutual TLS: the directory with `ca.crt`, `<name>.crt`, `<name>.key` (post quantum, ML-DSA-44) and `classical-ca.crt`, `<name>.classical.crt`, `<name>.classical.key`, and this service's name. Every listener then requires TLS 1.3 and a client certificate from either CA, and every outgoing `https://` call presents `<name>.crt` over `X25519MLKEM768` only. Under TLS a forbidden peer gets `403 unauthenticated: transport identity`: a wrong name, a classical certificate for a service name, or a post quantum certificate over a classical key exchange. |
+| `GET /control/tls` | all, `attctl` | The TLS connections the service accepted, by peer, certificate kind (`pq` or `classical`) and key exchange group |
 
 A node whose entropy source cannot be selected or reached exits before it serves
 any request, with no fallback (C-40).
@@ -39,7 +42,7 @@ any request, with no fallback (C-40).
 
 | Method and path | Token | Body → result |
 |---|---|---|
-| `GET /v1/info` | none | `{group, root, state: waiting\|pending\|ready, apf_public_key, apf_key_id, entropy}` |
+| `GET /v1/info` | none | `{group, root, state: waiting\|pending\|ready, suite, apf_public_key, apf_key_id, entropy}`; `suite` is `pq` or `classical` once genesis began |
 | `GET /v1/state` | none | Policy view: `{group, epoch, branch, policy_revision, read_fenced, repair_pending, roster, grants}` |
 | `POST /v1/request` | none (signed) | `{actor, sequence, body, signature}` → the adapter result. `body` is the hex of the exact signed JSON bytes, `signature` the Ed25519 signature over `RequestTBS` (contract §4.8). |
 | `POST /v1/genesis/begin` | bootstrap | `{group, root, root_key}` → `{apf_public_key, founder_certificate, acc_context}` |
@@ -137,5 +140,7 @@ Control API (control token):
 
 | Command | Effect |
 |---|---|
-| `att-node pki --dir DIR --names a,b,c [--namespace NS]` | A CA (`ca.crt`, `ca.key`) and, per name plus `attctl`, a certificate and key for server and client use. Names: the service, `localhost`, `127.0.0.1` and, with `NS`, its Kubernetes service names. |
+| `att-node pki --dir DIR --names a,b,c [--namespace NS]` | The post quantum CA (`ca.crt`, `ca.key`, ML-DSA-44) and the classical CA (`classical-ca.crt`, `classical-ca.key`, ECDSA P-256) and, per name plus `attctl`, one certificate and key from each for server and client use. Names: the service, `localhost`, `127.0.0.1` and, with `NS`, its Kubernetes service names. |
+| `att-node pki-issue --dir DIR --name NAME --out OUT [--classical]` | One more certificate from the deployment's post quantum (or classical) CA, for negative controls |
 | `att-node probe URL` | Exit 0 when `GET URL` answers `{"ok": ...}`; uses the TLS configuration of the environment (the readiness probe under mTLS) |
+| `att-node probe URL --tls-dir DIR [--as NAME] [--classical-kx] [--method M] [--body JSON]` | A transport probe: connects as NAME (post quantum certificate; none without `--as`), over `X25519MLKEM768` or only X25519 with `--classical-kx`; prints `HTTP <status>` or `refused: <reason>` |

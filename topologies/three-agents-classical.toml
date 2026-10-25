@@ -1,0 +1,25 @@
+# The three-agents topology in the classical suite, for comparison (E8).
+# Every other topology runs the default post quantum suite.
+name = "three-agents-classical"
+group = "lab"
+root = "alice"
+
+[mls]
+# agent-trust C-42: "pq" (default: MLS 0x0052, X-Wing, ML-DSA-44) or "classical"
+# (MLS 0x0001, X25519, Ed25519).
+suite = "classical"
+
+[entropy]
+source = "qrng"
+
+[relay]
+seed = 7
+
+[[agent]]
+name = "alice"
+
+[[agent]]
+name = "bob"
+
+[[agent]]
+name = "carol"

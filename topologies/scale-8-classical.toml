@@ -1,0 +1,37 @@
+# 8 agents in one group, classical suite (agent-trust C-42), to compare with scale-8.
+name = "scale-8-classical"
+group = "scale"
+root = "agent01"
+
+[mls]
+suite = "classical"
+
+[entropy]
+source = "qrng"
+
+[relay]
+seed = 5
+
+[[agent]]
+name = "agent01"
+
+[[agent]]
+name = "agent02"
+
+[[agent]]
+name = "agent03"
+
+[[agent]]
+name = "agent04"
+
+[[agent]]
+name = "agent05"
+
+[[agent]]
+name = "agent06"
+
+[[agent]]
+name = "agent07"
+
+[[agent]]
+name = "agent08"

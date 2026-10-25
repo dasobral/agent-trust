@@ -126,11 +126,27 @@ class Testbed:
             service.wait_healthy(timeout)
 
 
-def tls_context(pki):
-    """The control plane's mutual TLS context, or None without TLS."""
+# OpenSSL 3.5 is the first release that negotiates X25519MLKEM768 and verifies ML-DSA.
+PQ_OPENSSL = (3, 5)
+
+
+def control_chain():
+    """``pq`` when this Python's OpenSSL can do post quantum TLS, else ``classical``.
+    Services accept a classical certificate only for ``attctl`` and ``<agent>-app``
+    (``crates/att-node/src/tls.rs``); this is the one link that falls back."""
+    return "pq" if ssl.OPENSSL_VERSION_INFO[:2] >= PQ_OPENSSL else "classical"
+
+
+def tls_context(pki, name="attctl"):
+    """The control plane's mutual TLS context as ``name``, or None without TLS: the post
+    quantum CA and certificate, or the classical ones (see ``control_chain``)."""
     if not pki:
         return None
     pki = Path(pki)
-    context = ssl.create_default_context(cafile=str(pki / "ca.crt"))
-    context.load_cert_chain(str(pki / "attctl.crt"), str(pki / "attctl.key"))
+    if control_chain() == "pq":
+        ca, stem = pki / "ca.crt", name
+    else:
+        ca, stem = pki / "classical-ca.crt", f"{name}.classical"
+    context = ssl.create_default_context(cafile=str(ca))
+    context.load_cert_chain(str(pki / f"{stem}.crt"), str(pki / f"{stem}.key"))
     return context

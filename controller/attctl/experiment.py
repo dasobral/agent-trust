@@ -640,8 +640,34 @@ class Runner:
             raise StepFailure(f"{op}: " + "; ".join(problems))
         return {k: record.get(k) for k in ("op", "actor", "invocation", "status", "right", "resource")}
 
+    def _att_node(self):
+        import os
+        from pathlib import Path as _Path
+        return (self.tb.deployment.get("binary") or os.environ.get("ATT_NODE_BIN")
+                or str(_Path(__file__).resolve().parents[2] / "target" / "release" / "att-node"))
+
+    def _probe(self, url, tls_dir, name=None, classical_kx=False, method="GET", body=None):
+        """One transport probe with the Rust client (post quantum TLS, as ``name``):
+        ``HTTP <status>`` or ``refused: <reason>``."""
+        import subprocess
+        command = [self._att_node(), "probe", url, "--tls-dir", str(tls_dir)]
+        if name:
+            command += ["--as", name]
+        if classical_kx:
+            command.append("--classical-kx")
+        if method != "GET":
+            command += ["--method", method]
+        if body is not None:
+            command += ["--body", json.dumps(body)]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            return f"probe failed: {result.stderr.strip()[:120]}"
+        return result.stdout.strip()
+
     def do_check_mtls(self, step):
-        """Negative controls of the transport: every probe below must be refused."""
+        """Negative controls of the transport: every probe below must be refused, and the
+        positive controls must pass. Identities use their post quantum certificates over
+        ``X25519MLKEM768`` (the Rust probe), except where a control says otherwise."""
         import ssl
         import subprocess
         import tempfile
@@ -652,53 +678,140 @@ class Runner:
             raise StepFailure("this deployment has no PKI")
         pki = _Path(pki)
         endpoints = self.tb.deployment["endpoints"]
+        relay, apf = endpoints["relay"], endpoints["apf"]
+        agents = list(self.tb.deployment["agents"])
+        first, second = agents[0], agents[1]
+        probe = self._probe
 
-        def context(name=None, ca=pki / "ca.crt"):
+        def python(url, cert_dir, stem, ca):
             ctx = ssl.create_default_context(cafile=str(ca))
-            if name:
-                ctx.load_cert_chain(str(pki / f"{name}.crt"), str(pki / f"{name}.key"))
-            return ctx
-
-        def attempt(url, ctx, body=None, method="GET"):
-            data = None if body is None else json.dumps(body).encode()
-            request = urllib.request.Request(url, data=data, method=method,
-                                             headers={"Content-Type": "application/json"})
+            ctx.load_cert_chain(str(cert_dir / f"{stem}.crt"), str(cert_dir / f"{stem}.key"))
             try:
-                with urllib.request.urlopen(request, timeout=10, context=ctx) as response:
+                with urllib.request.urlopen(url, timeout=10, context=ctx) as response:
                     return f"HTTP {response.status}"
             except urllib.error.HTTPError as error:
                 return f"HTTP {error.code}"
             except (urllib.error.URLError, ssl.SSLError, OSError) as error:
                 return f"refused: {str(getattr(error, 'reason', error))[:90]}"
 
-        relay, apf = endpoints["relay"], endpoints["apf"]
         results = {
-            "no client certificate": attempt(f"{relay}/healthz", context()),
-            "bob reads carol's mailbox": attempt(f"{relay}/v1/mailbox/carol", context("bob")),
-            "bob publishes carol's KeyPackage": attempt(
-                f"{relay}/v1/keypackages/carol", context("bob"), {"key_package": "00"}, "PUT"),
-            "alice sends a request in bob's name": attempt(
-                f"{apf}/v1/request", context("alice"),
-                {"actor": "bob", "sequence": 999, "body": "7b7d", "signature": "00"}, "POST"),
-            "an agent calls the APF control API": attempt(f"{apf}/control/trace", context("alice")),
+            "no client certificate": probe(f"{relay}/healthz", pki),
+            f"{first} reads {second}'s mailbox": probe(
+                f"{relay}/v1/mailbox/{second}", pki, first),
+            f"{first} publishes {second}'s KeyPackage": probe(
+                f"{relay}/v1/keypackages/{second}", pki, first, method="PUT",
+                body={"key_package": "00"}),
+            f"{second} sends a request in {first}'s name": probe(
+                f"{apf}/v1/request", pki, second, method="POST",
+                body={"actor": first, "sequence": 999, "body": "7b7d", "signature": "00"}),
+            "an agent calls the APF control API": probe(f"{apf}/control/trace", pki, first),
+            f"{first}'s post quantum certificate over classical key exchange": probe(
+                f"{relay}/v1/mailbox/{first}", pki, first, classical_kx=True),
         }
-        with tempfile.TemporaryDirectory() as foreign:
-            import os
-            binary = (self.tb.deployment.get("binary") or os.environ.get("ATT_NODE_BIN")
-                      or str(_Path(__file__).resolve().parents[2] / "target" / "release" / "att-node"))
-            subprocess.run([binary, "pki", "--dir", foreign,
-                            "--names", "bob"], check=True, capture_output=True)
-            ctx = ssl.create_default_context(cafile=str(pki / "ca.crt"))
-            ctx.load_cert_chain(f"{foreign}/bob.crt", f"{foreign}/bob.key")
-            results["a certificate from a foreign CA"] = attempt(f"{relay}/v1/mailbox/bob", ctx)
-        # Positive control: the same probe with the right identity is accepted.
-        results["bob reads his own mailbox (positive control)"] = attempt(
-            f"{relay}/v1/mailbox/bob", context("bob"))
+        with tempfile.TemporaryDirectory() as scratch:
+            scratch = _Path(scratch)
+            # A whole foreign deployment PKI: its certificates name the same agents.
+            subprocess.run([self._att_node(), "pki", "--dir", str(scratch / "foreign"),
+                            "--names", first], check=True, capture_output=True)
+            foreign = scratch / "foreign"
+            (foreign / "ca.crt").write_text((pki / "ca.crt").read_text())
+            results["a certificate from a foreign CA"] = probe(
+                f"{relay}/v1/mailbox/{first}", foreign, first)
+            # The deployment's own classical CA, claiming a service identity.
+            subprocess.run([self._att_node(), "pki-issue", "--dir", str(pki), "--name", first,
+                            "--out", str(scratch / "classical"), "--classical"],
+                           check=True, capture_output=True)
+            results[f"a classical certificate that claims {first}"] = python(
+                f"{relay}/v1/mailbox/{first}", scratch / "classical", first,
+                pki / "classical-ca.crt")
+        # Positive controls: the same probes with the right identity are accepted.
+        positive = {
+            f"{first} reads his own mailbox (positive control)": probe(
+                f"{relay}/v1/mailbox/{first}", pki, first),
+        }
+        results.update(positive)
         accepted = [label for label, outcome in results.items()
                     if outcome == "HTTP 200" and "positive control" not in label]
-        if accepted or results["bob reads his own mailbox (positive control)"] != "HTTP 200":
+        broken = [label for label, outcome in results.items() if outcome.startswith("probe failed")]
+        if accepted or broken or any(v != "HTTP 200" for k, v in positive.items()):
             raise StepFailure(f"transport controls failed: {results}")
         return results
+
+    def do_check_pq_tls(self, step):
+        """Every TLS connection between services is post quantum: an ML-DSA-44 certificate
+        over ``X25519MLKEM768``, the QRNG link included. The control plane's own link is
+        reported; it is classical when this Python's OpenSSL is older than 3.5."""
+        from .api import control_chain
+        if not self.tb.deployment.get("pki"):
+            raise StepFailure("this deployment has no PKI")
+        hybrid = "X25519MLKEM768"
+        control_names = {"attctl", *(f"{agent}-app" for agent in self.tb.deployment["agents"])}
+        report, problems = {}, []
+        for service in self.tb.services():
+            connections = service.call("GET", "/control/tls")["connections"]
+            seen = {}
+            for line in connections:
+                peer, accepted = line["peer"], line["accepted"]
+                if not accepted:
+                    continue
+                kind = f'{line["certificate"]}/{line["group"]}'
+                seen.setdefault(peer, set()).add(kind)
+                if peer not in control_names and kind != f"pq/{hybrid}":
+                    problems.append(f"{peer} -> {service.name} over {kind}")
+            report[service.name] = {peer: sorted(kinds) for peer, kinds in sorted(seen.items())}
+        service_links = [peer for links in report.values() for peer in links
+                         if peer not in control_names]
+        if not service_links:
+            problems.append("no service-to-service connection was observed")
+        for name in step.get("expect_peers", []):
+            target, _, source = name.partition("<-")
+            if source not in report.get(target, {}):
+                problems.append(f"no connection from {source} to {target} was observed")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return {"control_link": control_chain(), "connections": report}
+
+    def do_check_suite(self, step):
+        """agent-trust C-42: the APF and every agent run the expected suite, with keys of
+        its size (Ed25519: 32 bytes; ML-DSA-44: 1312 bytes)."""
+        suite = step["suite"]
+        key_bytes = {"pq": 1312, "classical": 32}[suite]
+        info = self.tb.apf.call("GET", "/v1/info")
+        problems, report = [], {"apf": info.get("suite")}
+        if info.get("suite") != suite:
+            problems.append(f"apf runs {info.get('suite')}")
+        if len(bytes.fromhex(info.get("apf_public_key") or "")) != key_bytes:
+            problems.append("the APF key has the wrong size")
+        for name, agent in self.tb.agents.items():
+            status = agent.status()
+            report[name] = status.get("suite")
+            if status.get("suite") != suite:
+                problems.append(f"{name} runs {status.get('suite')}")
+            if len(bytes.fromhex(status["public_key"])) != key_bytes:
+                problems.append(f"{name}'s key has the wrong size")
+        if problems:
+            raise StepFailure("; ".join(problems))
+        return {"suite": suite, "public_key_bytes": key_bytes, "services": report}
+
+    def do_measure_sizes(self, step):
+        """Sizes in bytes of the MLS objects on the relay: KeyPackages, commits, acks and
+        Welcome messages (handshake log of the group)."""
+        relay, group = self.tb.relay, self.tb.group
+        sizes = {"key_package": [], "commit": [], "ack": [], "welcome": []}
+        for name in self.tb.agents:
+            try:
+                stored = relay.call("GET", f"/v1/keypackages/{name}")
+            except ServiceError:
+                continue
+            if isinstance(stored, dict) and stored.get("key_package"):
+                sizes["key_package"].append(len(stored["key_package"]) // 2)
+        entries = relay.call("GET", f"/v1/groups/{group}/handshake?after=0&reader={self.tb.root}")
+        for entry in entries:
+            for kind in ("commit", "ack", "welcome"):
+                if isinstance(entry.get(kind), str):
+                    sizes[kind].append(len(entry[kind]) // 2)
+        return {kind: {"min": min(v), "max": max(v), "count": len(v)} if v else None
+                for kind, v in sizes.items()}
 
     def do_check_network_policy(self, step):
         """Kubernetes only: from inside each source pod, probe each destination service.

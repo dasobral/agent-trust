@@ -40,6 +40,7 @@ use agent_trust::adapter::ClientIdentity;
 use agent_trust::adapter::SignedRequest;
 use agent_trust::client::{ClientEndpoint, JoinCandidate, PendingDelivery, PreparedJoin};
 use agent_trust::entropy::{DurableLabProvider, EntropyConfig, LabEntropy};
+use agent_trust::suite::Suite;
 use agent_trust::wire::{
     operation_digest, CanonicalAck, Envelope, Frontier, ReleaseCertificate, Right, SignedStructure,
 };
@@ -80,6 +81,8 @@ struct Config {
     bootstrap_token: Option<String>,
     pinned_apf_key: Option<Vec<u8>>,
     poll: Duration,
+    /// The suite of every identity this agent creates (agent-trust C-42).
+    suite: Suite,
 }
 
 /// The agent's membership state.
@@ -150,6 +153,8 @@ pub fn run() -> Result<(), String> {
             None => None,
         },
         poll: Duration::from_millis(config::number("ATT_POLL_MS", 100)?),
+        // C-42: `AGENT_TRUST_SUITE`, `pq` unless set.
+        suite: Suite::from_env(|name| std::env::var(name).ok())?,
         name: name.clone(),
     };
     let listen = config::or_default("ATT_LISTEN", "0.0.0.0:7300");
@@ -284,7 +289,7 @@ impl Agent {
     /// A new agent: a new identity drawn from the selected source (C-6).
     fn fresh(cfg: Config, entropy: LabEntropy, data_dir: PathBuf) -> Result<Self, String> {
         let provider = entropy.durable_provider(&Self::storage_path(&data_dir, 1))?;
-        let identity = ClientIdentity::generate(provider.rand())?;
+        let identity = ClientIdentity::generate_for(cfg.suite, provider.rand())?;
         let signer = identity.signer().clone();
         Ok(Self::blank(
             cfg,
@@ -306,6 +311,13 @@ impl Agent {
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .ok_or("corrupt: identity.json")?;
         let identity = ClientIdentity::restore(pair)?;
+        if identity.suite() != cfg.suite {
+            return Err(format!(
+                "binding_mismatch: the stored identity is {}, the configured suite is {}",
+                identity.suite().name(),
+                cfg.suite.name()
+            ));
+        }
         let signer = identity.signer().clone();
         let storage = state["storage"].as_u64().unwrap_or(1);
         let provider = entropy.durable_provider(&Self::storage_path(&data_dir, storage))?;
@@ -501,6 +513,7 @@ impl Agent {
         json!({
             "name": self.cfg.name,
             "group": self.cfg.group,
+            "suite": self.cfg.suite.name(),
             "public_key": hex::encode(&self.public_key),
             "membership": membership,
             "epoch": frontier.as_ref().map(|f| f.epoch),
@@ -835,7 +848,7 @@ impl Agent {
             .collect();
         rights.push((right, generation));
         rights.sort();
-        let new_identity = ClientIdentity::generate(&self.entropy.rand())?;
+        let new_identity = ClientIdentity::generate_for(self.cfg.suite, &self.entropy.rand())?;
         let new_signer = new_identity.signer().clone();
         let new_public = new_identity.public_key().to_vec();
         let staged = self.endpoint_mut()?.stage_rekey(new_identity, &rights)?;
@@ -1087,7 +1100,8 @@ impl Agent {
                 }
                 Err(error) => {
                     // The KeyPackage is spent either way; go back to a fresh candidate.
-                    let identity = ClientIdentity::generate(&self.entropy.rand())?;
+                    let identity =
+                        ClientIdentity::generate_for(self.cfg.suite, &self.entropy.rand())?;
                     let provider = self.new_provider()?;
                     self.signer = identity.signer().clone();
                     self.public_key = identity.public_key().to_vec();

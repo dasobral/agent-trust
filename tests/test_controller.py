@@ -45,6 +45,37 @@ class TopologyTests(unittest.TestCase):
         self.assertEqual(env["AGENT_TRUST_QRNG_API_KEY"], "k")
 
 
+class SuiteTests(unittest.TestCase):
+    """agent-trust C-42 through the topology: `pq` unless `[mls] suite` says otherwise."""
+
+    def plan_env(self, name):
+        topo = topology.Topology.load(REPO / "topologies" / name)
+        plan = topology.plan(topo, lambda n, r: f"http://{n}:{topology.PORTS[r]}")
+        return topo, {s.name: s.env for s in plan.services}
+
+    def test_the_default_suite_is_pq_and_reaches_the_apf_and_every_agent(self):
+        topo, env = self.plan_env("three-agents.toml")
+        self.assertEqual(topo.suite, "pq")
+        for name in ("apf", *topo.agents):
+            self.assertEqual(env[name]["AGENT_TRUST_SUITE"], "pq", name)
+        self.assertEqual(env["apf"]["AGENT_TRUST_QRNG_KEY_EXCHANGE"], "pq-only")
+
+    def test_the_classical_topology_selects_classical(self):
+        topo, env = self.plan_env("three-agents-classical.toml")
+        self.assertEqual(topo.suite, "classical")
+        self.assertEqual(env["bob"]["AGENT_TRUST_SUITE"], "classical")
+
+    def test_unknown_suites_and_key_exchanges_are_rejected(self):
+        base = topology.Topology.load(REPO / "topologies" / "three-agents.toml")
+        base.suite = "kyber"
+        with self.assertRaises(ValueError):
+            base.validate()
+        base.suite = "pq"
+        base.entropy["key_exchange"] = "classical"
+        with self.assertRaises(ValueError):
+            base.validate()
+
+
 class ComposeTests(unittest.TestCase):
     def test_compose_publishes_only_on_loopback(self):
         topo = topology.Topology.load(TOPOLOGY)
@@ -78,10 +109,11 @@ class KubernetesRenderTests(unittest.TestCase):
                              tls_dir=k8s.PKI_PATH if tls else None)
         pki = None
         if tls:
-            pki = {"ca.crt": "CA"}
+            pki = {"ca.crt": "CA", "classical-ca.crt": "CLASSICAL CA"}
             for service in plan.services:
-                pki[f"{service.name}.crt"] = f"CRT {service.name}"
-                pki[f"{service.name}.key"] = f"KEY {service.name}"
+                for stem in (service.name, f"{service.name}.classical"):
+                    pki[f"{stem}.crt"] = f"CRT {stem}"
+                    pki[f"{stem}.key"] = f"KEY {stem}"
         return plan, k8s.render(plan, "att-test", "img:tag", pki=pki)["items"]
 
     def test_no_token_appears_in_a_deployment(self):
@@ -94,7 +126,9 @@ class KubernetesRenderTests(unittest.TestCase):
         plan, items = self.render(tls=True)
         secrets = {i["metadata"]["name"]: i for i in items if i["kind"] == "Secret"}
         bob = secrets["att-pki-bob"]["stringData"]
-        self.assertEqual(sorted(bob), ["bob.crt", "bob.key", "ca.crt"])
+        self.assertEqual(sorted(bob), ["bob.classical.crt", "bob.classical.key", "bob.crt",
+                                       "bob.key", "ca.crt", "classical-ca.crt"])
+        self.assertFalse(any(name.endswith("ca.key") for name in bob), "no CA key in a pod")
         deployment = next(i for i in items if i["kind"] == "Deployment" and i["metadata"]["name"] == "bob")
         volumes = deployment["spec"]["template"]["spec"]["volumes"]
         self.assertIn({"name": "pki", "secret": {"secretName": "att-pki-bob", "defaultMode": 0o440}}, volumes)

@@ -11,8 +11,9 @@
 //! | `relay`     | Nothing: opaque store and forward, fault injection  | Untrusted network  |
 //! | `qrng-mock` | A QRNG Open API server over the OS RNG              | MOCK entropy       |
 //!
-//! Two tools share the binary: `pki` (the deployment CA and certificates for mutual
-//! TLS) and `probe` (a health check that works under mutual TLS).
+//! Three tools share the binary: `pki` (the deployment's post quantum and classical CAs
+//! and certificates for mutual TLS), `pki-issue` (one more certificate, for negative
+//! controls) and `probe` (a health check and a transport probe under mutual TLS).
 
 mod agent;
 mod apf;
@@ -25,7 +26,8 @@ mod tls;
 fn usage() -> &'static str {
     "usage: att-node <apf|agent|relay|qrng-mock>\n\
      \x20      att-node pki --dir DIR --names a,b,c [--namespace NS]\n\
-     \x20      att-node probe URL\n\
+     \x20      att-node pki-issue --dir DIR --name NAME --out OUT [--classical]\n\
+     \x20      att-node probe URL [--tls-dir DIR [--as NAME] [--classical-kx] [--method M] [--body JSON]]\n\
      Configuration comes from ATT_* environment variables; see docs/protocol.md."
 }
 
@@ -37,10 +39,8 @@ fn main() {
         "relay" => relay::run(),
         "qrng-mock" => qrng_mock::run(),
         "pki" => tls::run_pki(&std::env::args().skip(2).collect::<Vec<_>>()),
-        "probe" => match std::env::args().nth(2) {
-            Some(url) => http::run_probe(&url),
-            None => Err("probe needs a URL".into()),
-        },
+        "pki-issue" => tls::run_pki_issue(&std::env::args().skip(2).collect::<Vec<_>>()),
+        "probe" => http::run_probe(&std::env::args().skip(2).collect::<Vec<_>>()),
         "--version" => {
             println!("att-node {}", env!("CARGO_PKG_VERSION"));
             Ok(())

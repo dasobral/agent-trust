@@ -37,7 +37,7 @@ jobs:
           python-version: "3.12"
       - uses: Swatinem/rust-cache@v2
       - name: Unit tests, image and experiments (compose backend)
-        run: BACKEND=compose EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts" scripts/ci.sh
+        run: BACKEND=compose EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts e8-suite-pq e8-suite-classical" scripts/ci.sh
       - name: Keep the run directories
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,7 +67,7 @@ jobs:
       - name: Experiments on k3s
         run: |
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-          BACKEND=k8s EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts" scripts/ci.sh
+          BACKEND=k8s EXPERIMENTS="e1-revocation-fence e1-revocation-fence-mtls e3-restarts e8-suite-pq e8-suite-classical" scripts/ci.sh
       - name: Keep the run directories
         if: always()
         uses: actions/upload-artifact@v4

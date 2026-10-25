@@ -1,5 +1,5 @@
 //! Minimal synchronous HTTP/1.1 layer shared by every service, over plain TCP or
-//! mutual TLS (see `tls`).
+//! post quantum mutual TLS (see `tls`).
 //!
 //! Server: an accept loop hands each connection to a fixed pool of worker threads; one
 //! request per connection (`Connection: close`). Client: `ureq`, with the deployment's
@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde_json::{json, Value};
@@ -31,7 +31,9 @@ pub struct Request {
     pub query: BTreeMap<String, String>,
     pub bearer: Option<String>,
     pub remote: String,
-    /// The verified client certificate's common name under mutual TLS.
+    /// The identity the verified client certificate may act as under mutual TLS
+    /// (`tls::peer_identity`): `None` without a certificate, and for a certificate that
+    /// the transport rules refuse.
     pub peer: Option<String>,
     pub body: Value,
 }
@@ -92,6 +94,61 @@ impl Response {
     }
 }
 
+/// One line of the TLS connection report: who connected, with which certificate kind and
+/// key exchange group.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Connection {
+    /// The certificate's common name, or `-` without one.
+    peer: String,
+    /// `pq` (ML-DSA-44 CA), `classical` (ECDSA CA) or `none`.
+    certificate: &'static str,
+    /// The negotiated key exchange group, such as `X25519MLKEM768`.
+    group: String,
+    /// Whether the transport rules accepted the identity.
+    accepted: bool,
+}
+
+fn connections() -> &'static Mutex<BTreeMap<Connection, u64>> {
+    static CONNECTIONS: OnceLock<Mutex<BTreeMap<Connection, u64>>> = OnceLock::new();
+    CONNECTIONS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn record_connection(connection: Connection) {
+    if let Ok(mut map) = connections().lock() {
+        *map.entry(connection).or_insert(0) += 1;
+    }
+}
+
+/// `GET /control/tls` of every service: the TLS connections it accepted, by peer,
+/// certificate kind and key exchange group (`attctl` and the control token only).
+fn tls_report(request: &Request) -> Option<Response> {
+    if request.method != "GET" || request.path != "/control/tls" {
+        return None;
+    }
+    static TOKEN: OnceLock<Option<String>> = OnceLock::new();
+    let token = TOKEN.get_or_init(|| crate::config::optional("ATT_CONTROL_TOKEN"));
+    if !authorized(request, token) {
+        return Some(Response::status(401, "unauthorized: control token"));
+    }
+    if !request.peer_is(&["attctl"]) {
+        return Some(Response::forbidden_peer());
+    }
+    let lines: Vec<Value> = connections()
+        .lock()
+        .map(|map| {
+            map.iter()
+                .map(|(c, count)| {
+                    json!({"peer": c.peer, "certificate": c.certificate, "group": c.group,
+                           "accepted": c.accepted, "connections": count})
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(Response::outcome(Ok(
+        json!({"tls": tls::enabled(), "connections": lines}),
+    )))
+}
+
 /// Checks `Authorization: Bearer <token>` when a token is configured.
 pub fn authorized(request: &Request, token: &Option<String>) -> bool {
     match token {
@@ -118,7 +175,9 @@ where
                 Ok(Ok(stream)) => stream,
                 _ => return,
             };
-            let _ = serve_connection(stream, handler.as_ref());
+            let _ = serve_connection(stream, &|request: &Request| {
+                tls_report(request).unwrap_or_else(|| handler(request))
+            });
         });
     }
     for stream in listener.incoming().flatten() {
@@ -156,11 +215,30 @@ where
                     .complete_io(&mut stream.sock)
                     .map_err(|e| format!("TLS handshake: {e}"))?;
             }
-            let peer = stream
+            let group = stream
+                .conn
+                .negotiated_key_exchange_group()
+                .map(|g| g.name());
+            let certificate = stream
                 .conn
                 .peer_certificates()
                 .and_then(|certs| certs.first())
-                .and_then(tls::common_name);
+                .and_then(tls::peer_certificate);
+            let peer = certificate
+                .as_ref()
+                .and_then(|certificate| tls::peer_identity(certificate, group));
+            record_connection(Connection {
+                peer: certificate
+                    .as_ref()
+                    .map_or_else(|| "-".to_string(), |c| c.name.clone()),
+                certificate: match &certificate {
+                    None => "none",
+                    Some(c) if c.post_quantum => "pq",
+                    Some(_) => "classical",
+                },
+                group: tls::group_name(group),
+                accepted: peer.is_some(),
+            });
             exchange(stream, remote, peer, handler)
         }
     }
@@ -344,13 +422,66 @@ impl Client {
 
 /// `att-node probe URL`: exits 0 when `GET URL` answers `{"ok": ...}` (a readiness
 /// probe that also works under mutual TLS).
-pub fn run_probe(url: &str) -> Result<(), String> {
-    let (base, path) = match url
+///
+/// With options it is a transport probe for negative controls, run from outside the
+/// deployment: `att-node probe URL --tls-dir DIR [--as NAME] [--classical-kx]
+/// [--method M] [--body JSON]` connects with NAME's post quantum certificate from DIR
+/// (none without `--as`), offers only X25519 with `--classical-kx`, and prints
+/// `HTTP <status>` or `refused: <reason>`. It exits 0 whenever it could report.
+pub fn run_probe(args: &[String]) -> Result<(), String> {
+    let url = args.first().ok_or("probe needs a URL")?;
+    if args.len() == 1 {
+        let (base, path) = split_url(url);
+        return Client::new(base, None).call("GET", path, None).map(|_| ());
+    }
+    let mut tls_dir = None;
+    let mut name = None;
+    let mut classical_kx = false;
+    let mut method = "GET".to_string();
+    let mut body = None;
+    let mut iter = args[1..].iter();
+    while let Some(flag) = iter.next() {
+        let mut value = || iter.next().cloned().ok_or(format!("{flag} needs a value"));
+        match flag.as_str() {
+            "--tls-dir" => tls_dir = Some(value()?),
+            "--as" => name = Some(value()?),
+            "--classical-kx" => classical_kx = true,
+            "--method" => method = value()?,
+            "--body" => body = Some(value()?),
+            _ => return Err(format!("unknown probe flag {flag}")),
+        }
+    }
+    let tls_dir = tls_dir.ok_or("a transport probe needs --tls-dir")?;
+    let config = tls::probe_client(
+        std::path::Path::new(&tls_dir),
+        name.as_deref(),
+        classical_kx,
+    )?;
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .tls_config(Arc::new(config))
+        .build();
+    let request = agent.request(&method, url);
+    let result = match &body {
+        Some(body) => request
+            .set("Content-Type", "application/json")
+            .send_string(body),
+        None => request.call(),
+    };
+    match result {
+        Ok(response) => println!("HTTP {}", response.status()),
+        Err(ureq::Error::Status(status, _)) => println!("HTTP {status}"),
+        Err(err) => println!("refused: {}", err.kind()),
+    }
+    Ok(())
+}
+
+fn split_url(url: &str) -> (&str, &str) {
+    match url
         .find("://")
         .and_then(|i| url[i + 3..].find('/').map(|j| i + 3 + j))
     {
         Some(split) => (&url[..split], &url[split..]),
         None => (url, "/healthz"),
-    };
-    Client::new(base, None).call("GET", path, None).map(|_| ())
+    }
 }

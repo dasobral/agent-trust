@@ -12,10 +12,10 @@ authors = ["Daniel Sobral Blanco <dasobral93@gmail.com>"]
 # The Agent Trust stack, pinned in one place. Change these three revisions together:
 # agent-trust pins its own OpenMLS fork revision and openmls-qrand revision.
 [workspace.dependencies]
-agent-trust = { git = "https://github.com/dasobral/agent-trust.git", rev = "5cf724e2a8af2d7a3a76e6a24d03de62f29f4a83" }
-openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
-openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963" }
-openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable"] }
+agent-trust = { git = "https://github.com/dasobral/agent-trust.git", rev = "f69b7fa6bcb779d3dd032196f3ae89bbebc9cb61" }
+openmls = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_traits = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_basic_credential = { git = "https://github.com/dasobral/openmls.git", rev = "dd33278099426c2ffc8a4ec686e88bde1f937963", features = ["clonable", "draft-ietf-mls-pq-ciphersuites"] }
 
 # Same unification as agent-trust: openmls-qrand depends on crates.io openmls_traits.
 [patch.crates-io]

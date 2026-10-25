@@ -358,4 +358,9 @@ agents = ["alice", "bob"]
 
 [[step]]
 do = "check.mtls"
-name = "F7 transport controls: no certificate, wrong peer, foreign CA are all refused"
+name = "F7 transport controls: no certificate, wrong peer, foreign CA, classical key exchange and a classical certificate for a service name are all refused"
+
+[[step]]
+do = "check.pq_tls"
+name = "F8 every service link, the QRNG link included, is ML-DSA-44 over X25519MLKEM768"
+expect_peers = ["apf<-alice", "apf<-bob", "relay<-alice", "relay<-carol", "qrng<-apf", "qrng<-alice"]

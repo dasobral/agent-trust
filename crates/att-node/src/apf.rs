@@ -153,15 +153,25 @@ impl Apf {
 
     fn info(&self) -> Result<Value, String> {
         let phase = self.phase.lock().map_err(|_| "crashed: lock poisoned")?;
-        let (state, key) = match &*phase {
-            Phase::Waiting => ("waiting", None),
-            Phase::Pending(pending) => ("pending", Some(pending.apf_public_key().to_vec())),
-            Phase::Ready(adapter) => ("ready", Some(adapter.apf_public_key().to_vec())),
+        let (state, key, suite) = match &*phase {
+            Phase::Waiting => ("waiting", None, None),
+            Phase::Pending(pending) => (
+                "pending",
+                Some(pending.apf_public_key().to_vec()),
+                Some(pending.suite()),
+            ),
+            Phase::Ready(adapter) => (
+                "ready",
+                Some(adapter.apf_public_key().to_vec()),
+                Some(adapter.suite()),
+            ),
         };
         Ok(json!({
             "group": self.group,
             "root": self.root,
             "state": state,
+            // agent-trust C-42: fixed by the root's key at genesis.
+            "suite": suite.map(|suite| suite.name()),
             "apf_public_key": key.as_ref().map(hex::encode),
             "apf_key_id": key.as_ref().map(|key| hex::encode(Sha256::digest(key))),
             "entropy": self.entropy.label(),

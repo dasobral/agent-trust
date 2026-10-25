@@ -86,10 +86,12 @@ These are explicit choices of this testbed, not properties of agent-trust:
 4. **Transport security.** Each deployment generates three random tokens: `control`
    (control plane), `app` (applications), `bootstrap` (genesis, held only by the APF
    and the root agent). Request authenticity towards the APF never depends on
-   transport: every worker request is signed (contract §4.8). With `[tls] enabled`
-   in the topology, every connection is mutual TLS under a deployment CA
-   (`att-node pki`), the QRNG traffic included, and services bind the peer's
-   certificate name to the protocol identity:
+   transport: every worker request is signed (contract §4.8), with ML-DSA-44 in the
+   default `pq` suite (agent-trust C-42). With `[tls] enabled` in the topology, every
+   connection is mutual TLS 1.3, the QRNG traffic included: between services an
+   ML-DSA-44 certificate of the deployment's post quantum CA over the hybrid key
+   exchange `X25519MLKEM768`, with no classical fallback (`docs/deployment.md`). Services
+   bind the peer's certificate name to the protocol identity:
 
    | Service | Accepts only |
    |---|---|
@@ -100,8 +102,10 @@ These are explicit choices of this testbed, not properties of agent-trust:
    | every `/control/*` | `attctl` |
    | agent `/app/*` | `<agent>-app` or `attctl` |
 
-   Transport keys come from the OS RNG (rcgen over ring); they are outside the
-   agent-trust entropy seam, which covers MLS and identity keys.
+   A certificate of the classical CA (for a control plane without post quantum TLS) is
+   accepted only for `attctl` and `<agent>-app`, and a post quantum certificate only
+   over `X25519MLKEM768`. Transport keys come from the OS RNG (rcgen over aws-lc-rs);
+   they are outside the agent-trust entropy seam, which covers MLS and identity keys.
 5. **Time.** The APF uses the system clock (`SystemClock`). Delegations expire after
    `ttl_secs` (default 30 days).
 
