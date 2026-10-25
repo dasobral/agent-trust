@@ -20,39 +20,50 @@ This is research software, not a production system.
 
 ## Status
 
+Every topology now runs the **post quantum suite** (agent-trust C-42: MLS `0x0052`,
+X-Wing key exchange and ML-DSA-44 signatures for identities, requests and the APF), and
+every TLS link between services is ML-DSA-44 over the hybrid key exchange
+`X25519MLKEM768`, the QRNG link included (finding F-9, steps PQ-1 to PQ-4).
+
 | Experiment | Question | local | compose | k3s |
 |---|---|---|---|---|
 | [E1](docs/experiments/E1-revocation-fence.md) | Revocation fence, repair against a retained key adversary, rekey, under relay faults | PASS | PASS | PASS |
-| E1-mtls | E1 with mutual TLS everywhere, plus transport negative controls | PASS | PASS | PASS |
+| E1-mtls | E1 with post quantum mutual TLS everywhere, transport negative controls, and proof that every service link is ML-DSA-44 over `X25519MLKEM768` | PASS | PASS | PASS |
 | [E2](docs/experiments/E2-entropy-outage.md) | QRNG outage: fail closed, change nothing, recover | PASS | PASS | PASS |
 | [E3](docs/experiments/E3-restarts.md) | APF and agent crashes, outages, offline members | PASS | PASS | PASS |
 | [E4](docs/experiments/E4-hostile-commits.md) | Forged, replayed, spliced, hidden and reordered commits | PASS | PASS | PASS |
-| [E5](docs/experiments/E5-scale.md) | Eight agents in parallel: latency, cost growth, safety | PASS | | |
+| [E5](docs/experiments/E5-scale.md) | Eight agents in parallel: latency, cost growth, safety (`pq` suite) | **FAIL** (F-8) | | |
+| E5-classical | E5 in the classical suite | PASS | | |
 | [E7](docs/experiments/E7-confused-deputy.md) | Confused deputy: invocation provenance and attenuation | PASS | PASS | PASS |
+| [E8](docs/experiments/E8-suites.md) | The same scenario in the `pq` and `classical` suites, with sizes | PASS | PASS | PASS |
 | [K8S](deploy/k3s/README.md) | NetworkPolicy isolation of the services | | | PASS |
 
-Evidence (reports, traces, service logs) is in [`results/`](results/); the dates and
-exact revisions are in each `report.json`. Every recorded run names a clean testbed
-commit (`6c0331a` or `86fd2e7`, which differ only in documentation); a run from a
-tree with uncommitted changes would be marked `-dirty`. GitHub CI run
-`40115418056` on `d2ab776` passed the local job (every experiment, E5 included), the
-compose job and the k3s job (a fresh k3s with containerd). Stability: 60 of 60 runs pass (10 each of
-E1, E1-mtls, E2, E3, E4 and E7, local backend,
-[`results/stability-2026-10-24.txt`](results/stability-2026-10-24.txt)). E6 (a live Entropy Core) is the one planned
-experiment not run: it needs a reachable endpoint. In every run here the QRNG service
-is a **mock** (OS RNG bytes): no quantum origin is claimed.
+E5 fails in the `pq` suite because of finding F-8: the kernel keeps every envelope in
+every history snapshot, and ML-DSA signatures make envelopes about four times larger, so
+the APF slows down too fast for parallel sends (the sends time out). The F-8 fix needs
+approval. E5 in the classical suite passes.
 
-Stack under test: agent-trust `5cf724e` (branch `feat/durable-lab-provider`: `main`
-`9af877c` plus the durable provider this testbed needed, finding F-2; the branch head
-`43750a8` adds only its contract text, C-41, flagged for approval and not yet merged), OpenMLS fork
-`dd33278`, openmls-qrand `a102450`.
+Evidence (reports, traces, service logs) is in [`results/`](results/): the runs of
+2026-10-25 name the clean testbed commit `b7e9fa3`, the runs of 2026-10-24 the classical
+stack before F-9 (`6c0331a` or `86fd2e7`). A run from a tree with uncommitted changes
+would be marked `-dirty`. GitHub CI run `40183081448` on `b7e9fa3` runs the local job
+(every experiment, E5 in the classical suite), the compose job and the k3s job (a fresh
+k3s with containerd). The stability series of 2026-10-24 (60 of 60,
+[`results/stability-2026-10-24.txt`](results/stability-2026-10-24.txt)) covers the
+classical stack. E6 (a live Entropy Core) is the one planned experiment not run: it needs
+a reachable endpoint. In every run here the QRNG service is a **mock** (OS RNG bytes): no
+quantum origin is claimed.
+
+Stack under test: agent-trust `f69b7fa` (branch `feat/post-quantum`: the durable
+provider of `feat/durable-lab-provider`, C-41, plus the post quantum suite, C-42; neither
+is merged into `main` yet), OpenMLS fork `dd33278` with the feature
+`draft-ietf-mls-pq-ciphersuites`, openmls-qrand `66026082` (branch `feat/pq-tls`).
 
 Findings on the stack, with proposals: [`docs/findings.md`](docs/findings.md). The
 most important: the kernel's cost per request grows with the square of its history
-(F-8, measured by E5), and any epoch change makes not yet consumed messages
-undeliverable (F-7). F-9: every public key algorithm in the stack is classical; a probe
-shows that the hybrid post quantum MLS suite (ML-KEM-768 with X25519) already works
-([`results/F9/`](results/F9/README.md)).
+(F-8, measured by E5, and about twice as steep in the `pq` suite), and any epoch change
+makes not yet consumed messages undeliverable (F-7). F-9 (every public key algorithm
+was classical) is implemented.
 
 ## How the stack builds up
 

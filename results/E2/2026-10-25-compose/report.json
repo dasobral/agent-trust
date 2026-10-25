@@ -1,0 +1,941 @@
+{
+ "experiment": "E2",
+ "title": "QRNG outage over the network: fail closed, change nothing, recover",
+ "hypothesis": "(H1) While the QRNG service refuses requests, every step that needs fresh randomness on an agent (send, add, rekey) is refused with entropy_unavailable and nothing falls back to another source. (H2) A refused step changes neither the frontier, the roster nor the registered keys; a released but unprotected operation is abandoned at the APF (barrier B2). (H3) A node cannot start during the outage. (H4) When the source returns, every refused step succeeds without operator repair, and the oracle accepts the whole trace.",
+ "result": "pass",
+ "started": 1792923572.7831993,
+ "seconds": 12.152,
+ "steps": [
+  {
+   "index": 0,
+   "do": "genesis",
+   "name": "A1 alice founds the group",
+   "status": "pass",
+   "detail": {
+    "branch": "8590ea01469f6e19a444c857751d48679228051ae2b1c27e13b26f7f6900dac1",
+    "epoch": 0
+   },
+   "seconds": 0.059
+  },
+  {
+   "index": 1,
+   "do": "delegate",
+   "name": "A2 delegate bob",
+   "status": "pass",
+   "detail": {
+    "revision": 1
+   },
+   "seconds": 0.011
+  },
+  {
+   "index": 2,
+   "do": "delegate",
+   "name": "A3 delegate carol",
+   "status": "pass",
+   "detail": {
+    "revision": 2
+   },
+   "seconds": 0.008
+  },
+  {
+   "index": 3,
+   "do": "admit",
+   "name": "A4 admit bob",
+   "status": "pass",
+   "detail": {
+    "branch": "bfca8df3984f6eb4635d788d022d7049ad9fd9690bf1f2d2e083251b7552c7b0",
+    "epoch": 1,
+    "index": 0,
+    "subject": "bob"
+   },
+   "seconds": 0.172
+  },
+  {
+   "index": 4,
+   "do": "join",
+   "name": "A5 carol publishes a certified KeyPackage (not yet added)",
+   "status": "pass",
+   "detail": {
+    "published": true,
+    "rights": [
+     {
+      "generation": 0,
+      "right": "read"
+     },
+     {
+      "generation": 0,
+      "right": "write"
+     },
+     {
+      "generation": 0,
+      "right": "admit"
+     }
+    ],
+    "subject": "carol"
+   },
+   "seconds": 0.018
+  },
+  {
+   "index": 5,
+   "do": "send",
+   "name": "A6 alice sends m1",
+   "status": "pass",
+   "detail": {
+    "epoch": 1,
+    "op": "alice-000001",
+    "recipients": [
+     "bob"
+    ],
+    "sent_ms": 1792923573086
+   },
+   "seconds": 0.036
+  },
+  {
+   "index": 6,
+   "do": "quiesce",
+   "name": "A7 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 1,
+    "fetched": 1,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.276
+  },
+  {
+   "index": 7,
+   "do": "entropy_outage",
+   "name": "B1 the QRNG service starts refusing every request",
+   "status": "pass",
+   "detail": {
+    "available": false
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 8,
+   "do": "send",
+   "name": "B2 alice cannot send: the MLS message needs fresh randomness",
+   "status": "pass",
+   "detail": {
+    "refused": "entropy_unavailable",
+    "error": "entropy_unavailable"
+   },
+   "seconds": 0.045
+  },
+  {
+   "index": 9,
+   "do": "add",
+   "name": "B3 alice cannot add carol: the commit needs fresh path secrets",
+   "status": "pass",
+   "detail": {
+    "refused": "entropy_unavailable",
+    "error": "entropy_unavailable"
+   },
+   "seconds": 0.006
+  },
+  {
+   "index": 10,
+   "do": "revoke",
+   "name": "B4 alice revokes bob's write (the APF draws nothing)",
+   "status": "pass",
+   "detail": {
+    "read_fenced": false,
+    "revision": 11
+   },
+   "seconds": 0.012
+  },
+  {
+   "index": 11,
+   "do": "grant",
+   "name": "B5 alice offers write at generation 1",
+   "status": "pass",
+   "detail": {
+    "pending": true
+   },
+   "seconds": 0.012
+  },
+  {
+   "index": 12,
+   "do": "rekey",
+   "name": "B6 bob cannot rekey: the new key needs fresh randomness",
+   "status": "pass",
+   "detail": {
+    "refused": "entropy_unavailable",
+    "error": "entropy_unavailable"
+   },
+   "seconds": 0.007
+  },
+  {
+   "index": 13,
+   "do": "check.apf",
+   "name": "B7 nothing changed: roster and epoch",
+   "status": "pass",
+   "detail": {
+    "roster": [
+     "alice",
+     "bob"
+    ],
+    "epoch": 1,
+    "policy_revision": 3,
+    "read_fenced": false,
+    "repair_pending": null
+   },
+   "seconds": 0.002
+  },
+  {
+   "index": 14,
+   "do": "check.frontiers",
+   "name": "B8 alice and bob are still on the APF frontier",
+   "status": "pass",
+   "detail": {
+    "epoch": 1,
+    "agents": [
+     "alice",
+     "bob"
+    ]
+   },
+   "seconds": 0.004
+  },
+  {
+   "index": 15,
+   "do": "stop",
+   "name": "B9 bob stops",
+   "status": "pass",
+   "detail": {
+    "stopped": "bob"
+   },
+   "seconds": 0.452
+  },
+  {
+   "index": 16,
+   "do": "start",
+   "name": "B10 bob cannot start without its entropy source (fail closed)",
+   "status": "pass",
+   "detail": {
+    "service": "bob",
+    "started": false,
+    "reason": "timeout after 8s waiting for bob to answer"
+   },
+   "seconds": 8.509
+  },
+  {
+   "index": 17,
+   "do": "entropy_outage",
+   "name": "C1 the QRNG service recovers",
+   "status": "pass",
+   "detail": {
+    "available": true
+   },
+   "seconds": 0.002
+  },
+  {
+   "index": 18,
+   "do": "start",
+   "name": "C2 bob starts and resumes from its data directory",
+   "status": "pass",
+   "detail": {
+    "service": "bob",
+    "started": true
+   },
+   "seconds": 0.526
+  },
+  {
+   "index": 19,
+   "do": "check.agent",
+   "name": "C3 bob is the same member on the frontier",
+   "status": "pass",
+   "detail": {
+    "membership": "member",
+    "epoch": 1,
+    "restarts": 1,
+    "skipped_entries": 0,
+    "future": 0,
+    "waiting": []
+   },
+   "seconds": 0.003
+  },
+  {
+   "index": 20,
+   "do": "send",
+   "name": "C4 alice sends m2",
+   "status": "pass",
+   "detail": {
+    "epoch": 1,
+    "op": "alice-000003",
+    "recipients": [
+     "bob"
+    ],
+    "sent_ms": 1792923582999
+   },
+   "seconds": 0.056
+  },
+  {
+   "index": 21,
+   "do": "quiesce",
+   "name": "C4b drain before the epoch changes (finding F-7: consume binds to the APF's current epoch)",
+   "status": "pass",
+   "detail": {
+    "posted": 2,
+    "fetched": 2,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.275
+  },
+  {
+   "index": 22,
+   "do": "add",
+   "name": "C5 alice adds carol with the same KeyPackage",
+   "status": "pass",
+   "detail": {
+    "branch": "9dac033407fbd72cd7e88528b759cb48810d5b22ee8ccbfdbbceab5752c2e69f",
+    "epoch": 2,
+    "index": 1,
+    "subject": "carol"
+   },
+   "seconds": 0.178
+  },
+  {
+   "index": 23,
+   "do": "rekey",
+   "name": "C6 bob completes the pending rekey",
+   "status": "pass",
+   "detail": {
+    "branch": "f45e20ae9d9778604548368f98b5d14e38adf0783f003fdc299dfead92ba57ff",
+    "epoch": 3,
+    "generation": 1,
+    "public_key": "dff22ead063286d526816a0e13cf2d216142d6ee51b74349a9f5722b9b7f9cadcc8746766cc356f402562b285b1f21c446ff165b4785edc28944055ac164740c2638dce530c8ac24d7ef43410e2e5b169d509e2caa9c104ba16a9fd4e36dd9881e83bc11706c4467443cf14bf3de81a110f97eb39b76ae9bdb1803a54440f387ed84f9fb25aa3e60491dc47d8968e6fc374d109541dc3364e112899acbb843218f8d39e0d439eeb5c1fed0b4cd36f34cf60b2d2c6ef45cb0f5e4cff3bda9327bb753822cc16707a977bfff6ab296085319bc30d3e17152e672a90e65a1ed8a7fb723194f611ee067f2a3f2ebf8d073ab100277c9a5d339f5af1d9b0ec2de5f42fe380fba666001ec7888d5d25ff64fb263d7dff929f224521a770e8fb1eaf34d76fa27238b6cd68a0b8e1a6485b5fc5984f0a155504ba7202a177f6d4ce13bb8c5be6b4f8aaee18e9e3afa1b2a30e221ef444822da273c5c7e78b347bf8b3eec6042aabafc94b3150af0ab0fa1cf75f3a471157894e695f4b54e6a697893e2d03a74cfbb0341d23e616bff0369da7ae32963e14c95b9ed9f96da89564ae2344781ddb04032011ac61b3e75584daa7dc876ef2b28d56bd5335b35f45d997930a9cb8185a740848dab71803fb66972f2048aa8ed49b1db2799f02b4475695d4770ee7a20079c9c5f8b43ff64fa497b3d938f261ee2198491535ba847f18f47c658f750ce58aeab932415d0e20a02cc0613d0bf5bc2b09410508fa767f23b2d3c94039de3909ddf62c94b1a66e041a876008ccf638fc439a71444509e9fc417c052668598be6c415c9e540e402bb546fa5ac02cd142fba039766130bafedd3f2e0d0cda6b3b4175f028251be4671237936b32bd13c7b162464c9fe3d357326f4d27cc114895ad2e8ab3c37325797af47c93700ef342a5868806c93106af12d6d1fe2941c9187d89e9f772acb837c4c03d3d52a852c99a690676d8caa100b2bb8f28ba7935222b5122b867daaf5d5aef0413549b765a3e84d3e745b9ae3f8b89b4f326c8c2cbfad4cce9d6ddee14c96a6aaf092024aa2f7104229603e08c517eaf3d963dacadb536f316b98e2243ebae5530833de643a3cd7ec471ff6be54bfc0135047302811941ad55a8356cf376c64e876ca5ac280ed1f997fcc2b2c4bde96dfecf571c7c7c1bcd902cb0bd4c871e84b6e12220341e44ba308c7e23a7ac2d42bc43df34f5deebe18c4c20071f5fdc3a8238d46c2bca20aab0380df50a03d663871ad5f2952bebaa14d94fee6d0e2ca2a03fd006a5cb9aa6be8c0e2173af57d98f94c4bb5306c066332406543029c9e7594530bfbf2fd863f46571fd553de903cdfb4b760c54ca87dd8c83318511fdbc4b616f592fad8616118c360be709ee12c937645b6cee54ec08d07cb918896ff1591e94a5d3b45bc56a2c6e85c1033950d4f026bf47f19d15e5537203b6e5f32511ccb1e46a9800c092247fba8f8c00636aecc071395522d041fd982d85d90b6ad7df87cbd1db950a9d49f2d5df407bf82875caf53e8731ed61cbe06083900819ba376b443a103fa5abad7a0e3215cf395e83a9846c8ec294e3b1d77ce3b132370ec36f2baca8ee3cfc999eae7c9e58457830412f87bf857ceb5e441f162417ac5e0d670d26e735e066a4c6bdce31804a7d6a7da038dd35e6773d7ba0672499fca752785304d41985539f7496cf4340037fadc68530aff4cbf9b8000677439b5f848e2e8e005e367ac8c163df24179e90fefaa902e309921d8dc8904d64d78fca1dc9650330927f25a6e59b3d331831996896c9eeacc12a3e9f163851c71913e235d6aab8d334bb04f01a4c000d2a194d85",
+    "right": "write"
+   },
+   "seconds": 0.107
+  },
+  {
+   "index": 24,
+   "do": "send",
+   "name": "C7 bob sends m3 with its new key",
+   "status": "pass",
+   "detail": {
+    "epoch": 3,
+    "op": "bob-000001",
+    "recipients": [
+     "alice",
+     "carol"
+    ],
+    "sent_ms": 1792923583626
+   },
+   "seconds": 0.067
+  },
+  {
+   "index": 25,
+   "do": "send",
+   "name": "C8 carol sends m4",
+   "status": "pass",
+   "detail": {
+    "epoch": 3,
+    "op": "carol-000001",
+    "recipients": [
+     "alice",
+     "bob"
+    ],
+    "sent_ms": 1792923583748
+   },
+   "seconds": 0.122
+  },
+  {
+   "index": 26,
+   "do": "quiesce",
+   "name": "C9 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 6,
+    "fetched": 6,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.437
+  },
+  {
+   "index": 27,
+   "do": "check.apf",
+   "name": "D1 final roster and epoch: add plus rekey",
+   "status": "pass",
+   "detail": {
+    "roster": [
+     "alice",
+     "bob",
+     "carol"
+    ],
+    "epoch": 3,
+    "policy_revision": 4,
+    "read_fenced": false,
+    "repair_pending": null
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 28,
+   "do": "check.frontiers",
+   "name": "D2 every agent is on the APF frontier",
+   "status": "pass",
+   "detail": {
+    "epoch": 3,
+    "agents": [
+     "alice",
+     "bob",
+     "carol"
+    ]
+   },
+   "seconds": 0.004
+  },
+  {
+   "index": 29,
+   "do": "check.complete",
+   "name": "D3 every message reached every certified reader exactly once",
+   "status": "pass",
+   "detail": {
+    "pairs": 6,
+    "excluded": [],
+    "optional": 0
+   },
+   "seconds": 0.003
+  },
+  {
+   "index": 30,
+   "do": "check.exactly_once",
+   "name": "D4 no delivery without APF consumption",
+   "status": "pass",
+   "detail": {
+    "deliveries": 6,
+    "consumed": 6,
+    "lost_after_consume": 0
+   },
+   "seconds": 0.021
+  },
+  {
+   "index": 31,
+   "do": "check.oracle",
+   "name": "D5 the oracle accepts the trace, the abandoned release included",
+   "status": "pass",
+   "detail": {
+    "oracle": "oracle.py",
+    "events": 40,
+    "kinds": {
+     "abandon": 1,
+     "admit": 2,
+     "allocate": 5,
+     "allow": 6,
+     "consume": 6,
+     "deny": 1,
+     "emit": 4,
+     "init": 1,
+     "persist": 4,
+     "recover": 4,
+     "rekey": 1,
+     "release": 5
+    }
+   },
+   "seconds": 0.385
+  },
+  {
+   "index": 32,
+   "do": "check.broken_controls",
+   "name": "D6 the oracle rejects the broken controls that apply to this trace",
+   "status": "pass",
+   "detail": {
+    "rejected": {
+     "release cover that omits a reader": "unsound_cover",
+     "second envelope under one operation": "binding_mismatch",
+     "replayed consumption": "replay",
+     "rekey that reuses another member's key": "stale_key"
+    },
+    "skipped": [
+     "release after the read denial",
+     "fence opened by API only (no repair commit)",
+     "fence opened without confirmation",
+     "repair that keeps the revoked reader"
+    ]
+   },
+   "seconds": 0.33
+  },
+  {
+   "index": 33,
+   "do": "check.entropy",
+   "name": "D7 alice's counter shows the refused draws (bob's counter restarted with bob; B6 asserts its refusal); nothing else failed",
+   "status": "pass",
+   "detail": {
+    "nodes": {
+     "apf": {
+      "bytes": 96,
+      "failures": 0,
+      "requests": 3,
+      "source": "qrng"
+     },
+     "alice": {
+      "bytes": 440,
+      "failures": 2,
+      "requests": 12,
+      "source": "qrng"
+     },
+     "bob": {
+      "bytes": 196,
+      "failures": 0,
+      "requests": 6,
+      "source": "qrng"
+     },
+     "carol": {
+      "bytes": 196,
+      "failures": 0,
+      "requests": 6,
+      "source": "qrng"
+     }
+    },
+    "qrng_service": {
+     "available": true,
+     "bytes": 1120,
+     "clients": {
+      "172.18.0.4": 96,
+      "172.18.0.5": 196,
+      "172.18.0.6": 440,
+      "172.18.0.7": 388
+     },
+     "mock": true,
+     "refused": 9,
+     "requests": 41
+    }
+   },
+   "seconds": 0.005
+  }
+ ],
+ "skipped_steps": 0,
+ "backend": "compose",
+ "topology": "three-agents",
+ "entropy": {
+  "source": "qrng"
+ },
+ "stack": {
+  "agent-trust": "f69b7fa6bcb779d3dd032196f3ae89bbebc9cb61",
+  "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_qrand": "66026082b1badea0ca82c6739238bfe7bd6dcec7",
+  "testbed": "b7e9fa39a55f8b4b35f94b3ca42a120b75ba5fe0"
+ },
+ "observations": {
+  "apf_state": {
+   "branch": "f45e20ae9d9778604548368f98b5d14e38adf0783f003fdc299dfead92ba57ff",
+   "epoch": 3,
+   "grants": [
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admin",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 1,
+     "right": "write",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "carol"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "carol"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "carol"
+    }
+   ],
+   "group": "lab",
+   "policy_revision": 4,
+   "read_fenced": false,
+   "repair_pending": null,
+   "roster": [
+    "alice",
+    "bob",
+    "carol"
+   ]
+  },
+  "relay_stats": {
+   "dropped": 0,
+   "duplicated": 0,
+   "expired": 0,
+   "faults": {
+    "drop": 0,
+    "duplicate": 0,
+    "reorder": false
+   },
+   "fetched": 6,
+   "handshake": {
+    "lab": 3
+   },
+   "held": [],
+   "hidden": {},
+   "key_packages": [
+    "bob",
+    "carol"
+   ],
+   "leased": 0,
+   "pending": 0,
+   "posted": 6,
+   "queued": {},
+   "reversed": [],
+   "tapped": 0
+  },
+  "agents": {
+   "alice": {
+    "adversary": [],
+    "branch": "f45e20ae9d9778604548368f98b5d14e38adf0783f003fdc299dfead92ba57ff",
+    "confirmations": [],
+    "cursor": 3,
+    "entropy": {
+     "bytes": 440,
+     "failures": 2,
+     "requests": 12,
+     "source": "qrng"
+    },
+    "epoch": 3,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 2,
+    "membership": "member",
+    "name": "alice",
+    "polls": 121,
+    "public_key": "9dd40981f9e398987808f62422800f7a47af097ea530b9187fa367fabd2f3301f595b9d76bead1e50453d91aa1b83a99c1c0642ff8433aec26befb3698400c5d79ca3917d66dbf9ff8da5887f5980fbdf98919c688c574faea910d309db79da34883d51e3483d9582f78e4537f220ee5be843ade3630c5fa104d253d86e2a66ed70007dc1ff98a96f8f4f6b8314868b7465623709c0112ee8bb07bbd927d00021069de0eccab56765650e01c0e81ecfc13f35abd9d16a919d435552beace3b6c174cac8aab5b0d8fe19713e64723042d137fc9179650d129e98b9c1142ef8884496e8cec73a156bb006dbe6c18981d8ec951241747b16625ef73309d8bfb30296576a9424819a70dacde04cd54582fdc186e8105c82814dca6600a981af397def74c2e3361a00f58db52fa471a1911f6ce996a521f6cb52d167ee5f615f22be3271672470461b9df4475f6db0199e4646e867be794cf290689ea66880c1f21ebc6432fb9620e1a316926fa49641f0c6ace6c8b755828c0515dbb5ad9cf718e22482efb0778aba0ca326908c77a1988d2554ad859cbd60bd1b9b40b582be5fdd7e34c2a1fef6ada61a71fe6a411db4ffd07a5ae860076bd44f06f0e113b9a6ba1174d61df800496b32df083ff03b7c4900530fe7fe6ac81add731659ca9b1139cb3d0c21e3a29042e0b6b3a50220e6c858e6e0d0b96f8448f1f34cabfb89acc94298d55cd19a816fcc8310c79188b7a977e67c432c64514161ea546abec9e6e17817869c192d108978f5258142c7a1ac8d3c5b8d147bb7dc1d842e5716fa57a0111d1d5dc6ae2175fd35b9510b62ff99efecddb7be2f608affdce97744f46d35fe2239ccf46ab68eaef1dbf25f9aa48595664a5f10820d4e1d8e1019dfbab76effebd5148c24b02e3e3ce14b8f4a6a80dec395faf4fedffb1e62a15a75850c00996cd3e701771cda7494426c0a17cd022a31fdffa1008a7d2539f82d39ba5d89dfdeb67361d8241a54e82c62ccb460b5cc99cbee3b037b196355d326ca6dd5187cfd27dd35f93e45358ecd706cfe7cb2017186c7909767761382d4277d3c73b391f1b8fe75d55be2b2d7fa44a5018c079d85538de51018d167a67833f398a6cb03bba9cb3ac63ba1b03edc8c54a6582868e728d8c7c16392ad164e86b2e5897b6d65fee5d408b7430a85221845554fee39a2000f99fed4745ac61189ec305db8f8bef82684bbf755cabeccbaed686dae3f5a04bd86f4850219a3c358bb06fce98c7b4b83639544cb470d34084a54d96359ede588bdf0e013529ea8c297b4becd9048f27dccfbaba6219cfc28f0a7dec355a235a043465710d6feed65d840bd86d8f8b7fe8c81c50e2c3d0e259e0698befbd6bb8836886219575957ec01bc19053553f092a3d096566bdeb021e6a5dbc642a22e0d0ca6d0dd42acf1093c88c2d4c0af939d77088c9ee279a5d769c54a74ab74bf71e959f50c1c570c59d1f2ff6b5501f34dec5af40baf0838ea23821343a66af51b1d82b2ca0b085a3cc202accd0bdf8981d6258fdb86afcfec5db95a9dd2c602895b207791f69a7316bd88ff25e07e68bf55bc72c8f6032d368d5b43f8c902a17df420c8c8bffd654eebef4f4e0aa7eaa27f6d3c8d7484cc3af66ef3c592da1d81c9c017c7d4c86de8a2b761afcfe6f7ac469e7f49bf077808d9427a35da8bb8b1e5252e2bdd6de7d40eeb38cc8cb354e852f315cc91d5c7bbb1fd3fcbc0d3c0e142f2bfd8b3915179c9210812757979f8627de8979b63e3583e13a37ecd60131c8685120fc6d5076ab01693f31e1f0d0a1bd65641fe16a4aaa11df0cba619d870db1b35138a9b719500a87f304",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 19,
+    "skipped_entries": 0,
+    "suite": "pq",
+    "waiting": []
+   },
+   "bob": {
+    "adversary": [],
+    "branch": "f45e20ae9d9778604548368f98b5d14e38adf0783f003fdc299dfead92ba57ff",
+    "confirmations": [],
+    "cursor": 3,
+    "entropy": {
+     "bytes": 196,
+     "failures": 0,
+     "requests": 6,
+     "source": "qrng"
+    },
+    "epoch": 3,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 3,
+    "membership": "member",
+    "name": "bob",
+    "polls": 20,
+    "public_key": "dff22ead063286d526816a0e13cf2d216142d6ee51b74349a9f5722b9b7f9cadcc8746766cc356f402562b285b1f21c446ff165b4785edc28944055ac164740c2638dce530c8ac24d7ef43410e2e5b169d509e2caa9c104ba16a9fd4e36dd9881e83bc11706c4467443cf14bf3de81a110f97eb39b76ae9bdb1803a54440f387ed84f9fb25aa3e60491dc47d8968e6fc374d109541dc3364e112899acbb843218f8d39e0d439eeb5c1fed0b4cd36f34cf60b2d2c6ef45cb0f5e4cff3bda9327bb753822cc16707a977bfff6ab296085319bc30d3e17152e672a90e65a1ed8a7fb723194f611ee067f2a3f2ebf8d073ab100277c9a5d339f5af1d9b0ec2de5f42fe380fba666001ec7888d5d25ff64fb263d7dff929f224521a770e8fb1eaf34d76fa27238b6cd68a0b8e1a6485b5fc5984f0a155504ba7202a177f6d4ce13bb8c5be6b4f8aaee18e9e3afa1b2a30e221ef444822da273c5c7e78b347bf8b3eec6042aabafc94b3150af0ab0fa1cf75f3a471157894e695f4b54e6a697893e2d03a74cfbb0341d23e616bff0369da7ae32963e14c95b9ed9f96da89564ae2344781ddb04032011ac61b3e75584daa7dc876ef2b28d56bd5335b35f45d997930a9cb8185a740848dab71803fb66972f2048aa8ed49b1db2799f02b4475695d4770ee7a20079c9c5f8b43ff64fa497b3d938f261ee2198491535ba847f18f47c658f750ce58aeab932415d0e20a02cc0613d0bf5bc2b09410508fa767f23b2d3c94039de3909ddf62c94b1a66e041a876008ccf638fc439a71444509e9fc417c052668598be6c415c9e540e402bb546fa5ac02cd142fba039766130bafedd3f2e0d0cda6b3b4175f028251be4671237936b32bd13c7b162464c9fe3d357326f4d27cc114895ad2e8ab3c37325797af47c93700ef342a5868806c93106af12d6d1fe2941c9187d89e9f772acb837c4c03d3d52a852c99a690676d8caa100b2bb8f28ba7935222b5122b867daaf5d5aef0413549b765a3e84d3e745b9ae3f8b89b4f326c8c2cbfad4cce9d6ddee14c96a6aaf092024aa2f7104229603e08c517eaf3d963dacadb536f316b98e2243ebae5530833de643a3cd7ec471ff6be54bfc0135047302811941ad55a8356cf376c64e876ca5ac280ed1f997fcc2b2c4bde96dfecf571c7c7c1bcd902cb0bd4c871e84b6e12220341e44ba308c7e23a7ac2d42bc43df34f5deebe18c4c20071f5fdc3a8238d46c2bca20aab0380df50a03d663871ad5f2952bebaa14d94fee6d0e2ca2a03fd006a5cb9aa6be8c0e2173af57d98f94c4bb5306c066332406543029c9e7594530bfbf2fd863f46571fd553de903cdfb4b760c54ca87dd8c83318511fdbc4b616f592fad8616118c360be709ee12c937645b6cee54ec08d07cb918896ff1591e94a5d3b45bc56a2c6e85c1033950d4f026bf47f19d15e5537203b6e5f32511ccb1e46a9800c092247fba8f8c00636aecc071395522d041fd982d85d90b6ad7df87cbd1db950a9d49f2d5df407bf82875caf53e8731ed61cbe06083900819ba376b443a103fa5abad7a0e3215cf395e83a9846c8ec294e3b1d77ce3b132370ec36f2baca8ee3cfc999eae7c9e58457830412f87bf857ceb5e441f162417ac5e0d670d26e735e066a4c6bdce31804a7d6a7da038dd35e6773d7ba0672499fca752785304d41985539f7496cf4340037fadc68530aff4cbf9b8000677439b5f848e2e8e005e367ac8c163df24179e90fefaa902e309921d8dc8904d64d78fca1dc9650330927f25a6e59b3d331831996896c9eeacc12a3e9f163851c71913e235d6aab8d334bb04f01a4c000d2a194d85",
+    "rejections": [],
+    "restarts": 1,
+    "retain": false,
+    "sequence": 9,
+    "skipped_entries": 0,
+    "suite": "pq",
+    "waiting": []
+   },
+   "carol": {
+    "adversary": [],
+    "branch": "f45e20ae9d9778604548368f98b5d14e38adf0783f003fdc299dfead92ba57ff",
+    "confirmations": [],
+    "cursor": 3,
+    "entropy": {
+     "bytes": 196,
+     "failures": 0,
+     "requests": 6,
+     "source": "qrng"
+    },
+    "epoch": 3,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 1,
+    "membership": "member",
+    "name": "carol",
+    "polls": 124,
+    "public_key": "1e5b220cd9d2fe11b88ea02ff112eb69069c9793fd5ecb1c4c064b2e9127b4a060fe61454a487e68c99e8c85712d931e1aaebd0489939ec505c48e395e5a8b54ab1322ca52e4fbefff4280468e6039e5a49e6918efb2c5f90aff943859baca6242e752847ee93c7b2223e801b1c3a9de048ef1d7669bc5efd9249468213fa11652dfc670c48cf91e66cd32569f3c39342cab96a4806d9b54d78946fc4ec40b0ce54856462297ccbba7f013f5cd02e6b469a63fd2d37c19356ffba4b2685e9967154ecf787829e00c2609a15536fb82b6b88d3ac62b467acae97010437860c96cfac046dfa9a79a4181d99e56be069531ae7f11529c88546003f8c26cb56cc451d429f044a4bff577d0694d801e9922af16dde7b98453fb775925b16d9ca0a3869aa69ee97fb4c609e03894e5a4edaba2dae135cd8ee9de5e9b341a4f39faff9c97a7886d4333ba22ab9803b339296682275438ee0de1ed8270e2c0107465920ef8576e8f1e6fbde2f4c3ce46866ca700abb5769e7837b7b66ae8839dd44da23e27c75ea51cdb6d5f4990a3407725ce82653956579629c249cc3c758770830749816f0a5c0b6ed1ee9f55d36768a6807a732d4fb2c0092ffe1315cb94ee91139df90f13ebb1da521fe29ad4925c5e4be5e9feb8a1cc8d414e78afbab74fa61fea630a1d9b2768707c1b7fbb5bab979382f2b4d42f337c517adac19299faefb6a436b983b737798a6d0fc3cb786321f55d41dfe3673d5220385974e1da89240480f63fa6eaff81edbec44e201bb6e09f3a133646efba044cf05de3ea3849b4e580ba78af536400fcf8281cb678b80a5fe24051846778eb696e1327d3b399d1e4eb9016114a42b389426fd31e2e12a32d70fc0ab36c8d0522b68a446513cf51e282c8bce2adbe1bb75a0c3952496e260c33bd36f7c976b491627e5eec69d04449a26fd7f78258d26213b3ce01b5a19dd871d3f83ea3896015428fef9087f0af79795c4d2ef062345939e543ba205223c053de0c96cd6da2ade675ef5b747d630d20cc9e7dda52d9ceccf519456af015b2baedf7b302e6b1f44af2f9d8d26ecec80970c5495d1477884cdd8cbdea2db9e5edef328968351409253bb8e7a08e8ccfa558038f7f8611d86ed3f43323ce6beac80063272990681adc67ca59de207f1b8f806e9d3c2d73816430e484156a85612fd313f78e0a3fec3c7bd07807aaedbf594ae228a726cdc6821ad4c1c3104b263709c220d43dbe1e7b3c3d3fad6b75c03ae3dd9b95256965e2816c81dab7f1a2ee4d9e407e0a498ac123ef1bcb06037443f17a64828a102ae27bb10170512eae07856a5ca7c28a72bb43cceb8eab227da4d5305dce25dabbab3ccc3aabba541ec717530c7befb7d0882668cdd9df9ca66316fab42a4f5a753cf124bad434fef445fb51182667a6d344b1352736d3ce70b2b88a05263781f7668414810093e5034f0da820f671065707217cb03e77bcb269aa7cb6376342a4764246f43b0298a7ec5a736def9b127c82acf061cf6dfa672dbb0989d12783f2c6d68b6845687864ff07877d8bf489a6a9ebc698405edd46ee7ddc31eb1cff0ff7b16a56b2c6be0c2ffc3824138d732ca8a4791a399062ba40ea2c516dab84b36cfe622e0ec540242a580903fe2b39001c606613ca08f3d348d694f7cb8951870080e7cd0cbe94fcb745cc2fdb22f00d0a15a0b2b039b984abe15e079eb304c210d795ad2f987d88ffa73ee337b99414ebe451b39def5a614e14c4a8a4a03ddfed638582945223a4ad91c011e913d25990eac6fcf3f6038b8791b470c009ce7dc62fafe191ce2a0a463b06fc020f8702be59a1781c253c0602",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 6,
+    "skipped_entries": 1,
+    "suite": "pq",
+    "waiting": []
+   }
+  },
+  "qrng_stats": {
+   "available": true,
+   "bytes": 1120,
+   "clients": {
+    "172.18.0.4": 96,
+    "172.18.0.5": 196,
+    "172.18.0.6": 440,
+    "172.18.0.7": 388
+   },
+   "mock": true,
+   "refused": 9,
+   "requests": 41
+  },
+  "adapter_trace": [
+   {
+    "actor": "alice",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "bob",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "carol",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "alice",
+    "command": "abandon",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "alice",
+    "command": "revoke",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "alice",
+    "command": "grant",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "bob",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "bob",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "bob",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "bob",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "bob",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "carol",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "carol",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "carol",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "carol",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   }
+  ]
+ }
+}

@@ -1,0 +1,833 @@
+{
+ "experiment": "E8-classical",
+ "title": "Admission, revocation, repair and rekey in the classical suite",
+ "hypothesis": "(H1) Every node of the deployment runs the classical suite, with keys of its size. (H2) Admission, delivery, revocation with repair and rekey behave exactly as in the other suite, and the oracle accepts the trace and rejects every broken control. (H3) The report records the size of every MLS object on the relay, for comparison.",
+ "result": "pass",
+ "started": 1792923790.9717784,
+ "seconds": 2.683,
+ "steps": [
+  {
+   "index": 0,
+   "do": "genesis",
+   "name": "A1 alice founds the group",
+   "status": "pass",
+   "detail": {
+    "branch": "b54a0e5727c1979e203e7bdb7f819ed36d96f704d7a19de99105d6541f8fe20b",
+    "epoch": 0
+   },
+   "seconds": 0.05
+  },
+  {
+   "index": 1,
+   "do": "delegate",
+   "name": "A2 delegate bob",
+   "status": "pass",
+   "detail": {
+    "revision": 1
+   },
+   "seconds": 0.009
+  },
+  {
+   "index": 2,
+   "do": "delegate",
+   "name": "A3 delegate carol",
+   "status": "pass",
+   "detail": {
+    "revision": 2
+   },
+   "seconds": 0.011
+  },
+  {
+   "index": 3,
+   "do": "admit",
+   "name": "A4 admit bob",
+   "status": "pass",
+   "detail": {
+    "branch": "2f65ad975fb3def24f55bb25c8426a916f5426096b82df98d6643a89361660c7",
+    "epoch": 1,
+    "index": 0,
+    "subject": "bob"
+   },
+   "seconds": 0.163
+  },
+  {
+   "index": 4,
+   "do": "admit",
+   "name": "A5 admit carol",
+   "status": "pass",
+   "detail": {
+    "branch": "83ca8767107fd6869ed106b66e76b43d3096095753e94e8763dbe252c49ccf69",
+    "epoch": 2,
+    "index": 1,
+    "subject": "carol"
+   },
+   "seconds": 0.173
+  },
+  {
+   "index": 5,
+   "do": "check.suite",
+   "name": "A6 the APF and every agent run the classical suite",
+   "status": "pass",
+   "detail": {
+    "suite": "classical",
+    "public_key_bytes": 32,
+    "services": {
+     "apf": "classical",
+     "alice": "classical",
+     "bob": "classical",
+     "carol": "classical"
+    }
+   },
+   "seconds": 0.005
+  },
+  {
+   "index": 6,
+   "do": "send",
+   "name": "B1 alice sends m1",
+   "status": "pass",
+   "detail": {
+    "epoch": 2,
+    "op": "alice-000001",
+    "recipients": [
+     "bob",
+     "carol"
+    ],
+    "sent_ms": 1792923791431
+   },
+   "seconds": 0.049
+  },
+  {
+   "index": 7,
+   "do": "send",
+   "name": "B2 bob sends m2",
+   "status": "pass",
+   "detail": {
+    "epoch": 2,
+    "op": "bob-000001",
+    "recipients": [
+     "alice",
+     "carol"
+    ],
+    "sent_ms": 1792923791480
+   },
+   "seconds": 0.049
+  },
+  {
+   "index": 8,
+   "do": "quiesce",
+   "name": "B3 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 4,
+    "fetched": 4,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.338
+  },
+  {
+   "index": 9,
+   "do": "check.complete",
+   "name": "B4 m1 and m2 reached every reader exactly once",
+   "status": "pass",
+   "detail": {
+    "pairs": 4,
+    "excluded": [],
+    "optional": 0
+   },
+   "seconds": 0.003
+  },
+  {
+   "index": 10,
+   "do": "revoke",
+   "name": "C1 alice revokes carol's read right",
+   "status": "pass",
+   "detail": {
+    "read_fenced": true,
+    "revision": 15
+   },
+   "seconds": 0.012
+  },
+  {
+   "index": 11,
+   "do": "repair",
+   "name": "C2 alice commits the repair; bob confirms; the fence reopens",
+   "status": "pass",
+   "detail": {
+    "branch": "56c59535cbeded5e2c05f2efbc901b4c703ce4847b1c92cfdf50fe9b5830031c",
+    "epoch": 3,
+    "evidence": "pair",
+    "index": 2,
+    "opened": false,
+    "removed": [
+     "carol"
+    ],
+    "read_fenced_after": false
+   },
+   "seconds": 0.118
+  },
+  {
+   "index": 12,
+   "do": "send",
+   "name": "C3 alice sends m3 after the repair",
+   "status": "pass",
+   "detail": {
+    "epoch": 3,
+    "op": "alice-000002",
+    "recipients": [
+     "bob"
+    ],
+    "sent_ms": 1792923792000
+   },
+   "seconds": 0.049
+  },
+  {
+   "index": 13,
+   "do": "quiesce",
+   "name": "C4 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 5,
+    "fetched": 5,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.329
+  },
+  {
+   "index": 14,
+   "do": "check.delivered",
+   "name": "C5 bob received m3",
+   "status": "pass",
+   "detail": {
+    "agent": "bob",
+    "delivered": [
+     "alice-000002"
+    ]
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 15,
+   "do": "revoke",
+   "name": "D1 alice revokes bob's write right",
+   "status": "pass",
+   "detail": {
+    "read_fenced": false,
+    "revision": 22
+   },
+   "seconds": 0.013
+  },
+  {
+   "index": 16,
+   "do": "grant",
+   "name": "D2 alice re-grants write at generation 1: a rekey offer",
+   "status": "pass",
+   "detail": {
+    "pending": true
+   },
+   "seconds": 0.014
+  },
+  {
+   "index": 17,
+   "do": "rekey",
+   "name": "D3 bob commits a new signature key and incarnation",
+   "status": "pass",
+   "detail": {
+    "branch": "3503af1cd41ddb7fc94d4e110f4b9c2950d0b7ba900a905b201cd39e9bced6bc",
+    "epoch": 4,
+    "generation": 1,
+    "public_key": "4c42a82544e275dc0b988cd4c1b98c8fee42b5b0d1e752eaa6d189edc57ced08",
+    "right": "write"
+   },
+   "seconds": 0.074
+  },
+  {
+   "index": 18,
+   "do": "send",
+   "name": "D4 bob sends m4 with his new key",
+   "status": "pass",
+   "detail": {
+    "epoch": 4,
+    "op": "bob-000002",
+    "recipients": [
+     "alice"
+    ],
+    "sent_ms": 1792923792480
+   },
+   "seconds": 0.049
+  },
+  {
+   "index": 19,
+   "do": "quiesce",
+   "name": "D5 drain",
+   "status": "pass",
+   "detail": {
+    "posted": 6,
+    "fetched": 6,
+    "dropped": 0,
+    "duplicated": 0,
+    "tapped": 0,
+    "queued": {},
+    "held": []
+   },
+   "seconds": 0.333
+  },
+  {
+   "index": 20,
+   "do": "check.delivered",
+   "name": "D6 alice received m4",
+   "status": "pass",
+   "detail": {
+    "agent": "alice",
+    "delivered": [
+     "bob-000002"
+    ]
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 21,
+   "do": "measure.sizes",
+   "name": "F1 sizes of KeyPackages, commits, acks and Welcome messages on the relay",
+   "status": "pass",
+   "detail": {
+    "key_package": {
+     "min": 536,
+     "max": 542,
+     "count": 2
+    },
+    "commit": {
+     "min": 537,
+     "max": 1130,
+     "count": 4
+    },
+    "ack": {
+     "min": 310,
+     "max": 310,
+     "count": 4
+    },
+    "welcome": {
+     "min": 1027,
+     "max": 1346,
+     "count": 2
+    }
+   },
+   "seconds": 0.004
+  },
+  {
+   "index": 22,
+   "do": "check.oracle",
+   "name": "F2 the independent oracle accepts the exported APF trace",
+   "status": "pass",
+   "detail": {
+    "oracle": "oracle.py",
+    "events": 43,
+    "kinds": {
+     "admit": 2,
+     "allocate": 4,
+     "allow": 6,
+     "confirm": 2,
+     "consume": 6,
+     "deny": 2,
+     "emit": 4,
+     "init": 1,
+     "persist": 4,
+     "recover": 5,
+     "rekey": 1,
+     "release": 4,
+     "repair_open": 1,
+     "repair_stage": 1
+    }
+   },
+   "seconds": 0.432
+  },
+  {
+   "index": 23,
+   "do": "check.broken_controls",
+   "name": "F3 the oracle rejects every broken control derived from the trace",
+   "status": "pass",
+   "detail": {
+    "rejected": {
+     "release after the read denial": "read_fenced",
+     "fence opened by API only (no repair commit)": "invalid_repair",
+     "fence opened without confirmation": "unconfirmed",
+     "repair that keeps the revoked reader": "invalid_repair",
+     "release cover that omits a reader": "unsound_cover",
+     "second envelope under one operation": "binding_mismatch",
+     "replayed consumption": "replay",
+     "rekey that reuses another member's key": "stale_key"
+    },
+    "skipped": []
+   },
+   "seconds": 0.4
+  },
+  {
+   "index": 24,
+   "do": "check.no_errors",
+   "name": "F4 the honest agents logged no processing error",
+   "status": "pass",
+   "detail": {
+    "agents": [
+     "alice",
+     "bob"
+    ]
+   },
+   "seconds": 0.004
+  }
+ ],
+ "skipped_steps": 0,
+ "backend": "compose",
+ "topology": "three-agents-classical",
+ "entropy": {
+  "source": "qrng"
+ },
+ "stack": {
+  "agent-trust": "f69b7fa6bcb779d3dd032196f3ae89bbebc9cb61",
+  "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_qrand": "66026082b1badea0ca82c6739238bfe7bd6dcec7",
+  "testbed": "b7e9fa39a55f8b4b35f94b3ca42a120b75ba5fe0"
+ },
+ "observations": {
+  "apf_state": {
+   "branch": "3503af1cd41ddb7fc94d4e110f4b9c2950d0b7ba900a905b201cd39e9bced6bc",
+   "epoch": 4,
+   "grants": [
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admin",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "alice"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 1,
+     "right": "write",
+     "subject": "bob"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "bob"
+    },
+    {
+     "active": false,
+     "generation": 0,
+     "right": "read",
+     "subject": "carol"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "carol"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "carol"
+    }
+   ],
+   "group": "lab",
+   "policy_revision": 5,
+   "read_fenced": false,
+   "repair_pending": null,
+   "roster": [
+    "alice",
+    "bob"
+   ]
+  },
+  "relay_stats": {
+   "dropped": 0,
+   "duplicated": 0,
+   "expired": 0,
+   "faults": {
+    "drop": 0,
+    "duplicate": 0,
+    "reorder": false
+   },
+   "fetched": 6,
+   "handshake": {
+    "lab": 4
+   },
+   "held": [],
+   "hidden": {},
+   "key_packages": [
+    "bob",
+    "carol"
+   ],
+   "leased": 0,
+   "pending": 0,
+   "posted": 6,
+   "queued": {},
+   "reversed": [],
+   "tapped": 0
+  },
+  "agents": {
+   "alice": {
+    "adversary": [],
+    "branch": "3503af1cd41ddb7fc94d4e110f4b9c2950d0b7ba900a905b201cd39e9bced6bc",
+    "confirmations": [
+     {
+      "outcome": "ok",
+      "response": {
+       "evidence": null,
+       "opened": false
+      }
+     }
+    ],
+    "cursor": 4,
+    "entropy": {
+     "bytes": 392,
+     "failures": 0,
+     "requests": 14,
+     "source": "qrng"
+    },
+    "epoch": 4,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 2,
+    "membership": "member",
+    "name": "alice",
+    "polls": 28,
+    "public_key": "d5c65a7d86a1bd7948292fbd3b82a9c5a9f27b71329bd31db81718d50346750a",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 20,
+    "skipped_entries": 0,
+    "suite": "classical",
+    "waiting": []
+   },
+   "bob": {
+    "adversary": [],
+    "branch": "3503af1cd41ddb7fc94d4e110f4b9c2950d0b7ba900a905b201cd39e9bced6bc",
+    "confirmations": [
+     {
+      "outcome": "ok",
+      "response": {
+       "evidence": "pair",
+       "opened": true
+      }
+     }
+    ],
+    "cursor": 4,
+    "entropy": {
+     "bytes": 264,
+     "failures": 0,
+     "requests": 10,
+     "source": "qrng"
+    },
+    "epoch": 4,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 2,
+    "membership": "member",
+    "name": "bob",
+    "polls": 26,
+    "public_key": "4c42a82544e275dc0b988cd4c1b98c8fee42b5b0d1e752eaa6d189edc57ced08",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 13,
+    "skipped_entries": 0,
+    "suite": "classical",
+    "waiting": []
+   },
+   "carol": {
+    "adversary": [],
+    "branch": null,
+    "confirmations": [],
+    "cursor": 3,
+    "entropy": {
+     "bytes": 160,
+     "failures": 0,
+     "requests": 5,
+     "source": "qrng"
+    },
+    "epoch": null,
+    "errors": [],
+    "future": 0,
+    "group": "lab",
+    "inbox": 2,
+    "membership": "removed",
+    "name": "carol",
+    "polls": 32,
+    "public_key": "8e702015289c21198cbf65a9a21e01997853b669dca98e8efb61abec514ba2a4",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 3,
+    "skipped_entries": 1,
+    "suite": "classical",
+    "waiting": []
+   }
+  },
+  "qrng_stats": {
+   "available": true,
+   "bytes": 912,
+   "clients": {
+    "172.18.0.4": 96,
+    "172.18.0.5": 160,
+    "172.18.0.6": 392,
+    "172.18.0.7": 264
+   },
+   "mock": true,
+   "refused": 0,
+   "requests": 32
+  },
+  "adapter_trace": [
+   {
+    "actor": "alice",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "bob",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "carol",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "bob",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "bob",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "bob",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "bob",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "carol",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "alice",
+    "command": "revoke",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "alice",
+    "command": "repair_plan",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "alice",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "alice",
+    "command": "confirm_repair",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "bob",
+    "command": "confirm_repair",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "alice",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "alice",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "alice",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "alice",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "bob",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "alice",
+    "command": "revoke",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "alice",
+    "command": "grant",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "bob",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "bob",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "bob",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "bob",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "bob",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "alice",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   }
+  ]
+ }
+}

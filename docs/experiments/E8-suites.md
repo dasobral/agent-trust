@@ -35,5 +35,32 @@ sends; then sizes, the oracle and its broken controls. The two runs differ only 
 
 ## Results
 
-Recorded on every backend; see the reports in `results/E8-pq/` and
-`results/E8-classical/` and the summary table in the testbed README.
+Both experiments pass on the local, compose and k3s backends: every node runs its
+suite with keys of its size, the protocol behaves the same, and the oracle accepts the
+trace and rejects every broken control in both suites.
+
+Sizes on the relay, in bytes (local backend; the other backends give the same sizes):
+
+| Object | classical | pq | Factor |
+|---|---|---|---|
+| KeyPackage | 536 to 542 | 11255 to 11261 | 20.8 |
+| Commit (admission, repair, rekey) | 537 to 1130 | 10054 to 22551 | 20.0 |
+| APF ack | 310 | 2666 | 8.6 |
+| Welcome | 1027 to 1346 | 15413 to 21763 | 16.2 |
+
+An ML-DSA-44 signature is 2420 bytes and a key 1312 bytes, against 64 and 32 for
+Ed25519; an X-Wing ciphertext is 1120 bytes and a key 1216 bytes, against 32 and 32
+for X25519. A KeyPackage carries the leaf key, the signature key, the APF admission
+certificate and two signatures, so it grows about twenty times. Application messages
+carry an APF release certificate and an MLS signature, so they grow too, and the
+kernel stores them in every history snapshot (F-8, see E5).
+
+Run time, seconds (one run each, not a benchmark):
+
+| Backend | classical run (s) | pq run (s) |
+|---|---|---|
+| local | 2.57 | 2.831 |
+| compose | 2.683 | 3.04 |
+| k8s | 3.61 | 3.474 |
+
+The protocol cost is visible only at scale: see E5.

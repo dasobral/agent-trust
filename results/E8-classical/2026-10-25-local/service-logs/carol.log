@@ -1,0 +1,5 @@
+{"entropy":"qrng","event":"listening","listen":"127.0.0.1:59629","name":"carol","public_key":"bb8ce3d56160dc7db9daa03259b8be15b2b48c6e7cac8fb7d1834a45168c19b4","role":"agent","ts":1792922571}
+{"event":"joined","name":"carol","role":"agent","ts":1792922572}
+{"event":"delivered","name":"carol","op":"alice-000001","role":"agent","ts":1792922572}
+{"event":"delivered","name":"carol","op":"bob-000001","role":"agent","ts":1792922572}
+{"event":"removed","name":"carol","role":"agent","ts":1792922572}

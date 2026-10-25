@@ -1,0 +1,4396 @@
+{
+ "experiment": "E5-classical",
+ "title": "Eight agents in parallel: latency, APF cost growth and safety at scale",
+ "hypothesis": "(H1) Admission, release and delivery keep working as the group grows to eight members; their cost is measured, not assumed. (H2) With all eight agents sending in parallel, with and without relay faults, every message reaches every reader exactly once and only after an APF consumption. (H3) A revocation and repair with seven continuing members completes and excludes the revoked member. (H4) The APF's time per request grows with its kernel history, because the kernel validates its whole hash chain of full snapshots on every request; E5 measures the growth. (H5) The oracle accepts the full trace.",
+ "result": "pass",
+ "started": 1792922575.469139,
+ "seconds": 287.963,
+ "steps": [
+  {
+   "index": 0,
+   "do": "genesis",
+   "name": "A1 agent01 founds the group",
+   "status": "pass",
+   "detail": {
+    "branch": "b94f22cea5ed205b4317ae4566cbcdd06a8f639b91e41d8d9220d532685c9b2b",
+    "epoch": 0
+   },
+   "seconds": 0.053
+  },
+  {
+   "index": 1,
+   "do": "admit_all",
+   "name": "A2 delegate and admit the seven other agents, one at a time",
+   "status": "pass",
+   "detail": {
+    "admitted": 7,
+    "admissions": [
+     {
+      "member": "agent02",
+      "group_size": 2,
+      "ms": 156.0
+     },
+     {
+      "member": "agent03",
+      "group_size": 3,
+      "ms": 146.7
+     },
+     {
+      "member": "agent04",
+      "group_size": 4,
+      "ms": 186.3
+     },
+     {
+      "member": "agent05",
+      "group_size": 5,
+      "ms": 171.0
+     },
+     {
+      "member": "agent06",
+      "group_size": 6,
+      "ms": 166.3
+     },
+     {
+      "member": "agent07",
+      "group_size": 7,
+      "ms": 175.1
+     },
+     {
+      "member": "agent08",
+      "group_size": 8,
+      "ms": 166.5
+     }
+    ]
+   },
+   "seconds": 1.217
+  },
+  {
+   "index": 2,
+   "do": "check.apf",
+   "name": "A3 eight members at epoch 7",
+   "status": "pass",
+   "detail": {
+    "roster": [
+     "agent01",
+     "agent02",
+     "agent03",
+     "agent04",
+     "agent05",
+     "agent06",
+     "agent07",
+     "agent08"
+    ],
+    "epoch": 7,
+    "policy_revision": 7,
+    "read_fenced": false,
+    "repair_pending": null
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 3,
+   "do": "check.frontiers",
+   "name": "A4 every agent is on the APF frontier",
+   "status": "pass",
+   "detail": {
+    "epoch": 7,
+    "agents": [
+     "agent01",
+     "agent02",
+     "agent03",
+     "agent04",
+     "agent05",
+     "agent06",
+     "agent07",
+     "agent08"
+    ]
+   },
+   "seconds": 0.011
+  },
+  {
+   "index": 4,
+   "do": "rounds",
+   "name": "B1 four rounds: all eight agents send one message each in parallel (32 messages, 224 deliveries)",
+   "status": "pass",
+   "detail": {
+    "rounds": [
+     {
+      "round": 1,
+      "seconds": 3.92,
+      "apf_requests": 88,
+      "history_from": 15,
+      "history_to": 94,
+      "apf_p50_ms": 39.0
+     },
+     {
+      "round": 2,
+      "seconds": 14.19,
+      "apf_requests": 88,
+      "history_from": 95,
+      "history_to": 174,
+      "apf_p50_ms": 161.0
+     },
+     {
+      "round": 3,
+      "seconds": 30.77,
+      "apf_requests": 88,
+      "history_from": 175,
+      "history_to": 254,
+      "apf_p50_ms": 356.8
+     },
+     {
+      "round": 4,
+      "seconds": 51.64,
+      "apf_requests": 88,
+      "history_from": 255,
+      "history_to": 334,
+      "apf_p50_ms": 587.1
+     }
+    ],
+    "apf_p50_growth": 15.1
+   },
+   "seconds": 100.538
+  },
+  {
+   "index": 5,
+   "do": "check.complete",
+   "name": "B2 every message reached its seven readers exactly once",
+   "status": "pass",
+   "detail": {
+    "pairs": 224,
+    "excluded": [],
+    "optional": 0
+   },
+   "seconds": 0.007
+  },
+  {
+   "index": 6,
+   "do": "check.exactly_once",
+   "name": "B3 no delivery without APF consumption",
+   "status": "pass",
+   "detail": {
+    "deliveries": 224,
+    "consumed": 224,
+    "lost_after_consume": 0
+   },
+   "seconds": 0.827
+  },
+  {
+   "index": 7,
+   "do": "check.metrics",
+   "name": "B4 latency without faults",
+   "status": "pass",
+   "detail": {
+    "send_ms": {
+     "n": 32,
+     "p50": 4997.6,
+     "p95": 13611.0,
+     "max": 13925.0
+    },
+    "delivery_ms": {
+     "n": 224,
+     "p50": 5736.5,
+     "p95": 28430,
+     "max": 37609
+    },
+    "admit_ms": {
+     "n": 7,
+     "p50": 166.5,
+     "p95": 175.1,
+     "max": 186.3
+    },
+    "apf_ms_by_history": [
+     {
+      "history_up_to": 33,
+      "requests": 40,
+      "p50": 7.06
+     },
+     {
+      "history_up_to": 67,
+      "requests": 41,
+      "p50": 34.31
+     },
+     {
+      "history_up_to": 100,
+      "requests": 34,
+      "p50": 78.14
+     },
+     {
+      "history_up_to": 134,
+      "requests": 41,
+      "p50": 122.47
+     },
+     {
+      "history_up_to": 167,
+      "requests": 34,
+      "p50": 202.67
+     },
+     {
+      "history_up_to": 201,
+      "requests": 41,
+      "p50": 269.03
+     },
+     {
+      "history_up_to": 234,
+      "requests": 34,
+      "p50": 384.53
+     },
+     {
+      "history_up_to": 268,
+      "requests": 33,
+      "p50": 474.37
+     },
+     {
+      "history_up_to": 301,
+      "requests": 42,
+      "p50": 559.05
+     },
+     {
+      "history_up_to": 335,
+      "requests": 33,
+      "p50": 715.88
+     }
+    ]
+   },
+   "seconds": 0.012
+  },
+  {
+   "index": 8,
+   "do": "faults",
+   "name": "C1 relay drops 10%, duplicates 10%, reorders",
+   "status": "pass",
+   "detail": {
+    "drop": 10,
+    "duplicate": 10,
+    "reorder": true,
+    "seed": 3
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 9,
+   "do": "rounds",
+   "name": "C2 one round under faults",
+   "status": "pass",
+   "detail": {
+    "rounds": [
+     {
+      "round": 1,
+      "seconds": 81.46,
+      "apf_requests": 88,
+      "history_from": 335,
+      "history_to": 414,
+      "apf_p50_ms": 975.1
+     }
+    ],
+    "apf_p50_growth": 1.0
+   },
+   "seconds": 81.46
+  },
+  {
+   "index": 10,
+   "do": "check.complete",
+   "name": "C3 every message reached every reader exactly once despite the faults",
+   "status": "pass",
+   "detail": {
+    "pairs": 280,
+    "excluded": [],
+    "optional": 0
+   },
+   "seconds": 0.007
+  },
+  {
+   "index": 11,
+   "do": "check.rejections_are_duplicates",
+   "name": "C4 every refused copy was a duplicate",
+   "status": "pass",
+   "detail": {
+    "agent01": {},
+    "agent02": {
+     "undecryptable": 1
+    },
+    "agent03": {},
+    "agent04": {
+     "undecryptable": 1
+    },
+    "agent05": {
+     "undecryptable": 1
+    },
+    "agent06": {
+     "undecryptable": 1
+    },
+    "agent07": {
+     "undecryptable": 1
+    },
+    "agent08": {}
+   },
+   "seconds": 0.012
+  },
+  {
+   "index": 12,
+   "do": "revoke",
+   "name": "D1 agent01 revokes agent08's read right",
+   "status": "pass",
+   "detail": {
+    "read_fenced": true,
+    "revision": 415
+   },
+   "seconds": 1.111
+  },
+  {
+   "index": 13,
+   "do": "repair",
+   "name": "D2 repair with seven continuing members",
+   "status": "pass",
+   "detail": {
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "epoch": 8,
+    "evidence": "pair",
+    "index": 7,
+    "opened": false,
+    "removed": [
+     "agent08"
+    ],
+    "read_fenced_after": false
+   },
+   "seconds": 9.592
+  },
+  {
+   "index": 14,
+   "do": "rounds",
+   "name": "D3 one round from the seven continuing members",
+   "status": "pass",
+   "detail": {
+    "rounds": [
+     {
+      "round": 1,
+      "seconds": 88.31,
+      "apf_requests": 70,
+      "history_from": 418,
+      "history_to": 480,
+      "apf_p50_ms": 1335.0
+     }
+    ],
+    "apf_p50_growth": 1.0
+   },
+   "seconds": 88.313
+  },
+  {
+   "index": 15,
+   "do": "check.agent",
+   "name": "D4 agent08 applied its own removal",
+   "status": "pass",
+   "detail": {
+    "membership": "removed",
+    "epoch": null,
+    "restarts": 0,
+    "skipped_entries": 6,
+    "future": 0,
+    "waiting": []
+   },
+   "seconds": 0.001
+  },
+  {
+   "index": 16,
+   "do": "check.complete",
+   "name": "D5 completeness over the whole run",
+   "status": "pass",
+   "detail": {
+    "pairs": 322,
+    "excluded": [],
+    "optional": 0
+   },
+   "seconds": 0.009
+  },
+  {
+   "index": 17,
+   "do": "check.exactly_once",
+   "name": "D6 no duplicate, no delivery without consumption, over the whole run",
+   "status": "pass",
+   "detail": {
+    "deliveries": 322,
+    "consumed": 322,
+    "lost_after_consume": 0
+   },
+   "seconds": 1.563
+  },
+  {
+   "index": 18,
+   "do": "check.oracle",
+   "name": "D7 the oracle accepts the full trace",
+   "status": "pass",
+   "detail": {
+    "oracle": "oracle.py",
+    "events": 559,
+    "kinds": {
+     "admit": 7,
+     "allocate": 47,
+     "allow": 21,
+     "confirm": 2,
+     "consume": 322,
+     "deny": 1,
+     "emit": 47,
+     "init": 1,
+     "persist": 47,
+     "recover": 15,
+     "release": 47,
+     "repair_open": 1,
+     "repair_stage": 1
+    }
+   },
+   "seconds": 1.345
+  },
+  {
+   "index": 19,
+   "do": "check.broken_controls",
+   "name": "D8 the oracle rejects the broken controls",
+   "status": "pass",
+   "detail": {
+    "rejected": {
+     "release after the read denial": "read_fenced",
+     "fence opened by API only (no repair commit)": "invalid_repair",
+     "fence opened without confirmation": "unconfirmed",
+     "repair that keeps the revoked reader": "invalid_repair",
+     "release cover that omits a reader": "unsound_cover",
+     "second envelope under one operation": "binding_mismatch",
+     "replayed consumption": "replay"
+    },
+    "skipped": [
+     "rekey that reuses another member's key"
+    ]
+   },
+   "seconds": 1.862
+  },
+  {
+   "index": 20,
+   "do": "check.entropy",
+   "name": "D9 every node drew from the QRNG service without failure",
+   "status": "pass",
+   "detail": {
+    "nodes": {
+     "apf": {
+      "bytes": 96,
+      "failures": 0,
+      "requests": 3,
+      "source": "qrng"
+     },
+     "agent01": {
+      "bytes": 728,
+      "failures": 0,
+      "requests": 28,
+      "source": "qrng"
+     },
+     "agent02": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent03": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent04": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent05": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent06": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent07": {
+      "bytes": 184,
+      "failures": 0,
+      "requests": 11,
+      "source": "qrng"
+     },
+     "agent08": {
+      "bytes": 180,
+      "failures": 0,
+      "requests": 10,
+      "source": "qrng"
+     }
+    },
+    "qrng_service": {
+     "available": true,
+     "bytes": 2108,
+     "clients": {
+      "127.0.0.1": 2108
+     },
+     "mock": true,
+     "refused": 0,
+     "requests": 107
+    }
+   },
+   "seconds": 0.008
+  },
+  {
+   "index": 21,
+   "do": "check.metrics",
+   "name": "D10 latency over the whole run, and APF time per request against history length",
+   "status": "pass",
+   "detail": {
+    "send_ms": {
+     "n": 47,
+     "p50": 7639.7,
+     "p95": 28098.6,
+     "max": 29267.9
+    },
+    "delivery_ms": {
+     "n": 322,
+     "p50": 9509.0,
+     "p95": 49464,
+     "max": 59862
+    },
+    "admit_ms": {
+     "n": 7,
+     "p50": 166.5,
+     "p95": 175.1,
+     "max": 186.3
+    },
+    "apf_ms_by_history": [
+     {
+      "history_up_to": 48,
+      "requests": 63,
+      "p50": 8.72
+     },
+     {
+      "history_up_to": 96,
+      "requests": 48,
+      "p50": 62.33
+     },
+     {
+      "history_up_to": 144,
+      "requests": 56,
+      "p50": 128.57
+     },
+     {
+      "history_up_to": 192,
+      "requests": 48,
+      "p50": 237.24
+     },
+     {
+      "history_up_to": 240,
+      "requests": 56,
+      "p50": 363.7
+     },
+     {
+      "history_up_to": 288,
+      "requests": 56,
+      "p50": 491.79
+     },
+     {
+      "history_up_to": 336,
+      "requests": 48,
+      "p50": 696.14
+     },
+     {
+      "history_up_to": 384,
+      "requests": 56,
+      "p50": 895.88
+     },
+     {
+      "history_up_to": 432,
+      "requests": 55,
+      "p50": 1131.72
+     },
+     {
+      "history_up_to": 481,
+      "requests": 55,
+      "p50": 1379.25
+     }
+    ]
+   },
+   "seconds": 0.011
+  }
+ ],
+ "skipped_steps": 0,
+ "backend": "local",
+ "topology": "scale-8-classical",
+ "entropy": {
+  "source": "qrng"
+ },
+ "stack": {
+  "agent-trust": "f69b7fa6bcb779d3dd032196f3ae89bbebc9cb61",
+  "openmls": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_libcrux_crypto": "dd33278099426c2ffc8a4ec686e88bde1f937963",
+  "openmls_qrand": "66026082b1badea0ca82c6739238bfe7bd6dcec7",
+  "testbed": "b7e9fa39a55f8b4b35f94b3ca42a120b75ba5fe0"
+ },
+ "observations": {
+  "apf_state": {
+   "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+   "epoch": 8,
+   "grants": [
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent01"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent01"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admin",
+     "subject": "agent01"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent01"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent02"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent02"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent02"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent03"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent03"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent03"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent04"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent04"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent04"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent05"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent05"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent05"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent06"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent06"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent06"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent07"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent07"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent07"
+    },
+    {
+     "active": false,
+     "generation": 0,
+     "right": "read",
+     "subject": "agent08"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "write",
+     "subject": "agent08"
+    },
+    {
+     "active": true,
+     "generation": 0,
+     "right": "admit",
+     "subject": "agent08"
+    }
+   ],
+   "group": "scale",
+   "policy_revision": 8,
+   "read_fenced": false,
+   "repair_pending": null,
+   "roster": [
+    "agent01",
+    "agent02",
+    "agent03",
+    "agent04",
+    "agent05",
+    "agent06",
+    "agent07"
+   ]
+  },
+  "relay_stats": {
+   "dropped": 13,
+   "duplicated": 6,
+   "expired": 0,
+   "faults": {
+    "drop": 10,
+    "duplicate": 10,
+    "reorder": true
+   },
+   "fetched": 328,
+   "handshake": {
+    "scale": 8
+   },
+   "held": [],
+   "hidden": {},
+   "key_packages": [
+    "agent02",
+    "agent03",
+    "agent04",
+    "agent05",
+    "agent06",
+    "agent07",
+    "agent08"
+   ],
+   "leased": 0,
+   "pending": 0,
+   "posted": 322,
+   "queued": {},
+   "reversed": [],
+   "tapped": 0
+  },
+  "agents": {
+   "agent01": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "ok",
+      "response": {
+       "evidence": null,
+       "opened": false
+      }
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 728,
+     "failures": 0,
+     "requests": 28,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent01",
+    "polls": 397,
+    "public_key": "06d136ab785dced2cb75dca8d3fa72eb84514b5cfca9e39deb0b8b20b08c3f76",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 83,
+    "skipped_entries": 0,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent02": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "ok",
+      "response": {
+       "evidence": "pair",
+       "opened": true
+      }
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent02",
+    "polls": 342,
+    "public_key": "bbb8630207e88459f0f31f0798a983cf9e24590b2d7bb68e4d6c6ec7bbe557c2",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent06",
+      "op": "agent06-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 0,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent03": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent03",
+    "polls": 306,
+    "public_key": "9e5afe937a09590388730f742a24f65cab20628f5136f80fbdd3a45901ea9140",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent01",
+      "op": "agent01-000006"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 1,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent04": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent04",
+    "polls": 347,
+    "public_key": "cc95fc8a47cd80bdc756798c7daf59051fe9b3d4dcd0dd8d4054fab16699cd3e",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent03",
+      "op": "agent03-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 2,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent05": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent05",
+    "polls": 213,
+    "public_key": "dcf95c9bbec79d41e2ddfa2e80360d7e0f43d06c18a3882a3a7ba752b73baf2a",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent03",
+      "op": "agent03-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 3,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent06": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent06",
+    "polls": 232,
+    "public_key": "bdb7cf10569041bcf79999aebd9fcad680c8bd6702b72341b68e6f3f7eda0566",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent01",
+      "op": "agent01-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 4,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent07": {
+    "adversary": [],
+    "branch": "26556ee58c4fa4035f5ba8cdbd68d3c9ebd4bd517e012123e4e87cf7322a05f1",
+    "confirmations": [
+     {
+      "outcome": "invalid_repair"
+     }
+    ],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 184,
+     "failures": 0,
+     "requests": 11,
+     "source": "qrng"
+    },
+    "epoch": 8,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 41,
+    "membership": "member",
+    "name": "agent07",
+    "polls": 255,
+    "public_key": "8cfd5389728c7f9209ef417e16eb301fccd89452aba0c994e7cf44954f4c11af",
+    "rejections": [
+     {
+      "code": "undecryptable",
+      "error": "undecryptable: MLS processing",
+      "from": "agent02",
+      "op": "agent02-000005"
+     }
+    ],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 67,
+    "skipped_entries": 5,
+    "suite": "classical",
+    "waiting": []
+   },
+   "agent08": {
+    "adversary": [],
+    "branch": null,
+    "confirmations": [],
+    "cursor": 8,
+    "entropy": {
+     "bytes": 180,
+     "failures": 0,
+     "requests": 10,
+     "source": "qrng"
+    },
+    "epoch": null,
+    "errors": [],
+    "future": 0,
+    "group": "scale",
+    "inbox": 35,
+    "membership": "removed",
+    "name": "agent08",
+    "polls": 1136,
+    "public_key": "6eb6ec4c59796aec4d951e4c121f7aecb43aece390368ca89fdf1579bacd737e",
+    "rejections": [],
+    "restarts": 0,
+    "retain": false,
+    "sequence": 56,
+    "skipped_entries": 6,
+    "suite": "classical",
+    "waiting": []
+   }
+  },
+  "qrng_stats": {
+   "available": true,
+   "bytes": 2108,
+   "clients": {
+    "127.0.0.1": 2108
+   },
+   "mock": true,
+   "refused": 0,
+   "requests": 107
+  },
+  "adapter_trace": [
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent02",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent03",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent04",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent05",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent06",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent07",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent01",
+    "command": "delegate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent08",
+    "command": "admission_certificate",
+    "outcome": "ok",
+    "sequence": 1
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 2
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 3
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 4
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 5
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 6
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 7
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 8
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 9
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 10
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 11
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 12
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 13
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 14
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 15
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 16
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 17
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 18
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 19
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 20
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 21
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 22
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 23
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 24
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 25
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 26
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 27
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 28
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 29
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 30
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 31
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 32
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 33
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 34
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 35
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 36
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 37
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 38
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 39
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 40
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 41
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 42
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 43
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 57
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 44
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 45
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent08",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 46
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent08",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 47
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent08",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 48
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent08",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 49
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 50
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 51
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 52
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 53
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 54
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 68
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 55
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 69
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent08",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 56
+   },
+   {
+    "actor": "agent01",
+    "command": "revoke",
+    "outcome": "ok",
+    "sequence": 70
+   },
+   {
+    "actor": "agent01",
+    "command": "repair_plan",
+    "outcome": "ok",
+    "sequence": 71
+   },
+   {
+    "actor": "agent01",
+    "command": "submit_commit",
+    "outcome": "ok",
+    "sequence": 72
+   },
+   {
+    "actor": "agent01",
+    "command": "confirm_repair",
+    "outcome": "ok",
+    "sequence": 73
+   },
+   {
+    "actor": "agent02",
+    "command": "confirm_repair",
+    "outcome": "ok",
+    "sequence": 57
+   },
+   {
+    "actor": "agent07",
+    "command": "confirm_repair",
+    "outcome": "invalid_repair",
+    "sequence": 57
+   },
+   {
+    "actor": "agent06",
+    "command": "confirm_repair",
+    "outcome": "invalid_repair",
+    "sequence": 57
+   },
+   {
+    "actor": "agent03",
+    "command": "confirm_repair",
+    "outcome": "invalid_repair",
+    "sequence": 57
+   },
+   {
+    "actor": "agent05",
+    "command": "confirm_repair",
+    "outcome": "invalid_repair",
+    "sequence": 57
+   },
+   {
+    "actor": "agent04",
+    "command": "confirm_repair",
+    "outcome": "invalid_repair",
+    "sequence": 57
+   },
+   {
+    "actor": "agent04",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent01",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 74
+   },
+   {
+    "actor": "agent02",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent06",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent05",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent07",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent03",
+    "command": "allocate",
+    "outcome": "ok",
+    "sequence": 58
+   },
+   {
+    "actor": "agent04",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent01",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 75
+   },
+   {
+    "actor": "agent02",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent06",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent05",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent07",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent03",
+    "command": "release",
+    "outcome": "ok",
+    "sequence": 59
+   },
+   {
+    "actor": "agent04",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent01",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 76
+   },
+   {
+    "actor": "agent02",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent06",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent05",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent07",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent03",
+    "command": "persist",
+    "outcome": "ok",
+    "sequence": 60
+   },
+   {
+    "actor": "agent04",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent01",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 77
+   },
+   {
+    "actor": "agent02",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent06",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent05",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent07",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent03",
+    "command": "emit",
+    "outcome": "ok",
+    "sequence": 61
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 78
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 62
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 79
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 63
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 80
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 64
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 81
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 65
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 82
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 66
+   },
+   {
+    "actor": "agent01",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 83
+   },
+   {
+    "actor": "agent04",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent02",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent06",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent05",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent07",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   },
+   {
+    "actor": "agent03",
+    "command": "consume",
+    "outcome": "ok",
+    "sequence": 67
+   }
+  ]
+ }
+}

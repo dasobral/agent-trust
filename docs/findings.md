@@ -1,7 +1,7 @@
 # Findings on the stack
 
 Points found while building and running the testbed on agent-trust, the OpenMLS fork
-`dd33278` and openmls-qrand `a102450`. Each names its status, what the testbed does,
+`dd33278` and openmls-qrand (`a102450`, then `66026082` since F-9). Each names its status, what the testbed does,
 and the proposal upstream.
 
 | # | Repository | Finding | Status | Testbed today | Proposal |
@@ -13,8 +13,8 @@ and the proposal upstream.
 | F-5 | agent-trust | The C-37 export reads the adapter files from outside the `Adapter`. | Open | The APF service holds its lock during the export. | `Adapter::export_trace(&self)`. |
 | F-6 | agent-trust | A relay duplicate is refused by MLS (`undecryptable`) before the kernel's `replay` check, so the honest path never reaches `replay`. | Note | `check.rejected` accepts duplicate codes after the first copy. | None; correct and allowed by C-39. |
 | F-7 | agent-trust | Any epoch change at the APF makes every not yet consumed message undeliverable: kernel `consume` requires the release epoch to equal the APF's current epoch (§5.3). A membership change right after a send loses that send for slow readers. | Note (by design) | Agents drain their mailbox before applying a commit; experiments let delivery settle before membership changes (E2 C4b). | Document it as an operating rule, or let `consume` accept the release epoch while the reader is still at it (a profile change). |
-| F-8 | agent-trust | Kernel cost per request grows with the square of the history: `load()` re-validates the whole hash chain, every event stores a full state snapshot, and the adapter reads the full `checkpoint` several times per request. Measured in E5: 7 ms at ≤ 48 events, 1.1 s at ≤ 481 events. | Open, needs approval (changes tamper detection) | E5 measures it; the APF view no longer reads `checkpoint`. | Events carry a snapshot hash or a delta; validate fully at `open`, then incrementally; a `checkpoint` option for the last event only. |
-| F-9 | agent-trust, OpenMLS fork, openmls-qrand, testbed | Every public key algorithm in the stack is classical, so a large quantum computer breaks it. Key exchange: X25519 in MLS (suite `0x0001`) and X25519 or P-256 ECDHE on every TLS link, the QRNG link included. Signatures: Ed25519 for MLS credentials, APF records and requests; ECDSA P-256 for the testbed certificates. Recorded traffic can be decrypted later. | Open, needs a decision. A probe shows the hybrid suite `0x004F` works today. | Classical everywhere. Probe evidence in `results/F9/`. | Four steps, PQ-1 to PQ-4, below. |
+| F-8 | agent-trust | Kernel cost per request grows with the square of the history (about three times faster in the `pq` suite, see F-9): `load()` re-validates the whole hash chain, every event stores a full state snapshot, and the adapter reads the full `checkpoint` several times per request. Measured in E5: 7 ms at ≤ 48 events, 1.1 s at ≤ 481 events. | Open, needs approval (changes tamper detection) | E5 measures it; the APF view no longer reads `checkpoint`. | Events carry a snapshot hash or a delta; validate fully at `open`, then incrementally; a `checkpoint` option for the last event only. |
+| F-9 | agent-trust, OpenMLS fork, openmls-qrand, testbed | Every public key algorithm in the stack was classical, so a large quantum computer breaks it, and recorded traffic can be decrypted later. | **Implemented** 2026-10-25 (D-13): the `pq` suite is the default, and every TLS link is post quantum. | ML-DSA-44 and X-Wing in MLS, the APF and requests; ML-DSA-44 certificates over `X25519MLKEM768` on every service link. E8 compares both suites. | Done: PQ-1 to PQ-4, see "Implemented" below. The control plane link stays classical until its OpenSSL is 3.5 or later. |
 
 ## F-9 in detail: post quantum readiness
 
@@ -77,3 +77,58 @@ OpenMLS crate, or `openmls_rust_crypto` does not compile.
 
 A new experiment, E8, would run E1 to E7 under both suites on all three backends and
 record sizes and time.
+
+### Implemented (2026-10-25, D-13)
+
+Daniel approved all four steps: "PQC is already an urgency for migration so there is no
+reason to not implement it from the start in New applications. Proceed with all the
+PQs". The post quantum suite is now the default everywhere.
+
+| Step | Where | What runs now |
+|---|---|---|
+| PQ-1 | agent-trust C-42 (`feat/post-quantum`, `f69b7fa`) | MLS `0x0052`: X-Wing key exchange (ML-KEM-768 with X25519), ChaCha20-Poly1305, SHA-384. The suite is a property of the group, fixed by the root's key; `classical` (`0x0001`) stays available |
+| PQ-3 | agent-trust C-42 | ML-DSA-44 for client identities, request keys and the APF key (one 32-byte draw, the FIPS 204 seed; deterministic signing, so crash recovery still re-signs identical bytes) |
+| PQ-2 | openmls-qrand `66026082` (`feat/pq-tls`), agent-trust C-42, `att-node` | `X25519MLKEM768` over TLS 1.3 on every link: the QRNG link offers only that group by default; services offer only that group to each other |
+| PQ-4 | `att-node pki` (rcgen 0.14, aws-lc-rs) | ML-DSA-44 certificates from a post quantum CA for every identity. A classical CA (ECDSA P-256) remains for one client: the control plane on an OpenSSL older than 3.5. A classical certificate is accepted only for `attctl` and `<agent>-app` |
+
+Verification:
+
+- agent-trust: `tests/pq_suite.rs` (13 tests, written first), every existing test, and
+  the claim gate with the integration run in both suites: `full_lap_mls` stays `true`
+  (`evidence/verify-2026-10-25-pq.txt`).
+- openmls-qrand: `tests/pq_tls.rs` (6 tests, written first): the negotiated group is
+  `X25519MLKEM768`; a `pq-only` client refuses a classical server.
+- testbed: E1-mtls F7 (two new negative controls: a post quantum certificate over a
+  classical key exchange, and a classical certificate that names a service) and F8
+  (`check.pq_tls`: every service link, the QRNG link included, is ML-DSA-44 over
+  `X25519MLKEM768`). E8 runs the same scenario in both suites.
+
+Residual classical parts:
+
+- The control plane link from `attctl`, while its Python links OpenSSL 3.0 (this host
+  and the Ubuntu 24.04 CI runners). It upgrades by itself with OpenSSL 3.5 or later.
+- The QRNG link to a real Entropy Core needs that server to offer `X25519MLKEM768`;
+  `key_exchange = "pq-preferred"` is the explicit, reported downgrade (E6).
+- The legacy `MlsLab` of agent-trust (`mls-demo`), which is not on the adapter path.
+- The pq code points come from `draft-ietf-mls-pq-ciphersuites` and can change before
+  the RFC.
+
+Cost (E8, local backend; sizes in bytes):
+
+| Object | classical | pq | Factor |
+|---|---|---|---|
+| KeyPackage | 536 to 542 | 11255 to 11261 | 20.8 |
+| Commit (admission, repair, rekey) | 537 to 1130 | 10054 to 22551 | 20.0 |
+| APF ack | 310 | 2666 | 8.6 |
+| Welcome | 1027 to 1346 | 15413 to 21763 | 16.2 |
+
+E5 does not complete in the `pq` suite (`results/E5/2026-10-25-local`). The kernel keeps
+every persisted envelope in each history snapshot (F-8), and an envelope carries two
+ML-DSA-44 signatures (the release certificate and the MLS message), so it is about four
+times larger. In the recorded runs the kernel history grew to 143 MB against 31 MB in the
+classical suite (`results/E5-classical/2026-10-25-local`), and the APF time per request
+at up to 335 history events was 1.58 s against 0.72 s (p50). In the round under faults
+it was 2.0 s against 1.0 s, and in the next round parallel sends passed the 60 s client
+timeout (step D3); in a validation run the round under faults passed its 180 s bound
+instead. F-8 is therefore more urgent; its proposal is unchanged and still needs
+approval.

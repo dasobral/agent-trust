@@ -49,6 +49,28 @@ steps A2, B1, C2, D3 and D10; testbed `6c0331a`):
 The APF's time per request grows roughly with the square of the history length, and
 the APF serializes requests, so throughput falls as a run gets longer.
 
+## In the post quantum suite (2026-10-25)
+
+Since F-9, every topology runs the `pq` suite (agent-trust C-42). E5 in that suite does
+not complete (`results/E5/2026-10-25-local`, testbed `b7e9fa3`); the same steps in the
+classical suite pass (`experiments/e5-scale-classical.toml`,
+`results/E5-classical/2026-10-25-local`). Both runs on the same machine:
+
+| Measure | `classical` | `pq` |
+|---|---|---|
+| Admission, group of 2 → 8 (median) | 167 ms | 199 ms |
+| APF time per request, history ≤ 335 events (median) | 716 ms | 1 576 ms |
+| Clean rounds 1 → 4 | 3.9 → 14.2 → 30.8 → 51.6 s | 6.4 → 27.1 → 63.0 → 112.9 s |
+| Round under faults (history 335 → 414), APF median | 81.5 s, 975 ms | 173.2 s, 2 014 ms |
+| Kernel history file at the end | 31 MB | 143 MB (run stopped at D3) |
+| Result | PASS, 22 steps | FAIL at D3: parallel sends passed the 60 s client timeout |
+
+The cause is F-8 below, made steeper: the kernel stores each persisted envelope in every
+history snapshot, and a `pq` envelope carries two ML-DSA-44 signatures (2420 bytes each:
+the APF release certificate and the MLS message), so it is about four times larger. The
+F-8 proposal would remove the effect; it needs approval. CI runs E5 in the classical
+suite (`SCALE=1`); `SCALE=pq scripts/ci.sh` runs it in the `pq` suite.
+
 ## Finding F-8 (agent-trust kernel)
 
 Every kernel request starts with `load()`, which re-validates the whole hash chain

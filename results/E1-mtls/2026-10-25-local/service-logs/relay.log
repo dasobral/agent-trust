@@ -1,0 +1,5 @@
+{"event":"listening","listen":"127.0.0.1:52863","role":"relay","seed":7,"ts":1792922525}
+{"drop":25,"duplicate":25,"event":"faults","reorder":true,"role":"relay","seed":11,"ts":1792922526}
+{"event":"hold","held":true,"mailbox":"carol","role":"relay","ts":1792922532}
+{"event":"hold","held":false,"mailbox":"carol","role":"relay","ts":1792922534}
+{"enabled":true,"event":"tap","observer":"carol","role":"relay","ts":1792922536,"victim":"bob"}

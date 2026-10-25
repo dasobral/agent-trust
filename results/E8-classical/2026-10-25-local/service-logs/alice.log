@@ -1,0 +1,3 @@
+{"entropy":"qrng","event":"listening","listen":"127.0.0.1:43443","name":"alice","public_key":"86a143a1ea05b0d938cf514c3bf6140f01916462864fa6aab621685c8874fb0e","role":"agent","ts":1792922571}
+{"event":"delivered","name":"alice","op":"bob-000001","role":"agent","ts":1792922572}
+{"event":"delivered","name":"alice","op":"bob-000002","role":"agent","ts":1792922573}
