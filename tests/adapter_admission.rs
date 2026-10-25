@@ -172,12 +172,11 @@ fn codes(rights: &[(Right, u64)]) -> Vec<(u8, u64)> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// §4.2 `ApfAnchor` after R-11: static, without policy.
 struct TestAnchor {
     version: u8,
     apf_key_id: Vec<u8>,
     group: Vec<u8>,
-    policy_revision: u64,
-    policy_digest: Vec<u8>,
 }
 
 fn decode_anchor(bytes: &[u8]) -> TestAnchor {
@@ -186,8 +185,6 @@ fn decode_anchor(bytes: &[u8]) -> TestAnchor {
         version: reader.u8(),
         apf_key_id: reader.opaque(),
         group: reader.opaque(),
-        policy_revision: reader.u64(),
-        policy_digest: reader.opaque(),
     };
     reader.finish();
     anchor
@@ -197,8 +194,6 @@ fn encode_anchor(anchor: &TestAnchor) -> Vec<u8> {
     let mut out = vec![anchor.version];
     out.extend(vl(&anchor.apf_key_id));
     out.extend(vl(&anchor.group));
-    out.extend(tls_u64(anchor.policy_revision));
-    out.extend(vl(&anchor.policy_digest));
     out
 }
 
@@ -1117,10 +1112,16 @@ fn genesis_kernel_branch_is_hash_of_real_group_context() {
     attempt(
         "wrong-anchor",
         &|root, own_info| (own_info.to_vec(), root.export_ratchet_tree().expect("tree")),
+        // R-11: no second well-formed anchor exists for this key and group, so the case
+        // uses the pre-R-11 version-1 payload, which `found` already refuses.
         &|anchor: &[u8]| {
-            let mut decoded = decode_anchor(anchor);
-            decoded.policy_revision += 7;
-            encode_anchor(&decoded)
+            let decoded = decode_anchor(anchor);
+            let mut out = vec![1];
+            out.extend(vl(&decoded.apf_key_id));
+            out.extend(vl(&decoded.group));
+            out.extend(tls_u64(7));
+            out.extend(vl(&[0u8; 32]));
+            out
         },
     );
 }
@@ -1141,21 +1142,15 @@ fn genesis_group_carries_apf_anchor_and_required_capabilities() {
         let anchors = unknown_payloads(context.extensions().iter(), ANCHOR_EXT);
         assert_eq!(anchors.len(), 1, "exactly one apf_anchor");
         assert_eq!(anchors[0], w.apf_anchor);
+        // R-11 (a): exactly `{version = 2, apf_key_id, group}`, with no policy.
         let anchor = decode_anchor(&anchors[0]);
-        assert_eq!(anchor.version, 1);
+        assert_eq!(anchor.version, 2);
         assert_eq!(
             anchor.apf_key_id, apf_key_id,
             "apf_key_id = SHA-256(APF key)"
         );
         assert_eq!(anchor.group, GROUP.as_bytes());
-        assert_eq!(anchor.policy_revision, 0);
         assert_eq!(checkpoint["policy_revision"], json!(0));
-        assert_eq!(
-            anchor.policy_digest,
-            hex::decode(checkpoint["policy_digest"].as_str().expect("policy_digest"))
-                .expect("hex policy digest"),
-            "apf_anchor digest equals the kernel policy digest"
-        );
 
         // Required capabilities.
         let required = context
@@ -1533,6 +1528,13 @@ fn admitted_frontier_matches_kernel_branch_at_every_member() {
     assert_eq!(ack.successor, bob_admitted.frontier);
     assert_eq!(ack.commit_hash, sha256(&bob_staged.commit));
     assert_eq!(ack.kind, AckKind::Admit);
+    // R-11 (c): the ack carries the kernel policy at the canonical step.
+    let checkpoint = w.checkpoint();
+    assert_eq!(json!(ack.policy_revision), checkpoint["policy_revision"]);
+    assert_eq!(
+        json!(lower_hex(&ack.policy_digest)),
+        checkpoint["policy_digest"]
+    );
 
     // Carol is admitted through a commit staged by bob, an admin member other than
     // the founder; the root merges it as a receiver.
@@ -1890,7 +1892,7 @@ fn commit_with_unexpected_extra_proposal_is_noncanonical() {
     let dave_kp = parse_key_package(dave.key_package());
     let anchor = current_anchor(&mut root);
     let mut raised = anchor.clone();
-    raised.policy_revision += 1;
+    raised.apf_key_id = sha256(b"another APF key");
     let changed = extensions_with_anchor(&mut root, Some(&raised));
     let same = extensions_with_anchor(&mut root, None);
 
@@ -2046,6 +2048,13 @@ fn client_refuses_commit_without_matching_canonical_ack() {
     );
     let good = w.verify_ack(&admitted.ack);
     assert_eq!(good.parent, parent);
+    // R-11: a client stores the ack it merged under; a joiner the ack it joined under.
+    assert_eq!(root.last_ack(), Some(&good), "the committer stores its ack");
+    let joined = w.verify_ack(&bob_admitted.ack);
+    assert_eq!(bob.last_ack(), Some(&joined), "the joiner stores its ack");
+    assert!(joined.policy_revision > 0, "delegations raised the policy");
+    assert!(good.policy_revision >= joined.policy_revision);
+    let below = joined.policy_revision - 1;
 
     let forge = |change: &dyn Fn(&mut CanonicalAck)| {
         let mut ack = good.clone();
@@ -2109,9 +2118,20 @@ fn client_refuses_commit_without_matching_canonical_ack() {
             forge(&|ack| ack.parent.branch = other_branch.clone()),
             "binding_mismatch",
         ),
+        (
+            "policy revision below the stored ack's (R-11)",
+            staged.commit.clone(),
+            forge(&|ack| ack.policy_revision = below),
+            "binding_mismatch",
+        ),
     ];
     for (case, commit, ack, expected) in cases {
         let err = code(bob.apply_ack(&commit, &ack), expected);
+        assert_eq!(
+            bob.last_ack(),
+            Some(&joined),
+            "{case}: stored ack unchanged"
+        );
         assert_eq!(bob.frontier().expect("bob"), parent, "{case}: {err}");
         assert_eq!(
             raw_frontier(&mut bob),
@@ -2128,6 +2148,7 @@ fn client_refuses_commit_without_matching_canonical_ack() {
     );
     assert_eq!(bob.frontier().expect("bob"), w.frontier());
     assert_eq!(raw_frontier(&mut bob), w.frontier());
+    assert_eq!(bob.last_ack(), Some(&good));
     // Replaying the merged commit is refused: its parent is no longer bob's frontier.
     code(
         bob.apply_ack(&staged.commit, &admitted.ack),

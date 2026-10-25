@@ -184,13 +184,16 @@ fn release_tbs(
     out
 }
 
-/// §4.6 `CanonicalAckTBS` with the C-13 branch encoding.
+/// §4.6 `CanonicalAckTBS` with the C-13 branch encoding and the R-11 policy fields.
+#[allow(clippy::too_many_arguments)]
 fn ack_tbs(
     apf_key_id: &[u8],
     parent: &Frontier,
     successor: &Frontier,
     commit: &[u8],
     kind: u8,
+    policy_revision: u64,
+    policy_digest: &[u8],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend(vl(T_CANONICAL_LABEL));
@@ -202,6 +205,8 @@ fn ack_tbs(
     out.extend(vl(successor.branch.as_bytes()));
     out.extend(vl(&sha256(commit)));
     out.push(kind);
+    out.extend(tls_u64(policy_revision));
+    out.extend(vl(policy_digest));
     out
 }
 
@@ -429,7 +434,6 @@ fn accepted_from(response: &Value) -> Accepted {
 #[derive(Clone, Debug)]
 struct Plan {
     removed: Vec<String>,
-    apf_anchor: Vec<u8>,
     parent: Frontier,
 }
 
@@ -721,12 +725,6 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            apf_anchor: hex::decode(
-                response["apf_anchor"]
-                    .as_str()
-                    .expect("apf_anchor hex string"),
-            )
-            .expect("apf_anchor is hex"),
             parent: Frontier {
                 epoch: response["parent_epoch"].as_u64().expect("parent_epoch"),
                 branch: response["parent_branch"]
@@ -777,17 +775,34 @@ impl World {
         )
     }
 
-    /// The canonical ack the APF signs for `commit` (§4.6), rebuilt independently.
+    /// The canonical ack the APF signs for `commit` (§4.6), rebuilt independently. Its
+    /// policy fields are the kernel's now (R-11), so it is called right after the commit's
+    /// kernel step, before any other.
     fn rebuild_ack(
-        &self,
+        &mut self,
         parent: &Frontier,
         successor: &Frontier,
         commit: &[u8],
         kind: u8,
     ) -> Vec<u8> {
+        let checkpoint = self.checkpoint();
+        let policy_revision = checkpoint["policy_revision"]
+            .as_u64()
+            .expect("policy_revision");
+        let policy_digest =
+            hex::decode(checkpoint["policy_digest"].as_str().expect("policy_digest"))
+                .expect("policy_digest is hex");
         signed(
             &self.apf_signer(),
-            ack_tbs(&self.apf_key_id(), parent, successor, commit, kind),
+            ack_tbs(
+                &self.apf_key_id(),
+                parent,
+                successor,
+                commit,
+                kind,
+                policy_revision,
+                &policy_digest,
+            ),
         )
     }
 
@@ -1261,7 +1276,7 @@ fn crashed_repair(
     let plan = w.plan(ROOT);
     assert_eq!(plan.removed, vec!["carol".to_owned()]);
     let staged = root
-        .stage_repair(&plan.removed, &plan.apf_anchor)
+        .stage_repair(&plan.removed)
         .expect("stage the planned repair");
     assert_eq!(staged.parent, plan.parent);
     let crashed = w.crash(

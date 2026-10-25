@@ -5,7 +5,7 @@
 //! fence unable to reopen. A new plan and a new repair commit stack on the pending repair,
 //! and only the latest pending repair can be confirmed.
 //!
-//! The `apf_anchor` payload and the confirmation TBS are decoded here with `tls_codec`
+//! The confirmation TBS is decoded here with `tls_codec`
 //! and `sha2`, independently of `src/wire.rs`. Raw OpenMLS state is used through
 //! `ClientEndpoint::mls_parts_mut`, which honest code never uses, to model removed
 //! endpoints that keep their group secrets.
@@ -80,10 +80,6 @@ impl<'a> TlsReader<'a> {
         Self { rest: bytes }
     }
 
-    fn u8(&mut self) -> u8 {
-        u8::tls_deserialize(&mut self.rest).expect("uint8 field")
-    }
-
     fn u64(&mut self) -> u64 {
         u64::tls_deserialize(&mut self.rest).expect("uint64 field")
     }
@@ -102,29 +98,6 @@ impl<'a> TlsReader<'a> {
     fn finish(&self) {
         assert!(self.rest.is_empty(), "{} trailing bytes", self.rest.len());
     }
-}
-
-/// §4.2 `ApfAnchor`, as plain test data.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct TestAnchor {
-    version: u8,
-    apf_key_id: Vec<u8>,
-    group: Vec<u8>,
-    policy_revision: u64,
-    policy_digest: Vec<u8>,
-}
-
-fn decode_anchor(bytes: &[u8]) -> TestAnchor {
-    let mut reader = TlsReader::new(bytes);
-    let anchor = TestAnchor {
-        version: reader.u8(),
-        apf_key_id: reader.opaque(),
-        group: reader.opaque(),
-        policy_revision: reader.u64(),
-        policy_digest: reader.opaque(),
-    };
-    reader.finish();
-    anchor
 }
 
 /// Decodes a signed C-23 confirmation, checks its signature under `public_key`, and
@@ -288,7 +261,6 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
 }
@@ -626,12 +598,6 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            apf_anchor: hex::decode(
-                response["apf_anchor"]
-                    .as_str()
-                    .expect("apf_anchor hex string"),
-            )
-            .expect("apf_anchor is hex"),
             policy_revision: response["policy_revision"]
                 .as_u64()
                 .expect("plan policy_revision"),
@@ -834,7 +800,7 @@ fn commit_repair_with(
 ) -> Repaired {
     let actor = committer.subject().to_owned();
     let staged = committer
-        .stage_repair(&plan.removed, &plan.apf_anchor)
+        .stage_repair(&plan.removed)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
     let accepted = w
@@ -995,16 +961,7 @@ fn stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_co
         "built on the pending successor"
     );
     assert_eq!(plan.policy_revision, policy_revision);
-    assert_eq!(
-        decode_anchor(&plan.apf_anchor),
-        TestAnchor {
-            version: 1,
-            apf_key_id: w.apf_key_id(),
-            group: GROUP.as_bytes().to_vec(),
-            policy_revision,
-            policy_digest: w.policy_digest(),
-        }
-    );
+    let policy_digest = w.policy_digest();
     assert_eq!(w.plan(ROOT), plan, "any roster member gets the same plan");
     assert_eq!(w.plan("erin"), plan, "any roster member gets the same plan");
 
@@ -1020,6 +977,9 @@ fn stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_co
             successor: stacked.frontier.clone(),
             commit_hash: sha256(&stacked.commit),
             kind: AckKind::Repair,
+            // R-11 (c): the stacked ack carries the newer fence revision and its digest.
+            policy_revision,
+            policy_digest,
         }
     );
     let checkpoint = w.checkpoint();

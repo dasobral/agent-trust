@@ -9,7 +9,7 @@ Daniel's call), **open** (tracked work).
 
 ## A. The paper is stale against the code
 
-### A-1. K4 cites Ed25519, but the default suite is post quantum (**fixed**, two items open)
+### A-1. K4 cites Ed25519, but the default suite is post quantum (**fixed**, one item open)
 
 - Paper: K4 (`coherence.tex:238`) and Table IV (`coherence.tex:514`) name
   Ed25519 with `verify_strict` and cite Brendel et al.
@@ -29,15 +29,17 @@ Daniel's call), **open** (tracked work).
     MLWE, SelfTargetMSIS and MSIS, for deterministic signing, which is the
     variant the code uses (`docs/adapter-contract.md` §8.3).
   - Barbosa et al. (Crypto 2023, ePrint 2023/246) found and corrected a gap
-    in the chosen-message step of that proof. **Open:** whether the
-    corrected proof covers the strong case, and whether the bound carries
-    over to the changes FIPS 204 made to Dilithium.
+    in the chosen-message step of that proof, for ordinary unforgeability
+    only (their footnote 2). **Written out** in `ml-dsa-suf.tex`: the strong
+    case reduces to MSIS, and both verifiers reject non-canonical hints.
+    A reduction by hand, not mechanized.
   - X-Wing: IND-CCA if either X25519 (strong Diffie–Hellman, ROM) or
     ML-KEM-768 is (Barbosa et al., IACR CiC 2024). HPKE base mode is a
     KEM–DEM composition (Cramer–Shoup 2003).
   - **Open:** ETK's Theorem 1 is proved in the classical random-oracle
     model, so with the post-quantum suite Proposition 3 holds against
-    classical adversaries only.
+    classical adversaries only. `etk-qrom.tex` locates the one
+    classical-only step and states the quantum version as a conjecture.
 
 ### A-2. The HPKE randomness bullet is stale (**fixed**)
 
@@ -82,12 +84,14 @@ Daniel's call), **open** (tracked work).
   revocation at the first ledger step at or after `expires_at`. Test first,
   as a numbered contract correction.
 
-### A-6. R-11 is approved and not implemented (**open**)
+### A-6. R-11 is approved and not implemented (**fixed** 2026-10-25)
 
-Tracked in `docs/adapter-contract.md` §10 and §13 (D-11). Until it lands,
-Proposition 3 covers the construction, not the repair commit of the code.
-Proposition 2 covers both. This is the one place that states it; the other
-documents link here or to `formal/README.md`.
+Tracked in `docs/adapter-contract.md` §10 and §13 (D-11). Until it landed,
+Proposition 3 covered the construction, not the repair commit of the code;
+Proposition 2 covered both. R-11 is implemented (C-44): no commit carries a
+GroupContextExtensions proposal, the anchor is static, and the policy
+binding is in the canonical ack. Proposition 3 now covers the code's
+commits with the two remaining open items named in `formal/README.md`.
 
 ## B. The project documents are two generations behind the paper
 
@@ -98,9 +102,9 @@ documents link here or to `formal/README.md`.
   proof obligation.
 - `formal/README.md` says key confinement is derived: symbolically as a
   corollary of TreeKEM DY\*, computationally from ETK with named gaps.
-- Both cannot stand. Both now say **conditional** and name the same three
-  open items: R-11, the full ETK proof, and the two post-quantum items of
-  A-1.
+- Both cannot stand. Both now say **conditional** and name the same open
+  items. After the proof work of 25 October these are R-11 and the quantum
+  version of ETK (`etk-full-check.md`, `etk-qrom.tex`, `ml-dsa-suf.tex`). (R-11 closed on 25 October 2026, A-6; two items remain.)
 - `Bridge_remove^ETK` and `full_lap_mls` are also names from the Third
   Edition. `full_lap_mls` is a field in `evidence/manifest.json` and
   `scripts/verify.py`; its rename is a schema change, listed in C-43.

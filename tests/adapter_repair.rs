@@ -109,14 +109,12 @@ impl<'a> TlsReader<'a> {
     }
 }
 
-/// §4.2 `ApfAnchor`, as plain test data.
+/// §4.2 `ApfAnchor` after R-11, as plain test data: static, without policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct TestAnchor {
     version: u8,
     apf_key_id: Vec<u8>,
     group: Vec<u8>,
-    policy_revision: u64,
-    policy_digest: Vec<u8>,
 }
 
 fn decode_anchor(bytes: &[u8]) -> TestAnchor {
@@ -125,19 +123,23 @@ fn decode_anchor(bytes: &[u8]) -> TestAnchor {
         version: reader.u8(),
         apf_key_id: reader.opaque(),
         group: reader.opaque(),
-        policy_revision: reader.u64(),
-        policy_digest: reader.opaque(),
     };
     reader.finish();
     anchor
 }
 
-fn encode_anchor(anchor: &TestAnchor) -> Vec<u8> {
-    let mut out = vec![anchor.version];
-    out.extend(vl(&anchor.apf_key_id));
-    out.extend(vl(&anchor.group));
-    out.extend(tls_u64(anchor.policy_revision));
-    out.extend(vl(&anchor.policy_digest));
+/// The version-1 anchor payload that carried the policy before R-11.
+fn encode_policy_anchor(
+    apf_key_id: &[u8],
+    group: &str,
+    policy_revision: u64,
+    policy_digest: &[u8],
+) -> Vec<u8> {
+    let mut out = vec![1];
+    out.extend(vl(apf_key_id));
+    out.extend(vl(group.as_bytes()));
+    out.extend(tls_u64(policy_revision));
+    out.extend(vl(policy_digest));
     out
 }
 
@@ -357,6 +359,17 @@ fn raw_repair(
         .expect("serialize commit")
 }
 
+/// The number of GroupContextExtensions proposals in the client's own pending commit.
+fn group_context_extension_proposals(client: &mut Client) -> usize {
+    let (group, _, _) = client.mls_parts_mut();
+    group
+        .pending_commit()
+        .expect("a staged pending commit")
+        .queued_proposals()
+        .filter(|p| matches!(p.proposal(), Proposal::GroupContextExtensions(_)))
+        .count()
+}
+
 /// True if the client's own pending (staged, unmerged) commit carries an UpdatePath.
 fn pending_has_path(client: &mut Client) -> bool {
     let (group, _, _) = client.mls_parts_mut();
@@ -456,7 +469,6 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
 }
@@ -492,6 +504,8 @@ struct World {
     _dir: tempfile::TempDir,
     adapter: TestAdapter,
     apf_public: Vec<u8>,
+    /// The genesis `apf_anchor` payload, constant for the group's life (R-11).
+    genesis_anchor: Vec<u8>,
     seqs: HashMap<String, u64>,
     providers: u64,
 }
@@ -546,6 +560,7 @@ fn genesis(tag: &str) -> (World, Client) {
             _dir: dir,
             adapter,
             apf_public,
+            genesis_anchor: apf_anchor,
             seqs: HashMap::new(),
             providers: 0,
         },
@@ -775,6 +790,24 @@ impl World {
     /// C-20 `repair_plan {}` sent by `actor`.
     fn plan(&mut self, actor: &str) -> Plan {
         let response = self.ok(actor, &repair_plan_body());
+        // R-11: the plan carries no apf_anchor; the commit has no policy content.
+        let mut keys: Vec<&str> = response
+            .as_object()
+            .expect("plan object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "parent_branch",
+                "parent_epoch",
+                "policy_revision",
+                "removed"
+            ],
+            "C-20 plan fields after R-11"
+        );
         Plan {
             removed: response["removed"]
                 .as_array()
@@ -782,12 +815,6 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            apf_anchor: hex::decode(
-                response["apf_anchor"]
-                    .as_str()
-                    .expect("apf_anchor hex string"),
-            )
-            .expect("apf_anchor is hex"),
             policy_revision: response["policy_revision"]
                 .as_u64()
                 .expect("plan policy_revision"),
@@ -832,6 +859,39 @@ impl World {
 
     fn apf_key_id(&self) -> Vec<u8> {
         sha256(&self.apf_public)
+    }
+
+    /// The kernel `(policy_revision, policy_digest bytes)` now.
+    fn policy(&mut self) -> (u64, Vec<u8>) {
+        let checkpoint = self.checkpoint();
+        (
+            checkpoint["policy_revision"]
+                .as_u64()
+                .expect("policy_revision"),
+            hex::decode(checkpoint["policy_digest"].as_str().expect("policy_digest"))
+                .expect("policy_digest is hex"),
+        )
+    }
+
+    /// R-11 (c): a repair ack carries the kernel policy at the canonical step, at or after
+    /// the fence revision. Called right after the repair, before any other kernel step.
+    fn assert_repair_ack_policy(&mut self, ack: &[u8], fence_revision: u64) {
+        let ack = self.verify_ack(ack);
+        assert_eq!(ack.kind, AckKind::Repair);
+        let (revision, digest) = self.policy();
+        assert_eq!(
+            ack.policy_revision, revision,
+            "ack policy_revision is the kernel's"
+        );
+        assert_eq!(
+            ack.policy_digest, digest,
+            "ack policy_digest is the kernel's"
+        );
+        assert!(
+            ack.policy_revision >= fence_revision,
+            "repair ack policy_revision {} below fence revision {fence_revision}",
+            ack.policy_revision
+        );
     }
 
     /// The release cover (C-14): the writer singleton plus every roster reader singleton,
@@ -1028,13 +1088,22 @@ fn commit_repair_with(
     others: &mut [&mut Client],
 ) -> Repaired {
     let actor = committer.subject().to_owned();
+    let fence_revision = w.checkpoint()["fence_revision"]
+        .as_u64()
+        .expect("fence_revision while fenced");
     let staged = committer
-        .stage_repair(&plan.removed, &plan.apf_anchor)
+        .stage_repair(&plan.removed)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
+    assert_eq!(
+        group_context_extension_proposals(committer),
+        0,
+        "R-11 (b): the honest repair carries no GroupContextExtensions proposal"
+    );
     let accepted = w
         .submit_repair(&actor, &staged.parent, &staged.commit)
         .unwrap_or_else(|err| panic!("{actor} repair should be canonical, got {err}"));
+    w.assert_repair_ack_policy(&accepted.ack, fence_revision);
     assert_eq!(accepted.frontier.epoch, plan.parent.epoch + 1);
     assert_eq!(w.frontier(), accepted.frontier);
     assert_eq!(w.kernel_frontier(), accepted.frontier);
@@ -1203,33 +1272,17 @@ fn read_revocation_fences_release_until_confirmed_repair() {
     assert_eq!(plan.parent, parent);
     let policy_revision = w.policy_revision();
     assert_eq!(plan.policy_revision, policy_revision);
-    let policy_digest = hex::decode(
-        w.checkpoint()["policy_digest"]
-            .as_str()
-            .expect("policy_digest"),
-    )
-    .expect("policy_digest is hex");
-    assert_eq!(
-        decode_anchor(&plan.apf_anchor),
-        TestAnchor {
-            version: 1,
-            apf_key_id: w.apf_key_id(),
-            group: GROUP.as_bytes().to_vec(),
-            policy_revision,
-            policy_digest,
-        }
-    );
+    let (_, policy_digest) = w.policy();
     assert_eq!(
         w.plan("carol"),
         plan,
         "any roster member gets the same plan"
     );
 
-    // The canonical repair commit.
-    let staged = root
-        .stage_repair(&plan.removed, &plan.apf_anchor)
-        .expect("stage repair");
+    // The canonical repair commit: Removes and a path, no GroupContextExtensions (R-11).
+    let staged = root.stage_repair(&plan.removed).expect("stage repair");
     assert_eq!(staged.parent, parent);
+    assert_eq!(group_context_extension_proposals(&mut root), 0);
     let accepted = w
         .submit_repair(ROOT, &staged.parent, &staged.commit)
         .expect("canonical repair");
@@ -1244,6 +1297,8 @@ fn read_revocation_fences_release_until_confirmed_repair() {
             successor: accepted.frontier.clone(),
             commit_hash: sha256(&staged.commit),
             kind: AckKind::Repair,
+            policy_revision,
+            policy_digest,
         }
     );
     let checkpoint = w.checkpoint();
@@ -1266,7 +1321,7 @@ fn read_revocation_fences_release_until_confirmed_repair() {
             accepted.frontier
         );
         assert_eq!(tree_members(member), vec!["carol", "dave", ROOT]);
-        assert_eq!(current_anchor_bytes(member), plan.apf_anchor);
+        assert_eq!(current_anchor_bytes(member), w.genesis_anchor, "R-11 (a)");
     }
 
     // Canonical but unconfirmed: still fenced.
@@ -1309,7 +1364,7 @@ fn repair_missing_one_revoked_reader_is_noncanonical() {
     assert_eq!(plan.removed, vec!["bob", "carol"]);
 
     // Only bob removed.
-    let commit = raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), true);
+    let commit = raw_repair(&mut root, &["bob"], None, true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
     let checkpoint = w.checkpoint();
     assert_eq!(checkpoint["roster"], json!([ROOT, "bob", "carol", "dave"]));
@@ -1337,7 +1392,7 @@ fn repair_removing_a_continuing_reader_is_noncanonical() {
     let plan = w.plan(ROOT);
     assert_eq!(plan.removed, vec!["bob"]);
 
-    let commit = raw_repair(&mut root, &["bob", "dave"], Some(&plan.apf_anchor), true);
+    let commit = raw_repair(&mut root, &["bob", "dave"], None, true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
     assert_eq!(w.roster(), vec![ROOT, "bob", "carol", "dave"]);
 
@@ -1346,72 +1401,73 @@ fn repair_removing_a_continuing_reader_is_noncanonical() {
     open_fence(&mut w, &mut root, &mut dave);
 }
 
+/// R-11 (b): no commit carries a GroupContextExtensions proposal. A repair that carries
+/// one is noncanonical whatever it sets, including the exact parent extensions and the
+/// pre-R-11 policy anchor; the Remove-only repair with a path is canonical, and every
+/// member keeps the genesis `apf_anchor` byte for byte (R-11 (a)).
 #[test]
-fn repair_without_apf_anchor_update_is_noncanonical() {
+fn repair_with_group_context_extensions_is_noncanonical() {
     let Setup {
         mut w,
         mut root,
         mut carol,
         mut dave,
         ..
-    } = setup("no-anchor");
+    } = setup("gce");
     w.revoke("bob", "read");
     let plan = w.plan(ROOT);
     let parent_anchor = current_anchor_bytes(&mut root);
-    assert_ne!(
-        parent_anchor, plan.apf_anchor,
-        "the plan changes apf_anchor"
+    assert_eq!(parent_anchor, w.genesis_anchor);
+    assert_eq!(
+        decode_anchor(&parent_anchor),
+        TestAnchor {
+            version: 2,
+            apf_key_id: w.apf_key_id(),
+            group: GROUP.as_bytes().to_vec(),
+        }
     );
 
-    // Remove-only commit: no GroupContextExtensions proposal.
-    let commit = raw_repair(&mut root, &["bob"], None, true);
-    refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
-
-    // A GroupContextExtensions proposal that keeps the parent apf_anchor.
+    // A GroupContextExtensions proposal that repeats the parent extensions exactly.
     let commit = raw_repair(&mut root, &["bob"], Some(&parent_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
 
-    // The planned revision with a stale policy digest (the parent group's).
-    let mut stale = decode_anchor(&plan.apf_anchor);
-    stale.policy_digest = decode_anchor(&parent_anchor).policy_digest;
-    let stale = encode_anchor(&stale);
-    assert_ne!(stale, plan.apf_anchor);
-    let commit = raw_repair(&mut root, &["bob"], Some(&stale), true);
+    // The pre-R-11 anchor with the current policy revision and digest.
+    let (revision, digest) = w.policy();
+    let policy_anchor = encode_policy_anchor(&w.apf_key_id(), GROUP, revision, &digest);
+    let commit = raw_repair(&mut root, &["bob"], Some(&policy_anchor), true);
     refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
+    assert_eq!(w.checkpoint()["repair_pending"], Value::Null);
+    assert_eq!(w.plan(ROOT), plan, "the plan is unchanged");
 
-    // The planned bytes are canonical.
-    commit_repair_with(
-        &mut w,
-        &mut root,
-        plan.clone(),
-        &mut [&mut carol, &mut dave],
-    );
-    assert_eq!(current_anchor_bytes(&mut carol), plan.apf_anchor);
+    // The honest Remove-only repair is canonical (`commit_repair_with` checks that it has
+    // no GroupContextExtensions proposal and that its ack carries the kernel policy).
+    commit_repair_with(&mut w, &mut root, plan, &mut [&mut carol, &mut dave]);
+    for member in [&mut root, &mut carol, &mut dave] {
+        assert_eq!(current_anchor_bytes(member), w.genesis_anchor, "R-11 (a)");
+    }
     open_fence(&mut w, &mut root, &mut dave);
 }
 
+/// R-11 (c): the commit carries no policy, so a plan goes stale only through its Remove
+/// set and parent. A policy change that leaves both unchanged leaves the planned commit
+/// canonical, and its ack carries the kernel revision at the canonical step, which is
+/// above the plan's and the fence's, with the kernel digest at that revision.
 #[test]
-fn repair_with_policy_revision_older_than_fence_is_noncanonical() {
+fn repair_ack_carries_the_kernel_policy_at_the_canonical_step() {
     let Setup {
         mut w,
         mut root,
         mut carol,
         mut dave,
         ..
-    } = setup("old-revision");
+    } = setup("ack-policy");
     w.revoke("bob", "read");
     let fence_revision = w.checkpoint()["fence_revision"]
         .as_u64()
         .expect("fence_revision after a fencing revoke");
     let plan = w.plan(ROOT);
     assert_eq!(plan.policy_revision, fence_revision);
-
-    // A forged plan below the fence revision.
-    let mut forged = decode_anchor(&plan.apf_anchor);
-    forged.policy_revision = fence_revision - 1;
-    let forged = encode_anchor(&forged);
-    let commit = raw_repair(&mut root, &["bob"], Some(&forged), true);
-    refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
+    let staged = root.stage_repair(&plan.removed).expect("stage repair");
 
     // A further grant (to a subject that is not a roster member) changes the policy.
     let mut body = grant_body("frank", "read", 0, true);
@@ -1423,27 +1479,25 @@ fn repair_with_policy_revision_older_than_fence_is_noncanonical() {
         json!(plan.policy_revision + 1)
     );
     assert_eq!(checkpoint["fence_revision"], json!(fence_revision));
-
-    // The old plan's apf_anchor no longer matches.
-    let commit = raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), true);
-    refused_repair(&mut w, ROOT, &mut root, &commit, "noncanonical_commit");
-
-    // A fresh plan succeeds.
     let fresh = w.plan(ROOT);
     assert_eq!(fresh.removed, plan.removed);
+    assert_eq!(fresh.parent, plan.parent);
     assert_eq!(fresh.policy_revision, plan.policy_revision + 1);
-    assert_ne!(fresh.apf_anchor, plan.apf_anchor);
-    assert_eq!(
-        decode_anchor(&fresh.apf_anchor).policy_revision,
-        fresh.policy_revision
-    );
-    commit_repair_with(
-        &mut w,
-        &mut root,
-        fresh.clone(),
-        &mut [&mut carol, &mut dave],
-    );
-    assert_eq!(current_anchor_bytes(&mut dave), fresh.apf_anchor);
+
+    // The commit staged under the old plan is still the canonical repair.
+    let accepted = w
+        .submit_repair(ROOT, &staged.parent, &staged.commit)
+        .expect("canonical repair");
+    w.assert_repair_ack_policy(&accepted.ack, fence_revision);
+    let ack = w.verify_ack(&accepted.ack);
+    assert_eq!(ack.policy_revision, fresh.policy_revision);
+    assert!(ack.policy_revision > fence_revision);
+    for member in [&mut root, &mut carol, &mut dave] {
+        member
+            .apply_ack(&staged.commit, &accepted.ack)
+            .expect("apply repair ack");
+        assert_eq!(current_anchor_bytes(member), w.genesis_anchor);
+    }
     open_fence(&mut w, &mut root, &mut dave);
 }
 
@@ -1464,7 +1518,8 @@ fn repair_without_update_path_is_noncanonical() {
     let plan = w.plan(ROOT);
 
     // OpenMLS adds a path without `force_self_update`.
-    raw_repair(&mut root, &["bob"], Some(&plan.apf_anchor), false);
+    let parent_anchor = current_anchor_bytes(&mut root);
+    raw_repair(&mut root, &["bob"], Some(&parent_anchor), false);
     assert!(
         pending_has_path(&mut root),
         "Remove + GroupContextExtensions commit carries an UpdatePath"
@@ -1478,13 +1533,11 @@ fn repair_without_update_path_is_noncanonical() {
     root.discard_pending().expect("discard");
 
     // A repair from the removed member itself (it cannot remove its own leaf).
-    let commit = raw_repair(&mut bob, &[], Some(&plan.apf_anchor), true);
+    let commit = raw_repair(&mut bob, &[], None, true);
     refused_repair(&mut w, "bob", &mut bob, &commit, "noncanonical_commit");
 
     // The honest commit bytes submitted by a non-member and by another member.
-    let staged = root
-        .stage_repair(&plan.removed, &plan.apf_anchor)
-        .expect("stage repair");
+    let staged = root.stage_repair(&plan.removed).expect("stage repair");
     assert!(pending_has_path(&mut root));
     rejected(
         &mut w,

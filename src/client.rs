@@ -40,6 +40,10 @@ pub struct ClientEndpoint<P: OpenMlsProvider> {
     /// The new identity of a staged, unmerged rekey (C-28); it replaces `identity` only
     /// when the matching update ack is applied.
     pending_identity: Option<ClientIdentity>,
+    /// The ack this member last merged or joined under (R-11): its record of the policy
+    /// revision comes from this ledger-signed object. In memory only; `None` after
+    /// `found` and `load` until an ack is applied.
+    last_ack: Option<CanonicalAck>,
 }
 
 /// A commit staged by this member and not yet merged.
@@ -156,6 +160,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             apf_public_key: apf_public_key.to_vec(),
             pending: None,
             pending_identity: None,
+            last_ack: None,
         })
     }
 
@@ -252,6 +257,14 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         if ack.parent != self.frontier()? {
             return Err("binding_mismatch: parent frontier".into());
         }
+        // R-11: the policy revision the member holds never decreases.
+        if self
+            .last_ack
+            .as_ref()
+            .is_some_and(|last| ack.policy_revision < last.policy_revision)
+        {
+            return Err("binding_mismatch: policy revision decreased".into());
+        }
 
         let own = self.pending.as_deref() == Some(commit) && self.group.pending_commit().is_some();
         if own {
@@ -322,7 +335,13 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         // Merging any other canonical commit discards an own staged rekey.
         self.pending = None;
         self.pending_identity = None;
+        self.last_ack = Some(ack);
         self.frontier()
+    }
+
+    /// The canonical ack this member last merged or joined under (R-11), held in memory.
+    pub fn last_ack(&self) -> Option<&CanonicalAck> {
+        self.last_ack.as_ref()
     }
 
     /// Raw OpenMLS access for adversarial tests only; honest code never uses it.
@@ -463,6 +482,7 @@ impl<P: OpenMlsProvider> JoinCandidate<P> {
             apf_public_key: self.apf_public_key,
             pending: None,
             pending_identity: None,
+            last_ack: Some(ack),
         })
     }
 }
@@ -838,23 +858,12 @@ pub struct StagedRepair {
 }
 
 impl<P: OpenMlsProvider> ClientEndpoint<P> {
-    /// Stages, without merging, one commit that removes exactly the leaves of `removed`,
-    /// replaces `apf_anchor` with the planned payload and forces an UpdatePath (C-22).
+    /// Stages, without merging, one commit that removes exactly the leaves of `removed`
+    /// and forces an UpdatePath (C-22, R-11).
     ///
-    /// The plan comes from the APF (C-20), so the committer has no discretion (C-21). The
-    /// client checks only that the planned `apf_anchor` names its pinned APF key and
-    /// group; the sequencer is the gate for everything else.
-    pub fn stage_repair(
-        &mut self,
-        removed: &[String],
-        apf_anchor: &[u8],
-    ) -> Result<StagedRepair, String> {
-        let anchor = ApfAnchor::decode(apf_anchor).map_err(|_| "binding_mismatch: apf_anchor")?;
-        if anchor.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
-            || anchor.group.as_bytes() != self.group.group_id().as_slice()
-        {
-            return Err("binding_mismatch: apf_anchor".into());
-        }
+    /// The plan comes from the APF (C-20), so the committer has no discretion (C-21); the
+    /// sequencer is the gate for everything else.
+    pub fn stage_repair(&mut self, removed: &[String]) -> Result<StagedRepair, String> {
         if removed.contains(&self.subject) {
             return Err("invalid_repair: the committer is removed".into());
         }
@@ -877,39 +886,11 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             }
         }
 
-        // The current GroupContext extensions with exactly the apf_anchor replaced.
-        let mut replaced = 0;
-        let mut extensions = Vec::new();
-        for extension in self
-            .group
-            .public_group()
-            .group_context()
-            .extensions()
-            .iter()
-        {
-            match extension {
-                Extension::Unknown(t, _) if *t == APF_ANCHOR_EXTENSION_TYPE => {
-                    replaced += 1;
-                    extensions.push(Extension::Unknown(
-                        APF_ANCHOR_EXTENSION_TYPE,
-                        UnknownExtension(apf_anchor.to_vec()),
-                    ));
-                }
-                other => extensions.push(other.clone()),
-            }
-        }
-        if replaced != 1 {
-            return Err("binding_mismatch: apf_anchor count".into());
-        }
-        let extensions = Extensions::from_vec(extensions).map_err(mls)?;
-
         let parent = self.frontier()?;
         let bundle = self
             .group
             .commit_builder()
             .propose_removals(indices)
-            .propose_group_context_extensions(extensions)
-            .map_err(mls)?
             .force_self_update(true)
             .load_psks(self.provider.storage())
             .map_err(mls)?
@@ -1124,6 +1105,7 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
             apf_public_key: apf_public_key.to_vec(),
             pending: pending_commit.map(<[u8]>::to_vec),
             pending_identity,
+            last_ack: None,
         })
     }
 }

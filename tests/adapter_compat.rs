@@ -719,11 +719,11 @@ fn leaf_node_extensions_survive_key_package_into_ratchet_tree() {
 }
 
 #[test]
-fn one_commit_carries_removals_gce_and_forced_path() {
-    // Catches an inability to express the repair commit (Remove + new
-    // apf_anchor + UpdatePath) as one commit visible to the sequencer.
-    let anchor_v0 = b"apf_anchor policy_revision=0".to_vec();
-    let anchor_v1 = b"apf_anchor policy_revision=1".to_vec();
+fn one_commit_carries_removals_and_forced_path_with_static_anchor() {
+    // Catches an inability to express the R-11 repair commit (Remove + UpdatePath, no
+    // GroupContextExtensions) as one commit visible to the sequencer, with the
+    // apf_anchor carried into the successor context unchanged.
+    let anchor_v0 = b"apf_anchor genesis".to_vec();
     let mut alice = found_group(
         OpenMlsRustCrypto::default(),
         "alice",
@@ -763,17 +763,11 @@ fn one_commit_carries_removals_gce_and_forced_path() {
     );
 
     let bob_index = bob.index();
-    let new_extensions = Extensions::from_vec(vec![
-        required_capabilities(&[APF_ANCHOR]),
-        unknown(APF_ANCHOR, &anchor_v1),
-    ])
-    .expect("valid GC extensions");
+    let parent_extensions = observer.context().extensions().clone();
     let bundle = alice
         .group
         .commit_builder()
         .propose_removals([bob_index])
-        .propose_group_context_extensions(new_extensions)
-        .expect("propose GCE")
         .force_self_update(true)
         .load_psks(alice.provider.storage())
         .expect("load psks")
@@ -799,8 +793,8 @@ fn one_commit_carries_removals_gce_and_forced_path() {
         .queued_proposals()
         .filter(|p| matches!(p.proposal(), Proposal::GroupContextExtensions(_)))
         .count();
-    assert_eq!(gce_count, 1, "one GroupContextExtensions proposal");
-    assert_eq!(staged.queued_proposals().count(), 2, "no other proposals");
+    assert_eq!(gce_count, 0, "no GroupContextExtensions proposal");
+    assert_eq!(staged.queued_proposals().count(), 1, "no other proposals");
     let path_leaf = staged
         .update_path_leaf_node()
         .expect("forced UpdatePath is present");
@@ -811,9 +805,14 @@ fn one_commit_carries_removals_gce_and_forced_path() {
     );
     let successor = staged.group_context().clone();
     assert_eq!(
+        successor.extensions(),
+        &parent_extensions,
+        "successor context carries the parent extensions byte for byte"
+    );
+    assert_eq!(
         successor.extensions().unknown(APF_ANCHOR),
-        Some(&UnknownExtension(anchor_v1.clone())),
-        "successor context carries the new apf_anchor"
+        Some(&UnknownExtension(anchor_v0.clone())),
+        "successor context carries the genesis apf_anchor"
     );
     assert_eq!(
         successor

@@ -1,0 +1,52 @@
+# R-11 (D-11) policy binding into the canonical ack — GREEN
+# date: 2026-10-25T18:26:28Z
+# source revision: c7af9976a3644bde48c9771eb1161fb776007739 + uncommitted R-11 implementation (C-44, A-4)
+# toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+
+## command: cargo test -q --test adapter_admission
+exit: 0
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+## command: cargo test -q --test adapter_compat
+exit: 0
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+## command: cargo test -q --test adapter_entropy
+exit: 0
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+## command: cargo test -q --test adapter_rekey
+exit: 0
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.62s
+
+## command: cargo test -q --test adapter_recovery
+exit: 0
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.40s
+
+## command: cargo test -q --test adapter_release
+exit: 0
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.57s
+
+## command: cargo test -q --test adapter_repair
+exit: 0
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.36s
+
+## command: cargo test -q --test adapter_repair_stacked
+exit: 0
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.87s
+
+## command: cargo test -q --test lab_durable
+exit: 0
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+## command: python3 scripts/verify.py
+exit: 0
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (183 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+
+## command: cargo fmt --check && cargo clippy --all-targets -q
+exit: 0 (clippy output lines: 0)

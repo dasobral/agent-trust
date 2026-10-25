@@ -22,7 +22,10 @@ code's names to the ones used here.
   table for concepts, results and identifiers.
 - `notes/alignment-2026-10-25.md`: the review of this folder against the code,
   with the term mapping between the paper, the contracts and `src/`.
-- `R-11-proposal.md`: a draft contract correction that aligns the code with the analyzed construction. Approved as D-11 and merged into the adapter contract; implementation is pending.
+- `notes/ml-dsa-suf.tex`, `.pdf`: strong unforgeability of deterministic ML-DSA-44, carrying out footnote 2 of the corrected Fiat–Shamir-with-aborts proof, with the implementation's hint checks.
+- `notes/etk-full-check.md`: the check of ETK's full version (v2.0) against the construction and the coalition.
+- `notes/etk-qrom.tex`, `.pdf`: what a quantum version of ETK's theorem needs; a conjecture and five checks.
+- `R-11-proposal.md`: the contract correction that aligns the code with the analyzed construction. Approved as D-11, merged into the adapter contract, and implemented on 25 October 2026 (C-44).
 
 ## Reproduce
 
@@ -50,14 +53,14 @@ The run takes under a minute.
 | Lemma 1 (fence), Lemma 2 (roster inclusion) | Proved by hand, by induction over ledger steps. Checked exhaustively within bounds. |
 | Theorem 1 (factorization: read concordance) | Symbolic: proved, given K1–K5. Computational: proved for the construction, given Proposition 3 and its open items. |
 | Key confinement, symbolic (Proposition 2) | Corollary of the machine-checked TreeKEM DY\* theorem (Wallez thesis Sec. 6.4.3, IEEE S&P 2025). The 10-case match is in Appendix A. |
-| Key confinement, computational (Proposition 3; the Third Edition's `Bridge_remove^ETK`) | **Conditional.** Derived from ETK Theorem 1 under K1–K5, through ETK's `safe` predicate (Fig. 7 there). Three items are open: R-11 is not implemented, so the result covers the construction but not the code's repair commit; ETK was matched against its conference text, not its full proof; and for the post-quantum suite, the strong case of the corrected ML-DSA proof is unchecked and ETK's proof holds against classical adversaries only. |
+| Key confinement, computational (Proposition 3; the Third Edition's `Bridge_remove^ETK`) | **Conditional.** Derived from ETK Theorem 1 under K1–K5, and checked against ETK's full version (v2.0): its statement, predicates, corruption interfaces and proof structure ([record](notes/etk-full-check.md)). Two items are open: R-11 is not implemented, so the result covers the construction but not the code's repair commit; and ETK's proof holds against classical adversaries only, so with the post-quantum suite the result is classical (the quantum version is a conjecture with five checks, [`etk-qrom`](notes/etk-qrom.tex)). The strong unforgeability of ML-DSA-44 that ETK needs is written out as a reduction, not mechanized ([`ml-dsa-suf`](notes/ml-dsa-suf.tex)). |
 | Theorem 2 (write concordance, for writes, admin and admit) | Proved, given atomic ledger, signature unforgeability and collision resistance. |
 | Delegation, invocation, cascading revocation | Follows from the locality property, Eq. (2). Checked within bounds. |
 | Proposition 4 (progress) | Proved under stated assumptions. Enabledness of repair is checked within bounds. |
 | Proposition 1 (no-go for oblivious composition) | Constructive counterexample. |
 | Proposition 5 (no-go for offline release) | Elementary indistinguishability argument. |
-| Code versus construction | **Pending R-11.** The repair commit in the code still carries a GroupContextExtensions proposal, which ETK does not model. [`R-11-proposal.md`](R-11-proposal.md) moves the binding into the canonical acknowledgement and was approved as D-11 and merged into the adapter contract. Its implementation is pending. The symbolic result already covers the code. |
-| ETK proof scope | I matched the conference text of ETK, not the full version's Appendix J. Extending ETK to group-context changes is a possible topic for ETK's authors; it is not pursued here. |
+| Code versus construction | **Aligned (R-11, implemented 2026-10-25).** No commit carries a GroupContextExtensions proposal, and the sequencer rejects one. Every commit the system produces is an operation ETK models: admission adds, repair removes with a path, rekey is an empty commit with a path under a new signature key. The policy binding is in the APF-signed canonical acknowledgement ([`R-11-proposal.md`](R-11-proposal.md), adapter contract §4.6, C-44). Evidence: `evidence/r11-red.txt`, `evidence/r11-green.txt`. The symbolic result already covered the code. |
+| ETK proof scope | Checked against the full version (v2.0, ePrint 2025/229): Theorem 1, Fig. 7, Fig. 15, Appendices B.4, C, E and the structure of J. The coalition is a legal environment and every coalition-free epoch is `safe` ([`notes/etk-full-check.md`](notes/etk-full-check.md)). Not every case of Appendix J was re-verified. The only classical-only step of the proof is three query-history searches in J.2 ([`notes/etk-qrom.tex`](notes/etk-qrom.tex)). Extending ETK to group-context changes is a topic for its authors. |
 | Mechanized proofs | None yet. The model checker is evidence within bounds, not a proof. |
 
 ## Repair ledger against the Third Edition

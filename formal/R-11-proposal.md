@@ -2,7 +2,7 @@
 
 > C-43 (25 October 2026) renamed `acc_context` to `apf_anchor` and `AccContext` to `ApfAnchor`. The text below keeps the approved wording.
 
-Status: **approved by Daniel on 23 October 2026 (D-11)**: "I approve D-11: R-11 as proposed in formal/R-11-proposal.md, to be merged into docs/adapter-contract.md and implemented test-first after the current phase." Merged into `docs/adapter-contract.md` (§10 and §13) by the adapter session; implementation is pending.
+Status: **approved by Daniel on 23 October 2026 (D-11)**: "I approve D-11: R-11 as proposed in formal/R-11-proposal.md, to be merged into docs/adapter-contract.md and implemented test-first after the current phase." Merged into `docs/adapter-contract.md` (§10 and §13) by the adapter session. Implemented test-first on 25 October 2026 (C-44, amendment A-4; `evidence/r11-red.txt`, `evidence/r11-green.txt`).
 After approval, the coordinator copies the R-11 row into §10 of
 `docs/adapter-contract.md` and the D-11 entry into §13. Schedule it after
 the phase now in progress.

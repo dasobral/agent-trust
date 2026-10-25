@@ -21,8 +21,10 @@ pub const APF_ANCHOR_EXTENSION_TYPE: u16 = 0xf043;
 /// LeafNode extension `authz_incarnation` (§4.3).
 pub const AUTHZ_INCARNATION_EXTENSION_TYPE: u16 = 0xf044;
 
-/// Version byte of `apf_anchor` and `authz_incarnation`.
+/// Version byte of `authz_incarnation`.
 const STRUCT_VERSION: u8 = 1;
+/// Version byte of the static `apf_anchor` (R-11).
+pub const ANCHOR_VERSION: u8 = 2;
 /// Length of the QUIC-style two-byte prefix of a signature `opaque<V>`: 64-byte Ed25519
 /// signatures (`0x40 0x40`) and 2420-byte ML-DSA-44 signatures (`0x49 0x74`) both use the
 /// two-byte form (C-9, C-42).
@@ -107,15 +109,13 @@ impl Frontier {
     }
 }
 
-/// `apf_anchor` GroupContext extension payload (§4.2).
+/// `apf_anchor` GroupContext extension payload (§4.2, R-11): a constant genesis binding
+/// that names the APF key and the group. No commit changes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApfAnchor {
     pub version: u8,
     pub apf_key_id: Vec<u8>,
     pub group: String,
-    pub policy_revision: u64,
-    /// SHA-256 bytes (not hex) of the kernel policy snapshot.
-    pub policy_digest: Vec<u8>,
 }
 
 impl ApfAnchor {
@@ -124,24 +124,20 @@ impl ApfAnchor {
         w.u8(self.version);
         w.opaque(&self.apf_key_id)?;
         w.opaque(self.group.as_bytes())?;
-        w.u64(self.policy_revision)?;
-        w.opaque(&self.policy_digest)?;
         Ok(w.finish())
     }
 
-    /// Decodes exactly one well-formed version-1 payload.
+    /// Decodes exactly one well-formed version-2 payload.
     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
         let mut r = Reader::new(bytes);
         let version = r.u8()?;
-        if version != STRUCT_VERSION {
+        if version != ANCHOR_VERSION {
             return Err("malformed: apf_anchor version".into());
         }
         let anchor = Self {
             version,
             apf_key_id: r.opaque()?,
             group: r.string()?,
-            policy_revision: r.u64()?,
-            policy_digest: r.opaque()?,
         };
         r.finish()?;
         Ok(anchor)
@@ -239,6 +235,10 @@ pub struct CanonicalAck {
     /// SHA-256 of the exact commit `MlsMessage` bytes.
     pub commit_hash: Vec<u8>,
     pub kind: AckKind,
+    /// Kernel policy revision at the canonical step (R-11).
+    pub policy_revision: u64,
+    /// SHA-256 bytes (not hex) of the kernel policy snapshot at that revision (R-11).
+    pub policy_digest: Vec<u8>,
 }
 
 /// A TBS structure that is signed as `struct { tbs; opaque signature<V>; }`.
@@ -400,6 +400,8 @@ impl SignedStructure for CanonicalAck {
         w.opaque(self.successor.branch.as_bytes())?;
         w.opaque(&self.commit_hash)?;
         w.u8(self.kind as u8);
+        w.u64(self.policy_revision)?;
+        w.opaque(&self.policy_digest)?;
         Ok(w.finish())
     }
 
@@ -418,6 +420,8 @@ impl SignedStructure for CanonicalAck {
         };
         let commit_hash = r.opaque()?;
         let kind = AckKind::from_code(r.u8()?).ok_or("malformed: ack kind")?;
+        let policy_revision = r.u64()?;
+        let policy_digest = r.opaque()?;
         r.finish()?;
         Ok(Self {
             apf_key_id,
@@ -426,6 +430,8 @@ impl SignedStructure for CanonicalAck {
             successor,
             commit_hash,
             kind,
+            policy_revision,
+            policy_digest,
         })
     }
 }

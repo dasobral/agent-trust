@@ -360,7 +360,6 @@ struct Accepted {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Plan {
     removed: Vec<String>,
-    apf_anchor: Vec<u8>,
     parent: Frontier,
 }
 
@@ -715,12 +714,6 @@ impl World {
                 .iter()
                 .map(|name| name.as_str().expect("removed name").to_owned())
                 .collect(),
-            apf_anchor: hex::decode(
-                response["apf_anchor"]
-                    .as_str()
-                    .expect("apf_anchor hex string"),
-            )
-            .expect("apf_anchor is hex"),
             parent: Frontier {
                 epoch: response["parent_epoch"].as_u64().expect("parent_epoch"),
                 branch: response["parent_branch"]
@@ -988,6 +981,14 @@ fn rekey(
     assert_eq!(ack.parent, parent);
     assert_eq!(ack.successor, accepted.frontier);
     assert_eq!(ack.commit_hash, sha256(&staged.commit));
+    // R-11 (c): the update ack carries the kernel policy after the rekey.
+    let checkpoint = w.checkpoint();
+    assert_eq!(ack.policy_revision, policy_revision + 1);
+    assert_eq!(json!(ack.policy_revision), checkpoint["policy_revision"]);
+    assert_eq!(
+        json!(lower_hex(&ack.policy_digest)),
+        checkpoint["policy_digest"]
+    );
 
     assert_eq!(
         member
@@ -1079,7 +1080,7 @@ fn commit_repair(w: &mut World, committer: &mut Client, others: &mut [&mut Clien
     let actor = committer.subject().to_owned();
     let plan = w.plan(&actor);
     let staged = committer
-        .stage_repair(&plan.removed, &plan.apf_anchor)
+        .stage_repair(&plan.removed)
         .unwrap_or_else(|err| panic!("{actor} stages the planned repair, got {err}"));
     assert_eq!(staged.parent, plan.parent, "staged on the planned parent");
     let response = w

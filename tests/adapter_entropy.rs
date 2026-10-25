@@ -821,10 +821,8 @@ fn repair<P: OpenMlsProvider>(
         .map(|name| name.as_str().expect("removed name").to_owned())
         .collect();
     assert_eq!(planned, removed);
-    let apf_anchor =
-        hex::decode(plan["apf_anchor"].as_str().expect("apf_anchor hex")).expect("anchor hex");
     let staged = committer
-        .stage_repair(&planned, &apf_anchor)
+        .stage_repair(&planned)
         .expect("stage the planned repair");
     let (frontier, ack) = w.submit(&actor, "repair", &staged.parent, &staged.commit);
     for member in [&mut *committer, &mut *confirmer] {
@@ -1150,15 +1148,12 @@ fn failing_rand_fails_closed_without_kernel_mutation() {
     w.revoke("carol", "read");
     let before = w.snapshot();
     root_mls.set_failing(true);
-    let plan = w.ok(ROOT, &json!({"command":"repair_plan"}));
+    w.ok(ROOT, &json!({"command":"repair_plan"}));
     let after_plan = w.snapshot();
-    let apf_anchor =
-        hex::decode(plan["apf_anchor"].as_str().expect("apf_anchor hex")).expect("anchor hex");
     let refused = root_mls.refused();
     let err = fails(
         "stage_repair",
-        root.stage_repair(&["carol".to_owned()], &apf_anchor)
-            .map(|_| ()),
+        root.stage_repair(&["carol".to_owned()]).map(|_| ()),
     );
     assert!(
         root_mls.refused() > refused,

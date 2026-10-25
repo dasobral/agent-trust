@@ -1,0 +1,91 @@
+# R-11 (D-11) policy binding into the canonical ack — RED (interface stub)
+# date: 2026-10-25T18:13:54Z
+# source revision: c7af9976a3644bde48c9771eb1161fb776007739 + uncommitted R-11 tests and interface stub
+# toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+# stub: ApfAnchor and CanonicalAck carry the R-11 fields; acks are signed with policy_revision 0 and an empty
+#   digest; stage_repair still adds a GroupContextExtensions proposal that repeats the parent extensions;
+#   the sequencer still requires exactly one such proposal; ClientEndpoint::last_ack() returns None.
+# every failure below is an assertion or an expected-rejection failure; nothing fails to build.
+# after this run, the canonical part of the new test repair_with_group_context_extensions_is_noncanonical was
+#   changed from a raw Remove-only commit (which the committer cannot merge through apply_ack) to the honest
+#   stage_repair path; its red failure above is the earlier expected rejection, which the change does not touch.
+
+## command: cargo test -q --test adapter_admission
+exit: 101
+test result: FAILED. 10 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
+FAILED admitted_frontier_matches_kernel_branch_at_every_member
+FAILED client_refuses_commit_without_matching_canonical_ack
+      1 assertion `left == right` failed
+      1 assertion `left == right` failed: the committer stores its ack
+
+## command: cargo test -q --test adapter_compat
+exit: 0
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+## command: cargo test -q --test adapter_entropy
+exit: 0
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.80s
+
+## command: cargo test -q --test adapter_rekey
+exit: 101
+test result: FAILED. 1 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.21s
+FAILED old_key_no_longer_authenticates_after_rekey
+FAILED update_commit_without_offer_is_unauthorized
+FAILED update_commit_with_proposals_is_noncanonical
+FAILED update_commit_reusing_old_signature_key_is_noncanonical
+FAILED rekey_while_fenced_is_read_fenced
+FAILED reauthorized_writer_requires_update_with_new_signer
+FAILED new_right_for_current_member_via_rekey
+      7 assertion `left == right` failed
+
+## command: cargo test -q --test adapter_recovery
+exit: 101
+test result: FAILED. 0 passed; 14 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+FAILED b6_crash_after_stage_before_ack_never_merges
+FAILED b3_crash_after_persist_reemits_identical_bytes
+FAILED adapter_restart_reloads_sequencer_certificates_and_request_sequences
+FAILED b7_crash_after_ack_before_merge_stays_locally_fenced_until_exact_merge
+FAILED rekey_identity_survives_client_restart
+FAILED crash_before_kernel_discards_intent
+FAILED b2_crash_after_release_before_persist_abandons_permanently
+FAILED b1_crash_after_allocate_allows_release_after_restart
+FAILED b8_client_storage_rollback_is_unready_until_exact_frontier
+FAILED b4_crash_after_decrypt_before_consume_never_delivers
+FAILED b5_crash_after_consume_rejects_replay
+FAILED kernel_ahead_of_store_recovers_on_open
+FAILED kernel_ahead_of_sequencer_recovers_on_open
+FAILED interrupted_genesis_can_restart
+     14 assertion `left == right` failed: the independent ack rebuild matches an issued ack
+
+## command: cargo test -q --test adapter_release
+exit: 0
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.57s
+
+## command: cargo test -q --test adapter_repair
+exit: 101
+test result: FAILED. 4 passed; 11 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+FAILED offline_client_stays_locally_fenced_without_blocking_others
+FAILED inconsistent_confirmation_hash_keeps_fence_closed
+FAILED repair_with_group_context_extensions_is_noncanonical
+FAILED reallowed_reader_rejoins_only_with_new_generation_key_package
+FAILED repair_ack_carries_the_kernel_policy_at_the_canonical_step
+FAILED repair_removing_a_continuing_reader_is_noncanonical
+FAILED continuing_members_send_and_deliver_after_repair
+FAILED repair_missing_one_revoked_reader_is_noncanonical
+FAILED removed_endpoint_storage_copy_cannot_decrypt_successor_traffic
+FAILED canonical_repair_stays_fenced_until_confirmation
+FAILED read_revocation_fences_release_until_confirmed_repair
+      1 assertion `left == right` failed
+      1 assertion `left == right` failed: ack policy_revision is the kernel's
+      8 assertion `left == right` failed: R-11 (b): the honest repair carries no GroupContextExtensions proposal
+      1 request should be rejected with noncanonical_commit
+
+## command: cargo test -q --test adapter_repair_stacked
+exit: 101
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.79s
+FAILED stacked_repair_after_revocation_during_pending_repair_reopens_after_latest_confirmation
+      1 assertion `left == right` failed
+
+## command: cargo test -q --test lab_durable
+exit: 0
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s

@@ -82,17 +82,15 @@ The kernel stores the frontier as `(epoch, branch)`. A 64-character hex string f
 
 ```text
 struct {
-  uint8  version = 1;
+  uint8  version = 2;
   opaque apf_key_id<V>;
   opaque group<V>;            // kernel group identifier
-  uint64 policy_revision;     // R-3
-  opaque policy_digest<V>;    // R-3, SHA-256 of the kernel policy snapshot
-} ApfAnchor;
+} ApfAnchor;                  // R-11: static, set at genesis
 ```
 
 - The group MUST be created with exactly one `apf_anchor` and MUST list `0xf043` in `required_capabilities`. Every member and every KeyPackage then has to declare support.
-- After every canonical commit, the successor `GroupContext` MUST contain exactly one well-formed `apf_anchor` with the configured `apf_key_id` and `group`. Its `policy_revision` MUST NOT decrease.
-- A repair commit (§5.4) MUST carry a GroupContextExtensions proposal that sets `policy_revision ≥ fence_revision` (the policy revision of the read denial that closed the fence). `policy_digest` MUST equal the kernel digest at that revision.
+- Every successor `GroupContext` MUST contain the genesis `apf_anchor`, byte for byte (R-11). No commit carries a GroupContextExtensions proposal.
+- The policy binding is in the canonical ack (§4.6). Before R-11, version 1 of this struct also carried `policy_revision` and `policy_digest`, and a repair commit rewrote them.
 - OpenMLS preserves unknown extension bytes but does not interpret them. Every rule above is an adapter check.
 
 ### 4.3 `authz_incarnation` (LeafNode extension, proposed type `0xf044`)
@@ -159,10 +157,14 @@ struct {
   uint64 epoch; opaque branch<V>;
   opaque commit_hash<V>;            // SHA-256 of the exact commit MlsMessage bytes
   uint8  kind;                      // admit=1 repair=2 update=3
+  uint64 policy_revision;           // R-11: kernel policy revision at the canonical step
+  opaque policy_digest<V>;          // R-11: SHA-256 bytes of the kernel policy at that revision
 } CanonicalAckTBS;
 ```
 
 A client MUST merge a commit only if it holds a valid canonical ack for those exact commit bytes, its own parent frontier equals `parent_*`, and its computed successor frontier equals `(epoch, branch)`. Otherwise the client discards the commit and stays at its parent frontier. Within the trusted-authority profile, this is the parent compare-and-swap: at most one successor per parent.
+
+R-11: the APF sets `policy_revision` and `policy_digest` from the kernel after the commit's kernel step. For `kind` = repair, `policy_revision ≥ fence_revision`, and `policy_digest` is the kernel digest at that revision. A client stores the ack it merged or joined under, so its record of the policy revision comes from a ledger-signed object. It refuses an ack whose `policy_revision` is below the stored ack's (`binding_mismatch`).
 
 ### 4.7 Repair confirmation
 
@@ -240,7 +242,7 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
 - **C-8, two constructors.**
   - `Adapter::create` (phase 4.1) stays a policy-only adapter with no MLS group. On it, `admission_certificate` and `submit_commit` are `uninitialized: no group`.
   - The full adapter comes from `Adapter::begin_genesis`, which returns a `GenesisPending`, followed by `GenesisPending::complete`. `begin_genesis` writes no file: it refuses an existing file as `create` does, draws the APF seed, and computes the founder certificate and the genesis `apf_anchor`.
-  - `policy_digest` comes from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel `policy_digest` equals the digest in `apf_anchor`. On any failure nothing remains.
+  - The root's rights and the genesis `policy_digest` come from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel's `policy_revision` and `policy_digest` equal the in-memory kernel's (R-11: no longer through `apf_anchor`, which carries no policy). On any failure nothing remains.
   - `Adapter::open` reloads either kind.
 - **C-9, encodings** (`src/wire.rs`; signature length amended by C-42).
   - Every structure in §4.1–§4.6 is encoded with the TLS presentation language: `VLBytes` for each `opaque<V>`, big-endian fixed-width integers, and a vector of structs as a `VLBytes` of their concatenation.
@@ -351,21 +353,20 @@ These fill in §4.5 and §5.3 for plan phase 4.3. C-15 adds a signed consume rec
 These fill in §4.7, §5.4 and the read part of §5.5 for plan phase 4.4a. Non-read re-authorization of a current member (§5.5, the second bullet) waits for phase 4.4b and the open correction R-10 (D-9). C-21 and C-25 are flagged to Daniel.
 
 - **C-20, repair plan.** `repair_plan {}` is a routed request that any current roster member may send.
-  - When the kernel is read-fenced and no repair is pending, it returns `{removed, apf_anchor, policy_revision, parent_epoch, parent_branch}`.
+  - When the kernel is read-fenced and no repair is pending, it returns `{removed, policy_revision, parent_epoch, parent_branch}` (R-11 removed the `apf_anchor` field).
     - `removed` is the sorted list of roster members whose read grant is inactive.
-    - `apf_anchor` is the hex payload `{1, apf_key_id, group, current policy_revision, current policy_digest}`.
   - Otherwise it is `invalid_repair`.
 - **C-21, repair committer.** Any continuing member may commit the repair: a roster member that is not in `removed`. The commit's content is fixed exactly by the APF plan, so the committer has no discretion. This replaces "designated", which the specification leaves unspecified.
 - **C-22, sequencer checks for `submit_commit {kind: "repair", parent_epoch, parent_branch, commit}`**, in this order. Failures at steps 1–5 leave the sequencer and the kernel unchanged.
   1. Without a group, the result is `uninitialized`. If the parent differs from the kernel frontier, it is `stale_frontier`. If the kernel is not fenced or a repair is already pending, it is `invalid_repair`.
   2. The commit must be a `PublicMessage` that `PublicGroup::process_message` accepts.
   3. The sender must be the actor's leaf with its registered key, and the actor must be a continuing member.
-  4. The commit must contain exactly one Remove for each leaf whose credential is in `removed`, no other Remove, exactly one GroupContextExtensions proposal, no other proposal, and an UpdatePath.
-  5. The successor `GroupContext` extensions must equal the parent's, with `apf_anchor` replaced by exactly the planned bytes.
+  4. The commit must contain exactly one Remove for each leaf whose credential is in `removed`, no other Remove, no other proposal (R-11: a GroupContextExtensions proposal included), and an UpdatePath.
+  5. The successor `GroupContext` extensions must equal the parent's (R-11).
 
   Failures at steps 2–5 are `noncanonical_commit`.
   6. The adapter calls kernel `repair_stage` with the successor frontier, the current `policy_revision`, `removed`, `update_path: true` (proven in step 4) and `durable: true`. Kernel errors pass through.
-  7. The sequencer merges. The adapter records the pending repair with its committer, signs an ack with `kind` = repair, and returns `{epoch, branch, ack}`.
+  7. The sequencer merges. The adapter records the pending repair with its committer, signs an ack with `kind` = repair and the kernel policy (§4.6, R-11), and returns `{epoch, branch, ack}`.
 - **C-23, confirmation.** `ConfirmationTBS` (§4.7) is `{ opaque label<V>; opaque group<V>; uint64 epoch; opaque branch<V>; opaque epoch_authenticator_hash<V>; }`.
   - It is signed with the member's registered key. The branch is ASCII hex.
   - `epoch_authenticator_hash = SHA-256(label ‖ branch ‖ epoch_authenticator)`, a plain concatenation with the branch as ASCII hex.
@@ -488,12 +489,13 @@ A pre-cut release whose envelope arrives after a denial is still a valid release
 1. `revoke(read)` on a roster reader or an affected descendant closes the central fence. The adapter records `fence_revision = policy_revision` after the revoke.
 2. **Designated continuing repair member R:** builds one commit through `CommitBuilder` with:
    - `propose_removals` for the exact leaves of every reader the kernel reports as removed;
-   - `propose_group_context_extensions` (fork `openmls/src/group/mls_group/commit_builder.rs:316`) with the new `apf_anchor`;
    - `force_self_update(true)`.
 
+   R-11 removed the GroupContextExtensions proposal that rewrote `apf_anchor`.
+
    R stages it and submits it.
-3. **Sequencer:** checks that the sender is R, the Remove set equals the kernel's required set exactly (no more, no less), an UpdatePath is present (`update_path_leaf_node`, fork `openmls/src/group/public_group/staged_commit.rs:39`), and the `apf_anchor` satisfies §4.2. It computes the successor frontier.
-4. **Kernel, canonical step:** the repair commit becomes canonical under CAS, but the central fence stays closed. This needs R-1/R-3 changes to `repair`, or a two-step `repair` (stage then open; open decision D-3). The adapter persists the sequencer and signs the canonical ack.
+3. **Sequencer:** checks that the sender is R, the Remove set equals the kernel's required set exactly (no more, no less), no other proposal is present, an UpdatePath is present (`update_path_leaf_node`, fork `openmls/src/group/public_group/staged_commit.rs:39`), and the successor still holds the genesis `apf_anchor` (§4.2). It computes the successor frontier.
+4. **Kernel, canonical step:** the repair commit becomes canonical under CAS, but the central fence stays closed. This needs R-1/R-3 changes to `repair`, or a two-step `repair` (stage then open; open decision D-3). The adapter persists the sequencer and signs the canonical ack, which carries the kernel policy with `policy_revision ≥ fence_revision` (§4.6, R-11).
 5. **Confirmation step:** a designated continuing member C ≠ R processes the acked commit and sends a confirmation (§4.7). R reports its own `epoch_authenticator_hash`. The adapter requires the two hashes to be equal and both signatures to be valid. Only then does the kernel open the central fence. The kernel's `update_path`, `confirmed` and `durable` inputs are set from these checked facts and from the adapter's durable write. If only one member continues, R alone confirms. The trace records this weaker evidence explicitly.
 6. **Clients:** every other client stays locally fenced until it merges the acked commit and durably saves its storage. An offline client does not block the central transition.
 
@@ -750,9 +752,29 @@ Amendment A-3 (coordinator, 2026-10-23, with D-9): `tests/adapter_repair.rs` tes
 - Why: the formal companion derives key confinement from the ETK theorem for RFC 9420. ETK does not model GroupContextExtensions proposals, and no proof uses the group-context binding.
 - What is given up: MLS's confirmation tag no longer covers the policy revision. Members learn it from the APF-signed ack, which is already the source of truth for the parent compare-and-swap.
 - Effect on existing tests: assertions that read `policy_revision` or `policy_digest` from `apf_anchor`, or that expect a GroupContextExtensions proposal in a repair commit, are rewritten by their test authors against the ack, under a recorded amendment. The affected suites are `adapter_admission`, `adapter_compat`, `adapter_entropy`, `adapter_rekey`, `adapter_recovery`, `adapter_release`, `adapter_repair` and `adapter_repair_stacked`.
-- It is implemented test-first after the current phase (4.5 and 4.7b). It is not yet implemented.
+- **Implemented 2026-10-25 (C-44, amendment A-4).** Red: `evidence/r11-red.txt`. Green: `evidence/r11-green.txt`.
 
-**R-12 (proposed 2026-10-25, D-16 requested): delegation expiry becomes a ledger event.** Source: `formal/notes/alignment-2026-10-25.md` A-5. Today `expires_at` is evaluated at each request's `now` (`src/authority.rs:1198`, `src/adapter.rs:2078`), so expiry never runs `revoke` and never closes the fence. The formal companion predicts the consequence: an expired delegated reader in the roster makes every release fail (safe), but no repair can remove it, because `repair_stage` needs a closed fence, so the group makes no progress until an admin revokes the reader. No test has run this yet.
+Amendment A-4 (coordinator, 2026-10-25, with D-11): test assertions rewritten against the ack. No assertion is dropped without a replacement; every change follows from R-11 (a)–(c).
+- Independent decoders: `TestAnchor` in `adapter_admission` and `adapter_repair` decodes `{2, apf_key_id, group}`; `adapter_repair_stacked` no longer decodes the anchor; `ack_tbs` in `adapter_recovery` appends the two policy fields, and `rebuild_ack` reads them from the kernel right after the step.
+- Plans: the `Plan` helpers in `adapter_repair`, `adapter_repair_stacked`, `adapter_rekey` and `adapter_recovery`, and the plan reads in `adapter_entropy`, drop `apf_anchor`; `adapter_repair` asserts the exact C-20 field set. Every `stage_repair(removed, anchor)` call becomes `stage_repair(removed)`.
+- `adapter_admission::genesis_group_carries_apf_anchor_and_required_capabilities`: the anchor is `{2, apf_key_id, group}`; the policy assertions on the anchor are removed (the genesis policy check stays in `complete`, C-8).
+- `adapter_admission::genesis_kernel_branch_is_hash_of_real_group_context`, case `wrong-anchor`: no second well-formed anchor exists for one key and group, so the case uses the version-1 policy payload, which `found` refuses before any file is written.
+- `adapter_admission::commit_with_unexpected_extra_proposal_is_noncanonical`: the changed anchor differs in `apf_key_id` instead of `policy_revision`.
+- `adapter_repair::read_revocation_fences_release_until_confirmed_repair`: the plan's anchor assertion becomes the exact repair ack with `policy_revision` and `policy_digest`; members hold the genesis anchor after the repair.
+- `adapter_repair::repair_missing_one_revoked_reader_is_noncanonical` and `repair_removing_a_continuing_reader_is_noncanonical`: the wrong Remove sets are submitted without an extensions proposal, so the refusal is due to the Remove set alone.
+- `adapter_repair::repair_without_apf_anchor_update_is_noncanonical` is inverted into `repair_with_group_context_extensions_is_noncanonical`: an extensions proposal that repeats the parent extensions, and one that carries the version-1 policy anchor, are both `noncanonical_commit`; the Remove-only repair is canonical and keeps the genesis anchor.
+- `adapter_repair::repair_with_policy_revision_older_than_fence_is_noncanonical` becomes `repair_ack_carries_the_kernel_policy_at_the_canonical_step`. A commit can no longer carry a revision below the fence, so that case has no test input. A plan is stale only through its Remove set and parent: a commit staged before a further grant stays canonical, and its ack carries the newer kernel revision, above the fence.
+- `adapter_repair::repair_without_update_path_is_noncanonical`: the OpenMLS path fact is checked with an extensions proposal that repeats the parent extensions; bob's own repair is submitted without one.
+- `adapter_compat::one_commit_carries_removals_gce_and_forced_path` becomes `one_commit_carries_removals_and_forced_path_with_static_anchor`: one Remove, no extensions proposal, a forced path, and successor extensions equal to the parent's.
+- Added: the repair helper checks every honest repair for no extensions proposal and an ack with the kernel policy at or above the fence; `adapter_admission` and `adapter_rekey` check the policy fields of admit and update acks; `adapter_repair_stacked` checks them on the stacked ack; `client_refuses_commit_without_matching_canonical_ack` checks the stored ack and refuses an ack whose revision is below it.
+
+**C-44, resolved while implementing R-11.**
+- `CANONICAL_LABEL` stays `agent-trust/canonical/v1`; the struct appends the two fields as R-11 states, and an ack in the earlier encoding no longer decodes. `policy_digest` travels as the 32 raw SHA-256 bytes, as it did in the version-1 anchor.
+- `ApfAnchor::decode` accepts version 2 only. `authz_incarnation` stays at version 1.
+- `ClientEndpoint::stage_repair(removed)` takes no anchor. `ClientEndpoint::last_ack()` returns the ack stored in memory; it is `None` after `found` and `load` until an ack is applied, and a joiner stores the Welcome's ack.
+- The repair plan response drops `apf_anchor`. Consumers that read it (the testbed's lab client) follow when their pin moves.
+
+**R-12 (approved 2026-10-25, D-16): delegation expiry becomes a ledger event.** Source: `formal/notes/alignment-2026-10-25.md` A-5. Today `expires_at` is evaluated at each request's `now` (`src/authority.rs:1198`, `src/adapter.rs:2078`), so expiry never runs `revoke` and never closes the fence. The formal companion predicts the consequence: an expired delegated reader in the roster makes every release fail (safe), but no repair can remove it, because `repair_stage` needs a closed fence, so the group makes no progress until an admin revokes the reader. No test has run this yet.
 - Proposal: at the first kernel step whose `now` is at or after a delegation's `expires_at`, the kernel records a revocation of that delegation, with the descendant cascade and the fence rule of `revoke`, in the same transaction as the step. This restores Eq. (2) of the paper (every change of authorization is a ledger event).
 - Test first: a red test that lets a delegated reader expire and shows that no repair can be staged; then the fix.
 
@@ -798,13 +820,13 @@ Even then, the README states that computational key confinement (`formal/`, Prop
 - **D-11 (approved 2026-10-23): R-11, the policy binding moves into the canonical ack.**
   - The approval was relayed by the formalization review session, quoting Daniel: "I approve D-11: R-11 as proposed in formal/R-11-proposal.md, to be merged into docs/adapter-contract.md and implemented test-first after the current phase."
   - The coordinator asks Daniel to confirm before implementation starts, because the relay came from outside the adapter's session group.
-  - It is scheduled after phases 4.5 and 4.7b.
+  - Confirmed 2026-10-25: Daniel restated "R-11 … is approved but not yet implemented" as the next code fix, and the coordinator implemented it test-first (C-44, A-4).
 - **D-10 (approved 2026-10-23, option 1): stacked repair.**
   - The approval was relayed by the parent session, quoting Daniel: "I approve D-10 option 1: allow a stacked repair, confirm only the latest. Forward it to the adapter session to implement test-first."
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.
   - The fix: a plan and a repair commit may now stack on a pending repair (C-27), and only the latest pending repair can be confirmed. It needs no kernel change, because `repair_stage` already stacks and `repair_open` requires the latest pending branch.
 - **D-8 (approved 2026-10-23):** R-9, with amendment A-2. The approval was relayed by the parent session, quoting Daniel: "I approve R-9 (D-8). Forward it to the adapter session to implement test-first."
-- **D-16 (requested 2026-10-25): approve R-12, delegation expiry as a ledger event (§10).**
+- **D-16 (approved 2026-10-25 by Daniel): R-12, delegation expiry as a ledger event (§10).** Asked whether to approve R-12 as written in §10, Daniel chose "Approve R-12 as proposed". It is implemented test-first after R-11.
 - **D-15 (approved 2026-10-25 by Daniel): may–can concordance.** In the formal review session Daniel chose "Concordance" as the name that replaces authorization–capability coherence, "Everything, code included" as the scope of the rename, and "Research and cite" for the post-quantum hypotheses of K4. C-43 implements the code part.
 - **D-14 (approved 2026-10-25 by Daniel): merge, C-41, and the Entropy Core key exchange.** Daniel answered three items with "Let's do this": merge `feat/post-quantum` (C-42, D-13; the merge also brings C-41), accept C-41, and merge openmls-qrand `feat/pq-tls` (0.2.0, default `pq-only`). For the Entropy Core link he chose "pq-preferred" over `pq-only`. The C-42 amendment above implements that choice as the default of the `qrng` source, with the negotiated group in the entropy report.
 - **D-13 (approved 2026-10-25 by Daniel): post quantum migration (C-42).** Daniel approved all four steps of testbed finding F-9: "All steps look reasonable and good to have. PQC is already an urgency for migration so there is no reason to not implement it from the start in New applications. Proceed with all the PQs". C-42 implements PQ-1 and PQ-3 here; PQ-2 and PQ-4 are in openmls-qrand and the testbed.

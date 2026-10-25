@@ -36,7 +36,7 @@ use crate::suite::{Suite, SEED_LEN};
 use crate::wire::{
     AckKind, AdmissionCertificate, ApfAnchor, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
     Envelope, FounderCertificate, Frontier, ReleaseCertificate, RepairConfirmation, Right,
-    SignedStructure, ADMISSION_EXTENSION_TYPE, APF_ANCHOR_EXTENSION_TYPE,
+    SignedStructure, ADMISSION_EXTENSION_TYPE, ANCHOR_VERSION, APF_ANCHOR_EXTENSION_TYPE,
     AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
@@ -775,7 +775,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     /// The response and the store effect of a committed kernel call. Every signature is
     /// deterministic Ed25519 over kernel state, so recovery produces identical bytes.
     fn outputs(
-        &self,
+        &mut self,
         actor: &str,
         finish: Finish,
         response: Value,
@@ -811,6 +811,18 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 Ok((response, Effect::None))
             }
             Finish::Commit(step) => {
+                // R-11 (c): the policy at the canonical step. The kernel has applied this
+                // commit's step and nothing after it, live and in recovery (C-32), so the
+                // ack bytes are the same either way. For a repair, the kernel's
+                // `repair_stage` has already required `policy_revision >= fence_revision`.
+                let checkpoint = self.kernel_checkpoint()?;
+                let policy_revision = checkpoint["policy_revision"]
+                    .as_u64()
+                    .ok_or("malformed: kernel policy_revision")?;
+                let policy_digest = checkpoint["policy_digest"]
+                    .as_str()
+                    .and_then(|digest| hex::decode(digest).ok())
+                    .ok_or("malformed: kernel policy_digest")?;
                 let ack = CanonicalAck {
                     apf_key_id: self.apf_key_id(),
                     group: self.group.clone(),
@@ -818,6 +830,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                     successor: step.successor.clone(),
                     commit_hash: step.commit_hash.clone(),
                     kind: step.kind,
+                    policy_revision,
+                    policy_digest,
                 }
                 .sign(&self.apf)?;
                 Ok((
@@ -1872,12 +1886,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             signature_key: root_key.to_vec(),
         }
         .sign(&apf)?;
+        // R-11: the anchor is static and carries no policy.
         let apf_anchor = ApfAnchor {
-            version: 1,
+            version: ANCHOR_VERSION,
             apf_key_id,
             group: group.to_owned(),
-            policy_revision,
-            policy_digest,
         }
         .encode()?;
 
@@ -1894,6 +1907,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             apf,
             founder_certificate,
             apf_anchor,
+            policy: (policy_revision, policy_digest),
             crash: None,
         })
     }
@@ -2121,6 +2135,9 @@ pub struct GenesisPending<P: OpenMlsProvider, C: Clock> {
     apf: SignatureKeyPair,
     founder_certificate: Vec<u8>,
     apf_anchor: Vec<u8>,
+    /// The genesis `(policy_revision, policy_digest)` of the in-memory kernel, which
+    /// `complete` checks the real kernel against.
+    policy: (u64, Vec<u8>),
     /// The crash point armed by `crash_after` (C-33).
     crash: Option<CrashPoint>,
 }
@@ -2163,11 +2180,10 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             seed,
             apf,
             founder_certificate,
-            apf_anchor,
+            policy,
             crash,
             ..
         } = self;
-        let anchor = ApfAnchor::decode(&apf_anchor)?;
         let paths = AdapterPaths::new(&dir);
         let mut claimed = Claimed::default();
         let mut crashed = false;
@@ -2184,7 +2200,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             drop(key_file);
 
             // §5.1 step 5: the kernel starts at the genesis frontier, with the policy
-            // the group's apf_anchor already commits to.
+            // the founder certificate was computed from.
             let mut kernel = Authority::open(&paths.authority)?;
             kernel.execute(
                 json!({"command":"init", "group":group, "root":root, "branch":frontier.branch}),
@@ -2195,8 +2211,8 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 return Err(CRASHED.to_string());
             }
             let checkpoint = kernel.execute(json!({"command":"checkpoint"}))?;
-            if checkpoint["policy_revision"] != json!(anchor.policy_revision)
-                || checkpoint["policy_digest"] != json!(hex::encode(&anchor.policy_digest))
+            if checkpoint["policy_revision"] != json!(policy.0)
+                || checkpoint["policy_digest"] != json!(hex::encode(&policy.1))
             {
                 return Err("binding_mismatch: genesis policy digest".to_string());
             }
@@ -2713,8 +2729,6 @@ fn insert_confirmation(store: &Connection, record: &ConfirmationRecord) -> rusql
 struct RepairPlan {
     /// Sorted roster members whose read grant is inactive.
     removed: Vec<String>,
-    /// The planned `apf_anchor` payload at the current policy revision and digest.
-    apf_anchor: Vec<u8>,
     policy_revision: u64,
     parent: Frontier,
     roster: Vec<String>,
@@ -2775,21 +2789,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let policy_revision = checkpoint["policy_revision"]
             .as_u64()
             .ok_or("malformed: kernel policy_revision")?;
-        let policy_digest = checkpoint["policy_digest"]
-            .as_str()
-            .and_then(|digest| hex::decode(digest).ok())
-            .ok_or("malformed: kernel policy_digest")?;
-        let apf_anchor = ApfAnchor {
-            version: 1,
-            apf_key_id: self.apf_key_id(),
-            group: self.group.clone(),
-            policy_revision,
-            policy_digest,
-        }
-        .encode()?;
         Ok(RepairPlan {
             removed,
-            apf_anchor,
             policy_revision,
             parent: checkpoint_frontier(checkpoint)?,
             roster,
@@ -2805,7 +2806,6 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let plan = self.plan_from(&checkpoint)?;
         Ok(json!({
             "removed": plan.removed,
-            "apf_anchor": hex::encode(&plan.apf_anchor),
             "policy_revision": plan.policy_revision,
             "parent_epoch": plan.parent.epoch,
             "parent_branch": plan.parent.branch,
@@ -2841,8 +2841,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             return Err(noncanonical("committer is not a continuing member"));
         }
 
-        // Step 4: exactly one Remove per leaf of a removed subject, no other Remove,
-        // exactly one GroupContextExtensions proposal, nothing else, and an UpdatePath.
+        // Step 4 (R-11): exactly one Remove per leaf of a removed subject, no other Remove,
+        // no other proposal (a GroupContextExtensions proposal included), and an UpdatePath.
         let mut expected = Vec::new();
         for subject in &plan.removed {
             let before = expected.len();
@@ -2862,11 +2862,10 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         }
         expected.sort_unstable();
         let mut removes = Vec::new();
-        let (mut extension_proposals, mut others) = (0usize, 0usize);
+        let mut others = 0usize;
         for queued in staged.queued_proposals() {
             match queued.proposal() {
                 Proposal::Remove(remove) => removes.push(remove.removed().u32()),
-                Proposal::GroupContextExtensions(_) => extension_proposals += 1,
                 _ => others += 1,
             }
         }
@@ -2874,38 +2873,28 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if removes != expected {
             return Err(noncanonical("Remove set"));
         }
-        if extension_proposals != 1 || others != 0 {
+        if others != 0 {
             return Err(noncanonical("proposals"));
         }
         // Defense in depth: RFC 9420 §12.4.2 already requires the path for these proposals.
         check_path_leaf(&staged, &sender)?;
 
-        // Step 5: the successor extensions are the parent's with exactly the apf_anchor
-        // replaced by the planned bytes.
-        let mut anchors = 0;
-        let mut planned = Vec::new();
-        for extension in sequencer.group.group_context().extensions().iter() {
-            match extension {
-                Extension::Unknown(t, _) if *t == APF_ANCHOR_EXTENSION_TYPE => {
-                    anchors += 1;
-                    planned.push(Extension::Unknown(
-                        APF_ANCHOR_EXTENSION_TYPE,
-                        UnknownExtension(plan.apf_anchor.clone()),
-                    ));
-                }
-                other => planned.push(other.clone()),
-            }
-        }
-        if anchors != 1 {
-            return Err(noncanonical("parent apf_anchor count"));
-        }
+        // Step 5 (R-11): the successor GroupContext extensions are the parent's, so the
+        // genesis apf_anchor is carried byte for byte.
+        let parent_extensions: Vec<Extension> = sequencer
+            .group
+            .group_context()
+            .extensions()
+            .iter()
+            .cloned()
+            .collect();
         let successor_extensions: Vec<Extension> = staged
             .group_context()
             .extensions()
             .iter()
             .cloned()
             .collect();
-        if successor_extensions != planned {
+        if successor_extensions != parent_extensions {
             return Err(noncanonical("successor GroupContext extensions"));
         }
 

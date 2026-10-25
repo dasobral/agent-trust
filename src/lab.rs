@@ -714,11 +714,8 @@ impl World {
             .map(|name| name.as_str().map(str::to_owned))
             .collect::<Option<_>>()
             .ok_or("malformed: repair plan removed")?;
-        let apf_anchor = hex_field(&plan, "apf_anchor")?;
         let parent_roster = roster_of(&self.adapter.checkpoint()?)?;
-        let staged = self
-            .endpoint_mut(&by)?
-            .stage_repair(&removed, &apf_anchor)?;
+        let staged = self.endpoint_mut(&by)?.stage_repair(&removed)?;
         let (frontier, ack) = self.submit(&by, "repair", &staged.parent, &staged.commit)?;
         self.endpoint_mut(&by)?.apply_ack(&staged.commit, &ack)?;
         let continuing: Vec<String> = parent_roster
