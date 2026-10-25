@@ -5,4 +5,5 @@ pub mod client;
 pub mod entropy;
 pub mod lab;
 pub mod mls;
+pub mod suite;
 pub mod wire;

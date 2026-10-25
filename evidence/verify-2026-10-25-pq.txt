@@ -1,0 +1,47 @@
+# python3 scripts/verify.py, 2026-10-25, branch feat/post-quantum (C-42). Filtered: gate lines, test summaries and the named integration tests per suite.
+PASS build
+Ran 73 tests in 0.038s
+OK
+PASS python-oracle (73 tests)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.46s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.32s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.25s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.15s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.09s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.38s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.17s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.11s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.30s
+PASS rust (181 tests)
+test_broken_controls_are_rejected_by_oracle (test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+Ran 108 tests in 435.796s
+OK
+PASS harness (108 tests)
+test_broken_controls_are_rejected_by_oracle (harness.test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (harness.test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+Ran 5 tests in 389.806s
+OK
+PASS integration (pq) (5 tests, named oracle controls passed)
+test_broken_controls_are_rejected_by_oracle (harness.test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (harness.test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+Ran 5 tests in 91.671s
+OK
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_lap_mls: true
+EXIT 0

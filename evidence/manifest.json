@@ -50,6 +50,10 @@
       "harness": "pass",
       "integration": "pass"
     },
-    "reason": "every gate passed in this run; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is DRBG output seeded from the selected source"
+    "suites": [
+      "pq",
+      "classical"
+    ],
+    "reason": "every gate passed in this run, the integration gate in the pq and classical suites; Bridge_remove^ETK remains an open proof obligation and HPKE randomness is DRBG output seeded from the selected source"
   }
 }

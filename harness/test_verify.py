@@ -403,5 +403,59 @@ class ClaimGateTests(ManifestAssertions, unittest.TestCase):
                          "every harness test module must be run, not only test_oracle*")
 
 
+SUITES = ("pq", "classical")
+
+
+class SuiteFailingGates(FakeGates):
+    """``FakeGates`` whose integration harness fails only under one suite (C-42)."""
+
+    def __init__(self, failing_suite, **kwargs):
+        super().__init__(**kwargs)
+        self.failing_suite = failing_suite
+
+    def _python_result(self, command, modules):
+        env = (self.calls[-1]["kwargs"].get("env") or {}) if self.calls else {}
+        if modules == {INTEGRATION_MODULE} and env.get("AGENT_TRUST_SUITE") == self.failing_suite:
+            saved, self.failing = self.failing, self.failing | {INTEGRATION_MODULE}
+            try:
+                return super()._python_result(command, modules)
+            finally:
+                self.failing = saved
+        return super()._python_result(command, modules)
+
+
+class SuiteGateTests(ManifestAssertions, unittest.TestCase):
+    """C-42 amends C-38: the integration gate runs once per suite, ``pq`` first."""
+
+    def integration_calls(self, runner):
+        return [call for call in runner.calls
+                if call["kind"] == "python" and call["modules"] == {INTEGRATION_MODULE}]
+
+    def test_integration_gate_runs_once_per_suite_pq_first(self):
+        runner = FakeGates()
+        status, output, manifest = run_sandboxed(self, runner)
+        self.assertEqual(status, 0, output)
+        self.assert_boundary(manifest, True)
+        calls = self.integration_calls(runner)
+        self.assertEqual(
+            [(call["kwargs"].get("env") or {}).get("AGENT_TRUST_SUITE") for call in calls],
+            list(SUITES), calls)
+        for call in calls:
+            env = call["kwargs"]["env"]
+            self.assertEqual(env.get("PATH"), os.environ.get("PATH"),
+                             "the suite run keeps the rest of the environment")
+        self.assertEqual(manifest["claim_boundary"].get("suites"), list(SUITES))
+        for suite in SUITES:
+            self.assertIn(f"PASS integration ({suite}", output)
+
+    def test_a_failing_suite_fails_the_claim(self):
+        for suite in SUITES:
+            with self.subTest(failing_suite=suite):
+                runner = SuiteFailingGates(suite)
+                status, output, manifest = run_sandboxed(self, runner)
+                self.assert_fails_closed(status, output, manifest)
+                self.assertIn(f"FAIL integration ({suite})", output)
+
+
 if __name__ == "__main__":
     unittest.main()

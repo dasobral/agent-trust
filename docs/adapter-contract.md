@@ -196,7 +196,7 @@ struct {
 
 These clarifications fill in §4.8 for plan phase 4.1. C-1 refines the approved design and is flagged to Daniel in the phase report.
 
-- **C-1, key registration.** A subject's request key is registered when the subject is created:
+- **C-1, key registration** (amended by C-42 for the `pq` suite). A subject's request key is registered when the subject is created:
   - `delegate` MUST carry `subject_key`: the child's Ed25519 public key, 32 bytes, lowercase hex.
   - A `grant` that creates a previously unknown subject MUST carry `subject_key`. A `grant` to a known subject MUST NOT carry it.
   - The adapter removes `subject_key` before calling the kernel.
@@ -219,13 +219,13 @@ These clarifications fill in §4.8 for plan phase 4.1. C-1 refines the approved 
   6. It calls the kernel.
 
   A sequence that passes step 3 stays consumed even if a later step fails. Failures at steps 1–3 leave the adapter store and the kernel unchanged.
-- **C-5, storage layout.** `Adapter::create(dir, …)` creates three files and fails if any of them already exists:
+- **C-5, storage layout** (amended by C-42). `Adapter::create(dir, …)` creates three files and fails if any of them already exists:
   - `authority.sqlite`, the kernel;
   - `adapter.sqlite`, with registered keys, sequences and the trace;
   - `apf-signing-key`, the 32-byte Ed25519 seed, with mode `0600` on Unix.
 
   `Adapter::open` reloads them. The seed MUST NOT be written to either database or to the trace. Each handled request appends one trace event `{actor, sequence, command, outcome}`, where `outcome` is `"ok"` or the error code. A request that fails before its actor is known is traced with `actor: null`.
-- **C-6, key generation.** `ClientIdentity::generate` and the APF key both take a 32-byte seed from `OpenMlsRand::random_array` and build `SignatureKeyPair::from_raw(ED25519, seed, public)`. `public` is derived with `ed25519_dalek::SigningKey::from_bytes`. A rand failure is `entropy_unavailable`, and nothing is created.
+- **C-6, key generation** (amended by C-42 for ML-DSA-44). `ClientIdentity::generate` and the APF key both take a 32-byte seed from `OpenMlsRand::random_array` and build `SignatureKeyPair::from_raw(ED25519, seed, public)`. `public` is derived with `ed25519_dalek::SigningKey::from_bytes`. A rand failure is `entropy_unavailable`, and nothing is created.
 
 ### 4.10 Phase 4.2 interface (coordinator clarifications C-7 to C-12)
 
@@ -242,7 +242,7 @@ These fill in §4.1–§4.6, §5.1 and §5.2 for plan phase 4.2. C-7 adds a read
   - The full adapter comes from `Adapter::begin_genesis`, which returns a `GenesisPending`, followed by `GenesisPending::complete`. `begin_genesis` writes no file: it refuses an existing file as `create` does, draws the APF seed, and computes the founder certificate and the genesis `acc_context`.
   - `policy_digest` comes from an in-memory kernel initialized with the same `group` and `root`. `complete(group_info, ratchet_tree)` builds the sequencer and validates the group (§5.1 step 4). It then writes the files of C-5 plus `sequencer.sqlite` (the sequencer's `openmls_sqlite_storage`) and calls kernel `init` with `branch` set to the genesis frontier. Finally it checks that the kernel `policy_digest` equals the digest in `acc_context`. On any failure nothing remains.
   - `Adapter::open` reloads either kind.
-- **C-9, encodings** (`src/wire.rs`).
+- **C-9, encodings** (`src/wire.rs`; signature length amended by C-42).
   - Every structure in §4.1–§4.6 is encoded with the TLS presentation language: `VLBytes` for each `opaque<V>`, big-endian fixed-width integers, and a vector of structs as a `VLBytes` of their concatenation.
   - The certificates (§4.4, founder, §4.6) are `struct { TBS tbs; opaque signature<V>; }` and are signed over the TLS encoding of `tbs`.
   - Right codes: read 1, write 2, admin 3, admit 4.
@@ -611,9 +611,40 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
 
 - **C-41, durable lab provider and identity restore.**
   - `LabEntropy::durable_provider(path)` returns a `DurableLabProvider`: the shared lab crypto provider (§8), a rand over the selected source (C-40), and `openmls_sqlite_storage` storage in the one file at `path`. The file is created if missing and its migrations run. Opening draws nothing from the source. Reopening the same path gives the stored groups and keys back for `ClientEndpoint::load` (C-33). An unusable path is `malformed: client storage file`.
-  - `ClientIdentity::restore(key_pair)` rebuilds a stored identity. It accepts only an Ed25519 pair whose public key derives from its private seed, checked by a signature over a fixed probe verified with `verify_strict`; anything else is `binding_mismatch`. It creates no key: new keys still come only from `ClientIdentity::generate` (C-6).
+  - `ClientIdentity::restore(key_pair)` rebuilds a stored identity (amended by C-42 for ML-DSA-44). It accepts only an Ed25519 pair whose public key derives from its private seed, checked by a signature over a fixed probe verified with `verify_strict`; anything else is `binding_mismatch`. It creates no key: new keys still come only from `ClientIdentity::generate` (C-6).
   - The stored form of an identity is the application's choice. The testbed writes the key pair's serde JSON to an owner-only file. The key is outside the APF and the kernel, as for every client key (§3).
   - Tests: `tests/lab_durable.rs`. Evidence: `evidence/durable-provider-red.txt` (interface build failure) and `evidence/durable-provider-green.txt` (the tests and the full verifier pass; `full_lap_mls` stays `true`).
+
+### 8.3 Post quantum suite (C-42, D-13)
+
+**Approved by Daniel on 25 October 2026 (D-13).** Source: agent-trust-testbed finding F-9, steps PQ-1 (post quantum MLS key exchange) and PQ-3 (post quantum signatures). PQ-2 (post quantum TLS) and PQ-4 (post quantum certificates) are transport changes in openmls-qrand and the testbed; they do not touch this contract.
+
+- **C-42, one suite per group.**
+  - **Suites.** Defined in one place, `src/suite.rs`.
+
+    | Suite | MLS ciphersuite | Key exchange (HPKE KEM) | AEAD, hash | Signatures |
+    |---|---|---|---|---|
+    | `classical` | `0x0001` `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519` | DHKEM X25519 | AES-128-GCM, SHA-256 | Ed25519 |
+    | `pq` | `0x0052` `MLS_128_MLKEM768X25519_CHACHA20POLY1305_SHA384_MLDSA44` | X-Wing (draft 06): ML-KEM-768 combined with X25519 | ChaCha20-Poly1305, SHA-384 | ML-DSA-44 (FIPS 204) |
+
+    The `pq` code point comes from `draft-ietf-mls-pq-ciphersuites` (OpenMLS feature of the same name, on every OpenMLS crate). It can change before the draft becomes an RFC.
+  - **One signature scheme per group: the suite's.** Client identity keys (the MLS credential and the request key of C-1, which are the same key) and the APF key (certificates, acks, receipts, C-9) all use it.
+  - **Selection.**
+    - The founder's identity fixes the suite. `ClientIdentity::generate_for(suite, rand)` creates an identity of `suite`. `ClientIdentity::generate(rand)` stays the `classical` suite, so every existing caller and test is unchanged.
+    - `Adapter::create` and `Adapter::begin_genesis` take the suite from `root_public_key`: a valid 32-byte Ed25519 key is `classical`, a valid 1312-byte ML-DSA-44 key is `pq`, anything else is `malformed: root_public_key`. The APF key is generated in the same suite.
+    - The adapter records the suite in `adapter.sqlite` (`meta` key `suite`). `Adapter::open` reads it; a store without the key was written before C-42 and is `classical`. `Adapter::suite()` returns it.
+    - `ClientEndpoint` builds its group, KeyPackages and capabilities with the ciphersuite of its identity's suite. The adapter's sequencer checks the group context against the stored suite.
+  - **Amendment to C-1.** `subject_key` is a public key of the group's suite, lowercase hex: 32 bytes for `classical`, 1312 bytes for `pq`. A key of the other suite, or a key that does not decode, is `malformed: subject_key`.
+  - **Amendment to C-5.** `apf-signing-key` stays the 32-byte seed. Its scheme is the stored suite.
+  - **Amendment to C-6.** Every identity and the APF key still take exactly one 32-byte draw from `OpenMlsRand::random_array`. For Ed25519 the seed is the private key, as before. For ML-DSA-44 the seed is the FIPS 204 seed ξ: the key pair is `ML-DSA.KeyGen_internal(ξ)` (`ml_dsa::SigningKey::<MlDsa44>::from_seed`), stored as `SignatureKeyPair::from_raw(MLDSA44, seed, public)`. `SignatureKeyPair::new` and the provider's `signature_key_gen` stay forbidden.
+  - **Amendment to C-9.** The trailing `opaque signature<V>` of a signed structure has the length of the signer's scheme: 64 bytes (prefix `0x40 0x40`) for Ed25519, 2420 bytes (prefix `0x49 0x74`) for ML-DSA-44. The verifier takes the scheme from the public key it verifies with; any other length is `malformed`. Holders without an OpenMLS provider (C-18) verify Ed25519 with `verify_strict` and ML-DSA-44 with the `ml-dsa` crate, empty context.
+  - **Determinism.** `openmls_basic_credential` signs ML-DSA with the deterministic variant of FIPS 204 and an empty context (`ml-dsa` 0.1.1 `Signer`). Signing therefore draws no randomness, and a recovered response re-signs to identical bytes (C-32), as with Ed25519. The hedged variant is not used: it would break that byte identity. FIPS 204 allows the deterministic variant.
+  - **Amendment to C-41.** `ClientIdentity::restore` accepts a pair of either suite whose public key derives from its seed: Ed25519 as before; ML-DSA-44 by deriving the public key from the seed again and comparing the bytes. Anything else is `binding_mismatch`.
+  - **Hashes.** Values that agent-trust computes (branch, digests, `apf_key_id`, `epoch_authenticator_hash`) stay SHA-256. Values that MLS computes (tree hash, confirmed transcript hash, epoch authenticator) use the suite's hash, SHA-384 for `pq`, and are carried as `opaque<V>`.
+  - **Lab (additive to C-36 and C-40).** `agent-trust lab` reads `AGENT_TRUST_SUITE` before any request: `pq` (the default) or `classical`. Any other value exits nonzero with `malformed: suite` on stderr and processes no request. Every lab identity uses the selected suite. A new request `suite {}` returns `{suite, ciphersuite}`, with the ciphersuite as a lowercase hex string such as `"0x0052"`. `run_lab_with` keeps the `classical` suite for existing callers; `run_lab_with_suite` takes the suite.
+  - **Amendment to C-38.** `scripts/verify.py` runs the integration gate once per suite, `pq` first, then `classical`. `full_lap_mls` is `true` only when both pass, and the manifest names the suites.
+  - **Out of scope.** The legacy `MlsLab` (`agent-trust mls-demo`, `src/mls.rs`) stays `classical`; it is not on the adapter path. Composite signatures (Ed25519 and ML-DSA together) are not used: an MLS ciphersuite has one signature scheme, and the request key is the MLS key (C-1).
+  - Tests: `tests/pq_suite.rs`, and `harness/test_integration.py` under both suites. Evidence: `evidence/pq-baseline.txt` (the feature alone changes nothing), `evidence/pq-suite-red.txt`, `evidence/pq-suite-green.txt`.
 
 ## 9. Traces and the independent oracle
 
@@ -656,7 +687,7 @@ Crash tests use explicit barrier hooks. They do not use sleeps.
   - **Policy revisions.** They are renumbered so each exported `release` and `repair_stage` carries the count of exported policy events, because the kernel's `invoke` advances `policy_revision` while v2 does not model it.
   - **Recovery events.** Before a recipient's first `consume` at a frontier, the export emits `recover {client, epoch, branch}`. The evidence is that the client's consume was accepted at that frontier.
   - **Ordering.** Events follow the adapter trace order, which matches kernel history order because the adapter is the kernel's only writer.
-- **C-38, claim gate.** `scripts/verify.py` runs every gate: `cargo test --locked --all-targets`, every Python harness test (not only `test_oracle*`), and the integration harness.
+- **C-38, claim gate** (amended by C-42: one integration run per suite). `scripts/verify.py` runs every gate: `cargo test --locked --all-targets`, every Python harness test (not only `test_oracle*`), and the integration harness.
   - `evidence/manifest.json` gets `full_lap_mls: true` only when every gate passed in that run, the integration harness's exported lab traces were accepted by the oracle, and its mutated broken controls were rejected. Any unmet or failed gate makes it `false` and makes the verifier exit nonzero.
   - The manifest always records `bridge_remove_etk: "open"`, `live_entropy_core: "unmet"` and `hpke_randomness: "drbg_seeded_from_source"` (§8; `"excluded"` before phase 4.8).
   - `mls-demo` (the legacy `MlsLab`) keeps reporting `full_lap_mls: false`, because its claim concerns only that lab.
@@ -757,5 +788,6 @@ Even then, the README states that `Bridge_remove^ETK` is an open proof obligatio
   - The gap: a read revoke of a continuing member while a repair is pending used to leave the fence unable to reopen.
   - The fix: a plan and a repair commit may now stack on a pending repair (C-27), and only the latest pending repair can be confirmed. It needs no kernel change, because `repair_stage` already stacks and `repair_open` requires the latest pending branch.
 - **D-8 (approved 2026-10-23):** R-9, with amendment A-2. The approval was relayed by the parent session, quoting Daniel: "I approve R-9 (D-8). Forward it to the adapter session to implement test-first."
+- **D-13 (approved 2026-10-25 by Daniel): post quantum migration (C-42).** Daniel approved all four steps of testbed finding F-9: "All steps look reasonable and good to have. PQC is already an urgency for migration so there is no reason to not implement it from the start in New applications. Proceed with all the PQs". C-42 implements PQ-1 and PQ-3 here; PQ-2 and PQ-4 are in openmls-qrand and the testbed.
 - **D-12 (approved 2026-10-24 by Daniel, in the adapter session): lab entropy selection (C-40).** Runtime selection of the lab's entropy source returns as a test-infrastructure requirement on top of the provider-generic adapter, replacing the archived 2026-10-08 `MlsLab` version (tag `archive/lap-mls-coupling-2026-10-08`). Daniel chose to build the mock into openmls-qrand as a backend (`EntropyBackend`, `MockEntropy`) rather than as a separate fake HTTP server, because no alternative entropy provider is reachable yet.
 - **D-7 (approved 2026-10-23):** R-8a–c, with amendment A-1. The approval was relayed by the parent session, quoting Daniel: "I approve R-8 (D-7). Forward it to the adapter session to implement test-first."

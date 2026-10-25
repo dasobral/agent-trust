@@ -9,17 +9,16 @@ use openmls_traits::OpenMlsProvider;
 use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 
+use crate::suite::Suite;
+
 use crate::adapter::ClientIdentity;
 use crate::wire::{
-    epoch_authenticator_hash, operation_digest, verify_ed25519, AccContext, AckKind,
+    epoch_authenticator_hash, operation_digest, verify_without_provider, AccContext, AckKind,
     AuthzIncarnation, CanonicalAck, ConsumeReceipt, Envelope, FounderCertificate, Frontier,
     FrozenContent, ReleaseCertificate, RepairConfirmation, Right, SignedStructure,
     ACC_CONTEXT_EXTENSION_TYPE, ADMISSION_EXTENSION_TYPE, AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
-/// The laboratory ciphersuite; its signature scheme is the Ed25519 of every identity.
-pub(crate) const CIPHERSUITE: Ciphersuite =
-    Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 /// The three adapter extension types every leaf declares and the group requires.
 pub(crate) const ADAPTER_EXTENSIONS: [u16; 3] = [
     ADMISSION_EXTENSION_TYPE,
@@ -138,11 +137,11 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         .map_err(mls)?;
 
         let group_state = MlsGroup::builder()
-            .ciphersuite(CIPHERSUITE)
+            .ciphersuite(identity.suite().ciphersuite())
             .with_group_id(GroupId::from_slice(group.as_bytes()))
             .with_wire_format_policy(PURE_PLAINTEXT_WIRE_FORMAT_POLICY)
             .use_ratchet_tree_extension(true)
-            .with_capabilities(leaf_capabilities())
+            .with_capabilities(leaf_capabilities(identity.suite()))
             .with_group_context_extensions(context_extensions)
             .with_leaf_node_extensions(leaf_extensions)
             .map_err(mls)?
@@ -483,7 +482,7 @@ fn prepare_key_package<P: OpenMlsProvider>(
     }
     .encode()?;
     KeyPackage::builder()
-        .leaf_node_capabilities(leaf_capabilities())
+        .leaf_node_capabilities(leaf_capabilities(identity.suite()))
         .leaf_node_extensions(
             Extensions::single(Extension::Unknown(
                 AUTHZ_INCARNATION_EXTENSION_TYPE,
@@ -492,7 +491,7 @@ fn prepare_key_package<P: OpenMlsProvider>(
             .map_err(mls)?,
         )
         .prepare(
-            CIPHERSUITE,
+            identity.suite().ciphersuite(),
             provider,
             identity.signer(),
             credential(subject, identity),
@@ -527,9 +526,11 @@ pub(crate) fn unknown_payloads<T: ExtensionValidator>(
         .collect()
 }
 
-fn leaf_capabilities() -> Capabilities {
+/// The leaf capabilities: the ciphersuite of the identity's suite (C-42) and the adapter
+/// extensions.
+fn leaf_capabilities(suite: Suite) -> Capabilities {
     Capabilities::builder()
-        .ciphersuites(vec![CIPHERSUITE])
+        .ciphersuites(vec![suite.ciphersuite()])
         .credentials(vec![CredentialType::Basic])
         .extensions(
             ADAPTER_EXTENSIONS
@@ -609,7 +610,7 @@ impl PendingDelivery {
     /// valid receipt for another issuer, group, operation, recipient or certificate is
     /// `binding_mismatch`. On any error the plaintext is dropped.
     pub fn deliver(self, receipt: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let receipt = verify_ed25519::<ConsumeReceipt>(receipt, &self.apf_public_key)
+        let receipt = verify_without_provider::<ConsumeReceipt>(receipt, &self.apf_public_key)
             .map_err(|_| "unauthenticated".to_string())?;
         if receipt.apf_key_id != Sha256::digest(&self.apf_public_key).as_slice()
             || receipt.group != self.group

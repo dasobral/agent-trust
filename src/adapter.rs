@@ -24,7 +24,6 @@ use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::MemoryStorage;
 use openmls_sqlite_storage::{Codec, SqliteStorageProvider};
 use openmls_traits::crypto::OpenMlsCrypto;
-use openmls_traits::types::SignatureScheme;
 use openmls_traits::{random::OpenMlsRand, signatures::Signer, OpenMlsProvider};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Value};
@@ -32,9 +31,8 @@ use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize, VLBytes};
 
 use crate::authority::Authority;
-use crate::client::{
-    context_frontier, unknown_payloads, ADAPTER_EXTENSIONS, CIPHERSUITE, ZERO_HASH,
-};
+use crate::client::{context_frontier, unknown_payloads, ADAPTER_EXTENSIONS, ZERO_HASH};
+use crate::suite::{Suite, SEED_LEN};
 use crate::wire::{
     AccContext, AckKind, AdmissionCertificate, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
     Envelope, FounderCertificate, Frontier, ReleaseCertificate, RepairConfirmation, Right,
@@ -49,8 +47,8 @@ pub const AUTHORITY_FILE: &str = "authority.sqlite";
 pub const ADAPTER_FILE: &str = "adapter.sqlite";
 pub const APF_KEY_FILE: &str = "apf-signing-key";
 
-/// Ed25519 seed and public key length.
-const KEY_LEN: usize = 32;
+/// Length of the seed of every identity and APF key (C-6).
+const KEY_LEN: usize = SEED_LEN;
 /// Longest accepted `command` string; matches the kernel identifier bound.
 const MAX_COMMAND: usize = 256;
 /// SQLite sidecar suffixes that must not pre-exist next to a new database.
@@ -112,53 +110,64 @@ impl Clock for SystemClock {
     }
 }
 
-/// A client's own Ed25519 signing identity, generated from provider randomness (C-6).
+/// A client's own signing identity in its suite, generated from provider randomness
+/// (C-6, C-42).
 pub struct ClientIdentity {
     signer: SignatureKeyPair,
+    suite: Suite,
 }
 
 impl ClientIdentity {
-    /// Draws a 32-byte seed from `rand` and derives the key pair.
+    /// A `classical` (Ed25519) identity: [`ClientIdentity::generate_for`] with
+    /// [`Suite::Classical`], kept for existing callers (C-42).
     pub fn generate(rand: &impl OpenMlsRand) -> Result<Self, String> {
-        let mut seed = draw_seed(rand)?;
-        let signer = key_pair_from_seed(&seed);
-        // Best-effort wipe of the stack copy; `SignatureKeyPair` holds its own secret bytes.
-        seed.fill(0);
-        Ok(Self { signer })
+        Self::generate_for(Suite::Classical, rand)
     }
 
-    /// Rebuilds a stored identity, for a client restart. Only an Ed25519 pair whose public
-    /// key derives from its private seed is accepted (`binding_mismatch` otherwise), so a
-    /// stored secret cannot be paired with a foreign public key. New keys still come only
-    /// from [`ClientIdentity::generate`] (C-6).
+    /// Draws one 32-byte seed from `rand` and derives the key pair of `suite` (C-6, C-42).
+    pub fn generate_for(suite: Suite, rand: &impl OpenMlsRand) -> Result<Self, String> {
+        let mut seed = draw_seed(rand)?;
+        let signer = suite.key_pair_from_seed(&seed);
+        // Best-effort wipe of the stack copy; `SignatureKeyPair` holds its own secret bytes.
+        seed.fill(0);
+        Ok(Self { signer, suite })
+    }
+
+    /// Rebuilds a stored identity, for a client restart. Only a pair of a known suite
+    /// whose public key derives from its private seed is accepted (`binding_mismatch`
+    /// otherwise), so a stored secret cannot be paired with a foreign public key. The
+    /// check signs a fixed probe and verifies it under the stored public key (Ed25519
+    /// with `verify_strict`, ML-DSA-44 with an empty context). New keys still come only
+    /// from [`ClientIdentity::generate_for`] (C-6, C-41, C-42).
     pub fn restore(key_pair: SignatureKeyPair) -> Result<Self, String> {
-        if key_pair.signature_scheme() != SignatureScheme::ED25519 {
-            return Err("binding_mismatch: identity scheme".into());
+        let suite = Suite::of_scheme(key_pair.signature_scheme())
+            .ok_or_else(|| "binding_mismatch: identity scheme".to_string())?;
+        if !suite.is_public_key(key_pair.public()) {
+            return Err("binding_mismatch: identity public key".into());
         }
-        let restored = Self { signer: key_pair };
+        let restored = Self {
+            signer: key_pair,
+            suite,
+        };
         let probe = b"agent-trust/identity-restore/v1";
         let signature = restored
             .signer
             .sign(probe)
             .map_err(|_| "binding_mismatch: identity key".to_string())?;
-        let public: [u8; KEY_LEN] = restored
-            .signer
-            .public()
-            .try_into()
-            .map_err(|_| "binding_mismatch: identity public key".to_string())?;
-        let verifying = ed25519_dalek::VerifyingKey::from_bytes(&public)
-            .map_err(|_| "binding_mismatch: identity public key".to_string())?;
-        let signature = ed25519_dalek::Signature::from_slice(&signature)
-            .map_err(|_| "binding_mismatch: identity key".to_string())?;
-        verifying.verify_strict(probe, &signature).map_err(|_| {
-            "binding_mismatch: the public key does not derive from the seed".to_string()
-        })?;
+        if !suite.verify_without_provider(probe, restored.signer.public(), &signature) {
+            return Err("binding_mismatch: the public key does not derive from the seed".into());
+        }
         Ok(restored)
     }
 
-    /// The 32-byte Ed25519 public key.
+    /// The public key: 32 bytes (Ed25519) or 1312 bytes (ML-DSA-44).
     pub fn public_key(&self) -> &[u8] {
         self.signer.public()
+    }
+
+    /// The identity's suite (C-42).
+    pub fn suite(&self) -> Suite {
+        self.suite
     }
 
     pub fn signer(&self) -> &SignatureKeyPair {
@@ -173,14 +182,11 @@ fn draw_seed(rand: &impl OpenMlsRand) -> Result<[u8; KEY_LEN], String> {
         .map_err(|_| "entropy_unavailable".to_string())
 }
 
-/// `SignatureKeyPair::from_raw` over a seed, with the public half from ed25519-dalek (C-6).
+/// `SignatureKeyPair::from_raw` over a seed in `suite` (C-6, C-42).
 /// Never `SignatureKeyPair::new` or the provider's `signature_key_gen` (§8).
 /// The caller wipes its own copy of `seed` afterwards.
-fn key_pair_from_seed(seed: &[u8; KEY_LEN]) -> SignatureKeyPair {
-    let public = ed25519_dalek::SigningKey::from_bytes(seed)
-        .verifying_key()
-        .to_bytes();
-    SignatureKeyPair::from_raw(SignatureScheme::ED25519, seed.to_vec(), public.to_vec())
+fn key_pair_from_seed(suite: Suite, seed: &[u8; KEY_LEN]) -> SignatureKeyPair {
+    suite.key_pair_from_seed(seed)
 }
 
 /// A request signed by its actor's registered key (§4.8).
@@ -248,6 +254,8 @@ pub struct Adapter<P: OpenMlsProvider, C: Clock> {
     provider: P,
     clock: C,
     group: String,
+    /// The group's suite (C-42): the scheme of every registered key and of the APF key.
+    suite: Suite,
     apf: SignatureKeyPair,
     kernel: Authority,
     store: Connection,
@@ -270,7 +278,9 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         provider: P,
         clock: C,
     ) -> Result<Self, String> {
-        let root_key = parse_public_key(root_public_key).ok_or("malformed: root_public_key")?;
+        // C-42: the root's key fixes the suite of the group and of the APF key.
+        let (suite, root_key) =
+            parse_root_key(root_public_key).ok_or("malformed: root_public_key")?;
 
         // C-34: an interrupted `create` or genesis is cleaned before the C-5 refusal.
         let paths = AdapterPaths::new(dir);
@@ -284,7 +294,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
 
         // C-6: one 32-byte draw; on failure nothing has been created.
         let mut seed = draw_seed(provider.rand())?;
-        let apf = key_pair_from_seed(&seed);
+        let apf = key_pair_from_seed(suite, &seed);
 
         // Claim all three names atomically (`create_new`); undo every claim on failure.
         let mut claimed = Claimed::default();
@@ -303,7 +313,15 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             let mut kernel = Authority::open(&paths.authority)?;
             kernel.execute(json!({"command":"init", "group":group, "root":root}))?;
 
-            let store = init_store(&paths.adapter, group, apf.public(), root, &root_key, None)?;
+            let store = init_store(
+                &paths.adapter,
+                group,
+                suite,
+                apf.public(),
+                root,
+                &root_key,
+                None,
+            )?;
             sync_dir(dir);
             remove_marker(&paths)?;
             Ok((kernel, store))
@@ -315,6 +333,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 provider,
                 clock,
                 group: group.to_owned(),
+                suite,
                 apf,
                 kernel,
                 store,
@@ -354,10 +373,31 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             seed.fill(0);
             return Err("malformed: apf key file".into());
         }
-        let apf = key_pair_from_seed(&seed);
+        let store = match open_store(&paths.adapter, false) {
+            Ok(store) => store,
+            Err(err) => {
+                seed.fill(0);
+                return Err(err);
+            }
+        };
+        // C-42: the stored suite; a store written before C-42 is `classical`.
+        let suite = match meta_opt(&store, "suite") {
+            Ok(None) => Ok(Suite::Classical),
+            Ok(Some(name)) => {
+                Suite::parse(&name).map_err(|_| "malformed: adapter store suite".to_string())
+            }
+            Err(err) => Err(err),
+        };
+        let suite = match suite {
+            Ok(suite) => suite,
+            Err(err) => {
+                seed.fill(0);
+                return Err(err);
+            }
+        };
+        let apf = key_pair_from_seed(suite, &seed);
         seed.fill(0);
 
-        let store = open_store(&paths.adapter, false)?;
         // Stores written before phase 4.3 gain the operations table (C-17).
         store.execute_batch(OPERATIONS_TABLE).map_err(db)?;
         // Stores written before phase 4.4a gain the repair tables (C-22, C-23).
@@ -393,6 +433,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             provider,
             clock,
             group,
+            suite,
             apf,
             kernel,
             store,
@@ -420,9 +461,14 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         Ok(adapter)
     }
 
-    /// The APF Ed25519 public key.
+    /// The APF public key, in the group's suite (C-42).
     pub fn apf_public_key(&self) -> &[u8] {
         self.apf.public()
+    }
+
+    /// The group's suite (C-42).
+    pub fn suite(&self) -> Suite {
+        self.suite
     }
 
     /// `SHA-256(APF public key)`.
@@ -499,7 +545,12 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         .map_err(|_| unauthenticated(true))?;
         self.provider
             .crypto()
-            .verify_signature(SignatureScheme::ED25519, &tbs, &key, &request.signature)
+            .verify_signature(
+                self.suite.signature_scheme(),
+                &tbs,
+                &key,
+                &request.signature,
+            )
             .map_err(|_| unauthenticated(true))?;
 
         let last: Option<String> = self
@@ -946,7 +997,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             (false, None) => None,
             (false, Some(_)) | (true, None) => return Err(malformed(cmd, "subject_key")),
             (true, Some(raw)) => {
-                let key = parse_hex_key(&raw).ok_or_else(|| malformed(cmd, "subject_key"))?;
+                let key =
+                    parse_hex_key(self.suite, &raw).ok_or_else(|| malformed(cmd, "subject_key"))?;
                 if self
                     .key_registered(&key)
                     .map_err(|err| (Some(command.clone()), err))?
@@ -1006,12 +1058,12 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             .is_some_and(|grants| grants.iter().any(|g| g["subject"] == json!(subject))))
     }
 
-    fn key_registered(&self, key: &[u8; KEY_LEN]) -> Result<bool, String> {
+    fn key_registered(&self, key: &[u8]) -> Result<bool, String> {
         let found: Option<i64> = self
             .store
             .query_row(
                 "SELECT 1 FROM adapter_keys WHERE public_key = ?1",
-                [key.as_slice()],
+                [key],
                 |row| row.get(0),
             )
             .optional()
@@ -1229,20 +1281,26 @@ fn error_code(error: &str) -> &str {
     error.split(':').next().unwrap_or(error).trim()
 }
 
-/// A 32-byte Ed25519 public key that decodes to a curve point.
-fn parse_public_key(bytes: &[u8]) -> Option<[u8; KEY_LEN]> {
-    let key: [u8; KEY_LEN] = bytes.try_into().ok()?;
-    ed25519_dalek::VerifyingKey::from_bytes(&key).ok()?;
-    Some(key)
+/// A root public key of either suite: the suite is the one whose valid key it is (C-42).
+fn parse_root_key(bytes: &[u8]) -> Option<(Suite, Vec<u8>)> {
+    Suite::from_public_key(bytes).map(|suite| (suite, bytes.to_vec()))
 }
 
-/// C-1: exactly 64 lowercase hex characters encoding a valid Ed25519 public key.
-fn parse_hex_key(value: &Value) -> Option<[u8; KEY_LEN]> {
+/// A valid public key of `suite` (C-1 as amended by C-42).
+fn parse_public_key(suite: Suite, bytes: &[u8]) -> Option<Vec<u8>> {
+    suite.is_public_key(bytes).then(|| bytes.to_vec())
+}
+
+/// C-1: lowercase hex encoding a valid public key of `suite`: 64 characters for
+/// `classical`, 2624 for `pq` (C-42).
+fn parse_hex_key(suite: Suite, value: &Value) -> Option<Vec<u8>> {
     let text = value.as_str()?;
-    if text.len() != 2 * KEY_LEN || !text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+    if text.len() != 2 * suite.public_key_len()
+        || !text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    {
         return None;
     }
-    parse_public_key(&hex::decode(text).ok()?)
+    parse_public_key(suite, &hex::decode(text).ok()?)
 }
 
 fn db(err: rusqlite::Error) -> String {
@@ -1259,9 +1317,10 @@ fn db(err: rusqlite::Error) -> String {
 fn init_store(
     path: &Path,
     group: &str,
+    suite: Suite,
     apf_public: &[u8],
     root: &str,
-    root_key: &[u8; KEY_LEN],
+    root_key: &[u8],
     founder: Option<&CertificateRecord>,
 ) -> Result<Connection, String> {
     let store = open_store(path, true)?;
@@ -1294,12 +1353,12 @@ fn init_store(
     }
     let populate = (|| {
         store.execute(
-            "INSERT INTO adapter_meta(k, v) VALUES ('group', ?1), ('apf_public_key', ?2)",
-            params![group, hex::encode(apf_public)],
+            "INSERT INTO adapter_meta(k, v) VALUES ('group', ?1), ('apf_public_key', ?2), ('suite', ?3)",
+            params![group, hex::encode(apf_public), suite.name()],
         )?;
         store.execute(
             "INSERT INTO adapter_keys(actor, public_key) VALUES (?1, ?2)",
-            params![root, root_key.as_slice()],
+            params![root, root_key],
         )?;
         if let Some(founder) = founder {
             store.execute_batch(
@@ -1368,7 +1427,7 @@ fn checkpoint_frontier(checkpoint: &Value) -> Result<Frontier, String> {
 /// What `prepare` routes an authenticated request to.
 enum Routed {
     /// A kernel request and the key to register if the kernel accepts it (C-1).
-    Kernel(Value, Option<(String, [u8; KEY_LEN])>),
+    Kernel(Value, Option<(String, Vec<u8>)>),
     /// `admission_certificate` over these preimage bytes (C-10).
     Certificate(Vec<u8>),
     /// `submit_commit` of this kind, on this parent frontier, of these commit bytes
@@ -1387,7 +1446,7 @@ enum Routed {
 /// The adapter store change that commits together with a successful request's trace event.
 enum Effect {
     None,
-    Register(String, [u8; KEY_LEN]),
+    Register(String, Vec<u8>),
     Admitted(CertificateRecord),
     /// C-17: `op` was allocated by this actor.
     Allocated(String, String),
@@ -1766,7 +1825,9 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         provider: P,
         clock: C,
     ) -> Result<GenesisPending<P, C>, String> {
-        let root_key = parse_public_key(root_public_key).ok_or("malformed: root_public_key")?;
+        // C-42: the root's key fixes the suite of the group and of the APF key.
+        let (suite, root_key) =
+            parse_root_key(root_public_key).ok_or("malformed: root_public_key")?;
 
         // C-34: an interrupted genesis is cleaned first. C-8: then refuse an existing file
         // as `create` does, before drawing entropy.
@@ -1799,7 +1860,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
 
         // §5.1 step 1 (C-6): one 32-byte draw; on failure nothing exists.
         let seed = Seed(draw_seed(provider.rand())?);
-        let apf = key_pair_from_seed(&seed.0);
+        let apf = key_pair_from_seed(suite, &seed.0);
         let apf_key_id = Sha256::digest(apf.public()).to_vec();
 
         // §5.1 step 2: the founder certificate binds the root's generation-0 rights and key.
@@ -1827,6 +1888,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             group: group.to_owned(),
             root: root.to_owned(),
             root_key,
+            suite,
             rights,
             seed,
             apf,
@@ -2050,7 +2112,9 @@ pub struct GenesisPending<P: OpenMlsProvider, C: Clock> {
     dir: PathBuf,
     group: String,
     root: String,
-    root_key: [u8; KEY_LEN],
+    root_key: Vec<u8>,
+    /// The group's suite, fixed by the root's key (C-42).
+    suite: Suite,
     /// The root's generation-0 rights that kernel `init` creates.
     rights: Vec<(Right, u64)>,
     seed: Seed,
@@ -2090,6 +2154,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             group,
             root,
             root_key,
+            suite,
             seed,
             apf,
             founder_certificate,
@@ -2141,6 +2206,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             let store = init_store(
                 &paths.adapter,
                 &group,
+                suite,
                 apf.public(),
                 &root,
                 &root_key,
@@ -2166,6 +2232,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 provider,
                 clock,
                 group,
+                suite,
                 apf,
                 kernel,
                 store,
@@ -2200,7 +2267,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
         let context = public.group_context();
         if context.group_id().as_slice() != self.group.as_bytes()
             || context.epoch().as_u64() != 0
-            || context.ciphersuite() != CIPHERSUITE
+            || context.ciphersuite() != self.suite.ciphersuite()
         {
             return Err(mismatch("group id, epoch or ciphersuite"));
         }
@@ -3017,7 +3084,7 @@ struct Offer {
 struct RekeyRecord {
     subject: String,
     old_key: Vec<u8>,
-    new_key: [u8; KEY_LEN],
+    new_key: Vec<u8>,
     successor: Frontier,
 }
 
@@ -3176,12 +3243,12 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
 
     /// Whether `key` was ever a leaf signature key of this group: every founder,
     /// admission and rekey leaf key is indexed in `adapter_certificates`.
-    fn key_retired(&self, key: &[u8; KEY_LEN]) -> Result<bool, String> {
+    fn key_retired(&self, key: &[u8]) -> Result<bool, String> {
         let found: Option<i64> = self
             .store
             .query_row(
                 "SELECT 1 FROM adapter_certificates WHERE signature_key = ?1",
-                [key.as_slice()],
+                [key],
                 |row| row.get(0),
             )
             .optional()
@@ -3244,7 +3311,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if credential_identity(path_leaf.credential()).as_deref() != Some(actor.as_bytes()) {
             return Err(noncanonical("UpdatePath leaf credential"));
         }
-        let new_key = parse_public_key(path_leaf.signature_key().as_slice())
+        let new_key = parse_public_key(self.suite, path_leaf.signature_key().as_slice())
             .ok_or_else(|| noncanonical("UpdatePath leaf signature key"))?;
         if new_key.as_slice() == sender.signature_key().as_slice()
             || self.key_registered(&new_key)?
@@ -3484,8 +3551,11 @@ fn hex_from(value: &Value) -> Result<Vec<u8>, String> {
     hex::decode(value.as_str().ok_or_else(corrupt_intent)?).map_err(|_| corrupt_intent())
 }
 
-fn key_from(value: &Value) -> Result<[u8; KEY_LEN], String> {
-    hex_from(value)?.try_into().map_err(|_| corrupt_intent())
+fn key_from(value: &Value) -> Result<Vec<u8>, String> {
+    let key = hex_from(value)?;
+    Suite::from_public_key(&key)
+        .map(|_| key)
+        .ok_or_else(corrupt_intent)
 }
 
 fn ack_kind_name(kind: AckKind) -> &'static str {
@@ -3556,7 +3626,7 @@ fn effect_record(effect: &Effect) -> Result<Value, String> {
         }
         Effect::Rekeyed(record) => json!({
             "type": "rekeyed", "subject": record.subject,
-            "old_key": hex::encode(&record.old_key), "new_key": hex::encode(record.new_key),
+            "old_key": hex::encode(&record.old_key), "new_key": hex::encode(&record.new_key),
             "successor": frontier_record(&record.successor),
         }),
         // Both are decided without a kernel mutation or after it, never in an intent.

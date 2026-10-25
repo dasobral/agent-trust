@@ -8,8 +8,9 @@ run in this order, and the first failing gate stops the run:
 2. ``python-oracle``: the independent oracle tests (``harness/test_oracle*.py``);
 3. ``rust``: ``cargo test --locked --all-targets``;
 4. ``harness``: every Python harness test (``unittest discover -s harness``);
-5. ``integration``: ``harness.test_integration``, which passes only if its named
-   oracle-acceptance and broken-control tests ran and passed.
+5. ``integration``: ``harness.test_integration``, once per suite (``pq`` first, then
+   ``classical``, through ``AGENT_TRUST_SUITE``, C-42), which passes only if its named
+   oracle-acceptance and broken-control tests ran and passed in every suite.
 
 Every gate must also execute a nonzero number of tests. Each run writes
 ``MANIFEST_PATH`` (read at call time): ``claim_boundary.full_lap_mls`` is ``true``
@@ -20,6 +21,7 @@ on every run. Other manifest records are kept.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -37,6 +39,9 @@ NAMED_INTEGRATION_TESTS = (
     "test_broken_controls_are_rejected_by_oracle",
 )
 GATES = ("build", "python-oracle", "rust", "harness", "integration")
+# C-42: the integration gate runs once per suite, in this order.
+SUITES = ("pq", "classical")
+SUITE_ENV = "AGENT_TRUST_SUITE"
 BOUNDARY_FIELDS = {
     "bridge_remove_etk": "open",
     "live_entropy_core": "unmet",
@@ -44,7 +49,8 @@ BOUNDARY_FIELDS = {
 }
 
 
-def _run(command, *, runner, out):
+def _run(command, *, runner, out, env=None):
+    options = {"env": env} if env is not None else {}
     try:
         result = runner(
             command,
@@ -52,6 +58,7 @@ def _run(command, *, runner, out):
             text=True,
             capture_output=True,
             check=False,
+            **options,
         )
     except OSError as error:
         print(f"FAIL command: {error}", file=out)
@@ -67,9 +74,9 @@ def _output(result):
     return (result.stdout or "") + (result.stderr or "")
 
 
-def _python_gate(name, command, *, runner, out):
+def _python_gate(name, command, *, runner, out, env=None):
     """Run a unittest command; return its executed test count, or None on failure."""
-    result = _run(command, runner=runner, out=out)
+    result = _run(command, runner=runner, out=out, env=env)
     if result is None or result.returncode != 0:
         print(f"FAIL {name}", file=out)
         return None
@@ -104,6 +111,7 @@ def _write_manifest(gates, full_lap_mls, reason, out):
         "full_lap_mls": bool(full_lap_mls),
         **BOUNDARY_FIELDS,
         "gates": {gate: gates.get(gate, "not_run") for gate in GATES},
+        "suites": list(SUITES),
         "reason": reason,
     }
     try:
@@ -161,22 +169,24 @@ def _gates(cargo, gates, *, runner, out):
     gates["harness"] = "pass"
     print(f"PASS harness ({harness[0]} tests)", file=out)
 
-    integration = _python_gate(
-        "integration",
-        [sys.executable, "-m", "unittest", INTEGRATION_MODULE, "-v"],
-        runner=runner, out=out,
-    )
-    if integration is None:
-        gates["integration"] = "fail"
-        return "the integration gate failed"
-    missing = _missing_named_tests(_output(integration[1]))
-    if missing:
-        gates["integration"] = "fail"
-        print(f"FAIL integration: named tests did not run and pass: {', '.join(missing)}",
-              file=out)
-        return "the integration oracle acceptance or broken controls did not pass"
+    for suite in SUITES:
+        name = f"integration ({suite})"
+        integration = _python_gate(
+            name,
+            [sys.executable, "-m", "unittest", INTEGRATION_MODULE, "-v"],
+            runner=runner, out=out, env={**os.environ, SUITE_ENV: suite},
+        )
+        if integration is None:
+            gates["integration"] = "fail"
+            return f"the integration gate failed in the {suite} suite"
+        missing = _missing_named_tests(_output(integration[1]))
+        if missing:
+            gates["integration"] = "fail"
+            print(f"FAIL {name}: named tests did not run and pass: {', '.join(missing)}",
+                  file=out)
+            return f"the integration oracle acceptance or broken controls did not pass in the {suite} suite"
+        print(f"PASS {name} ({integration[0]} tests, named oracle controls passed)", file=out)
     gates["integration"] = "pass"
-    print(f"PASS integration ({integration[0]} tests, named oracle controls passed)", file=out)
     return None
 
 
@@ -190,8 +200,9 @@ def run_verification(*, runner=subprocess.run, which=shutil.which, out=sys.stdou
     else:
         failure = _gates(cargo, gates, runner=runner, out=out)
     passed = failure is None
-    reason = ("every gate passed in this run; Bridge_remove^ETK remains an open proof "
-              "obligation and HPKE randomness is DRBG output seeded from the selected source" if passed else failure)
+    reason = ("every gate passed in this run, the integration gate in the pq and classical "
+              "suites; Bridge_remove^ETK remains an open proof obligation and HPKE randomness "
+              "is DRBG output seeded from the selected source" if passed else failure)
     if not _write_manifest(gates, passed, reason, out):
         return 1
     print(f"claim_boundary.full_lap_mls: {'true' if passed else 'false'}", file=out)

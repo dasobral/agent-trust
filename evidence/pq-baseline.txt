@@ -1,0 +1,55 @@
+# PQ baseline (2026-10-25): the OpenMLS feature draft-ietf-mls-pq-ciphersuites on every OpenMLS crate, plus ml-dsa =0.1.1; lab suite still MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519.
+# rustc 1.97.0 (2d8144b78 2026-07-07)
+$ cargo test --locked --all-targets --release
+     Running unittests src/lib.rs (target/release/deps/agent_trust-0ca43588b5966ee8)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/main.rs (target/release/deps/agent_trust-7baf4783b669a4ad)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/adapter_admission.rs (target/release/deps/adapter_admission-bff84fba1e0b8b15)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+     Running tests/adapter_compat.rs (target/release/deps/adapter_compat-1c4e2bb622940120)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+     Running tests/adapter_entropy.rs (target/release/deps/adapter_entropy-8b841d35ea59d690)
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.17s
+     Running tests/adapter_identity.rs (target/release/deps/adapter_identity-b377d4a31711a216)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+     Running tests/adapter_recovery.rs (target/release/deps/adapter_recovery-56247a1fff6c69c0)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.62s
+     Running tests/adapter_rekey.rs (target/release/deps/adapter_rekey-331ba93a9ecba254)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+     Running tests/adapter_release.rs (target/release/deps/adapter_release-8e11221600e7c87f)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+     Running tests/adapter_repair.rs (target/release/deps/adapter_repair-5056f336fe632212)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+     Running tests/adapter_repair_stacked.rs (target/release/deps/adapter_repair_stacked-3e0b7f0aa96d3022)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+     Running tests/authority_adversarial.rs (target/release/deps/authority_adversarial-a94a97e7201e30db)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests/authority_contract.rs (target/release/deps/authority_contract-9467894cd3d29888)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running tests/authority_corrections.rs (target/release/deps/authority_corrections-f0633dedf8fd906d)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+     Running tests/authority_gap_contract.rs (target/release/deps/authority_gap_contract-0d7f5a0ed914d094)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests/authority_invocation_resources.rs (target/release/deps/authority_invocation_resources-64e6962fd5ff74ff)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+     Running tests/authority_rekey_contract.rs (target/release/deps/authority_rekey_contract-39aac74bab0ca8c2)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+     Running tests/authority_resource_contract.rs (target/release/deps/authority_resource_contract-216364158a3eef0c)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+     Running tests/authority_subject_status.rs (target/release/deps/authority_subject_status-30c9f6fdb4c05b2d)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/confused_deputy_red.rs (target/release/deps/confused_deputy_red-236c4fb829307395)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/lab_durable.rs (target/release/deps/lab_durable-e0103a225f0d03e9)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running tests/lab_entropy.rs (target/release/deps/lab_entropy-d34491d8d5f6c408)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.11s
+     Running tests/mls_contract.rs (target/release/deps/mls_contract-2d39791185c68d71)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests/zz_derisk_mldsa.rs (target/release/deps/zz_derisk_mldsa-78df6394e89f9b14)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+EXIT 0
+
+$ python3 -m unittest discover -s harness
+Ran 106 tests: OK (exit 0)

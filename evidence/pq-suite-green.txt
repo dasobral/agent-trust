@@ -1,0 +1,35 @@
+# C-42 green (2026-10-25): the post quantum suite, tests/pq_suite.rs and the per suite claim gate.
+# rustc 1.97.0 (2d8144b78 2026-07-07); Python 3.13.17
+
+$ cargo test --locked --release --test pq_suite
+test environment_selects_the_suite_and_defaults_to_pq ... ok
+test ml_dsa_signatures_interoperate_and_are_deterministic ... ok
+test pq_identity_takes_one_32_byte_draw_and_is_ml_dsa_44 ... ok
+test restore_accepts_either_suite_only_when_the_public_key_derives_from_the_seed ... ok
+test suite_is_recognized_from_a_public_key ... ok
+test suites_name_their_ciphersuite_scheme_and_sizes ... ok
+test the_apf_re_signs_identically_from_its_stored_seed ... ok
+test classical_root_key_still_gives_a_classical_adapter ... ok
+test pq_adapter_uses_ml_dsa_everywhere_and_keeps_its_suite_across_open ... ok
+test the_same_session_runs_under_classical ... ok
+test a_full_lab_session_runs_under_pq ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+$ python3 -m unittest harness.test_verify (red before scripts/verify.py ran the gate per suite)
+FAIL: test_a_failing_suite_fails_the_claim (harness.test_verify.SuiteGateTests.test_a_failing_suite_fails_the_claim) (failing_suite='pq')
+AssertionError: 0 == 0 : PASS build
+FAIL: test_a_failing_suite_fails_the_claim (harness.test_verify.SuiteGateTests.test_a_failing_suite_fails_the_claim) (failing_suite='classical')
+AssertionError: 0 == 0 : PASS build
+FAIL: test_integration_gate_runs_once_per_suite_pq_first (harness.test_verify.SuiteGateTests.test_integration_gate_runs_once_per_suite_pq_first)
+AssertionError: Lists differ: [None] != ['pq', 'classical']
+-> after the change: Ran 11 tests, OK
+
+$ python3 scripts/verify.py
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (181 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_lap_mls: true
+EXIT 0

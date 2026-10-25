@@ -1,6 +1,7 @@
 use agent_trust::authority::Authority;
 use agent_trust::entropy::EntropyConfig;
 use agent_trust::mls::MlsLab;
+use agent_trust::suite::Suite;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -151,6 +152,14 @@ fn main() {
         }
         "lab" => {
             let (dir, seed) = lab_args(args);
+            // C-42: the suite is resolved first; an unknown value processes no request.
+            let suite = match Suite::from_env(|name| std::env::var(name).ok()) {
+                Ok(suite) => suite,
+                Err(error) => {
+                    eprintln!("{error}");
+                    std::process::exit(1)
+                }
+            };
             // C-40: the entropy source is resolved before any request is read; a bad or
             // unreachable source is a startup failure, never a fallback to another source.
             let entropy = match EntropyConfig::from_env().and_then(|config| config.connect()) {
@@ -162,7 +171,14 @@ fn main() {
             };
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
-            match agent_trust::lab::run_lab_with(&dir, seed, entropy, stdin.lock(), stdout.lock()) {
+            match agent_trust::lab::run_lab_with_suite(
+                &dir,
+                seed,
+                entropy,
+                suite,
+                stdin.lock(),
+                stdout.lock(),
+            ) {
                 Ok(()) => 0,
                 Err(error) => {
                     eprintln!("{error}");

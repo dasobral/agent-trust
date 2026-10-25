@@ -1,10 +1,13 @@
 //! TLS encodings shared by the adapter and client endpoints (`docs/adapter-contract.md`
 //! §4.1–§4.6, C-9, C-14, C-15). Every signed structure is `struct { TBS tbs; opaque signature<V>; }`
-//! signed with Ed25519 over the TLS encoding of `tbs`.
+//! signed over the TLS encoding of `tbs` with the scheme of the group's suite: Ed25519 or
+//! ML-DSA-44 (C-42).
 
-use openmls_traits::{crypto::OpenMlsCrypto, signatures::Signer, types::SignatureScheme};
+use openmls_traits::{crypto::OpenMlsCrypto, signatures::Signer};
 use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize, VLBytes};
+
+use crate::suite::Suite;
 
 pub const FRONTIER_LABEL: &[u8] = b"agent-trust/frontier/v1";
 pub const FOUNDER_LABEL: &[u8] = b"agent-trust/founder/v1";
@@ -20,10 +23,15 @@ pub const AUTHZ_INCARNATION_EXTENSION_TYPE: u16 = 0xf044;
 
 /// Version byte of `acc_context` and `authz_incarnation`.
 const STRUCT_VERSION: u8 = 1;
-/// Ed25519 signature length.
-const SIGNATURE_LEN: usize = 64;
-/// QUIC-style length prefix of a 64-byte `opaque<V>` (two-byte form, value 64).
-const SIGNATURE_PREFIX: [u8; 2] = [0x40, 0x40];
+/// Length of the QUIC-style two-byte prefix of a signature `opaque<V>`: 64-byte Ed25519
+/// signatures (`0x40 0x40`) and 2420-byte ML-DSA-44 signatures (`0x49 0x74`) both use the
+/// two-byte form (C-9, C-42).
+const SIGNATURE_PREFIX_LEN: usize = 2;
+
+/// The two-byte QUIC-style prefix of an `opaque<V>` of `len` bytes (64 ≤ len < 16384).
+fn signature_prefix(len: usize) -> [u8; SIGNATURE_PREFIX_LEN] {
+    [0x40 | (len >> 8) as u8, (len & 0xff) as u8]
+}
 
 /// Rights with their wire codes (C-9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -250,57 +258,68 @@ pub trait SignedStructure: Sized {
         Ok(out)
     }
 
-    /// Decodes a signed structure and verifies its Ed25519 signature under `public_key`.
-    /// A bad signature is `unauthenticated`; a bad encoding is `malformed`.
+    /// Decodes a signed structure and verifies its signature under `public_key`, with
+    /// the scheme of the suite that `public_key` belongs to (C-42). A bad signature is
+    /// `unauthenticated`; a bad encoding is `malformed`.
     ///
-    /// The APF signs with Ed25519 only (C-9), so the trailing `opaque signature<V>` is
-    /// exactly 66 bytes. The TBS before it must decode exactly and re-encode to the same
+    /// The APF signs with the group's one scheme (C-9, C-42), so the trailing
+    /// `opaque signature<V>` has that scheme's fixed length: 66 bytes for Ed25519, 2422
+    /// for ML-DSA-44. The TBS before it must decode exactly and re-encode to the same
     /// bytes, so the signed bytes have one canonical meaning.
     fn verify(
         bytes: &[u8],
         public_key: &[u8],
         crypto: &impl OpenMlsCrypto,
     ) -> Result<Self, String> {
-        let (decoded, tbs, signature) = split_signed::<Self>(bytes)?;
+        let suite = key_suite(public_key)?;
+        let (decoded, tbs, signature) = split_signed::<Self>(bytes, suite)?;
         crypto
-            .verify_signature(SignatureScheme::ED25519, tbs, public_key, signature)
+            .verify_signature(suite.signature_scheme(), tbs, public_key, signature)
             .map_err(|_| "unauthenticated".to_string())?;
         Ok(decoded)
     }
 }
 
+/// The suite of a verifying key; a key of neither suite cannot verify (`unauthenticated`).
+fn key_suite(public_key: &[u8]) -> Result<Suite, String> {
+    Suite::from_public_key(public_key).ok_or_else(|| "unauthenticated".to_string())
+}
+
 /// Splits a signed structure into its canonically decoded TBS, the TBS bytes and the
-/// raw 64-byte signature (see [`SignedStructure::verify`]).
-fn split_signed<T: SignedStructure>(bytes: &[u8]) -> Result<(T, &[u8], &[u8]), String> {
+/// raw signature of `suite`'s length (see [`SignedStructure::verify`]).
+fn split_signed<T: SignedStructure>(
+    bytes: &[u8],
+    suite: Suite,
+) -> Result<(T, &[u8], &[u8]), String> {
+    let length = suite.signature_len();
     let split = bytes
         .len()
-        .checked_sub(SIGNATURE_PREFIX.len() + SIGNATURE_LEN)
+        .checked_sub(SIGNATURE_PREFIX_LEN + length)
         .ok_or_else(|| "malformed: signed structure".to_string())?;
     let (tbs, signature) = bytes.split_at(split);
-    if signature[..SIGNATURE_PREFIX.len()] != SIGNATURE_PREFIX {
+    if signature[..SIGNATURE_PREFIX_LEN] != signature_prefix(length) {
         return Err("malformed: signature encoding".into());
     }
     let decoded = T::decode_tbs(tbs)?;
     if decoded.tbs()? != tbs {
         return Err("malformed: non-canonical encoding".into());
     }
-    Ok((decoded, tbs, &signature[SIGNATURE_PREFIX.len()..]))
+    Ok((decoded, tbs, &signature[SIGNATURE_PREFIX_LEN..]))
 }
 
-/// [`SignedStructure::verify`] with ed25519-dalek's strict verification, the same check
-/// the OpenMLS RustCrypto provider applies. For holders of a signed structure that no
-/// longer have an OpenMLS provider, such as a pending delivery (C-18).
-pub(crate) fn verify_ed25519<T: SignedStructure>(
+/// [`SignedStructure::verify`] without an OpenMLS provider, for holders of a signed
+/// structure that no longer have one, such as a pending delivery (C-18): Ed25519 with
+/// ed25519-dalek's strict verification (the check the RustCrypto provider applies),
+/// ML-DSA-44 with the `ml-dsa` crate and an empty context (C-42).
+pub(crate) fn verify_without_provider<T: SignedStructure>(
     bytes: &[u8],
     public_key: &[u8],
 ) -> Result<T, String> {
-    let (decoded, tbs, signature) = split_signed::<T>(bytes)?;
-    let key = ed25519_dalek::VerifyingKey::try_from(public_key)
-        .map_err(|_| "unauthenticated".to_string())?;
-    let signature = ed25519_dalek::Signature::from_slice(signature)
-        .map_err(|_| "unauthenticated".to_string())?;
-    key.verify_strict(tbs, &signature)
-        .map_err(|_| "unauthenticated".to_string())?;
+    let suite = key_suite(public_key)?;
+    let (decoded, tbs, signature) = split_signed::<T>(bytes, suite)?;
+    if !suite.verify_without_provider(tbs, public_key, signature) {
+        return Err("unauthenticated".into());
+    }
     Ok(decoded)
 }
 

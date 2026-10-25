@@ -1,0 +1,9 @@
+# C-42 red (2026-10-25): tests/pq_suite.rs before the implementation. Interface build failure only.
+$ cargo test --locked --release --test pq_suite
+      1 error: could not compile `agent-trust` (test "pq_suite") due to 13 previous errors
+      1 error[E0432]: unresolved import `agent_trust::lab::run_lab_with_suite`
+      1 error[E0432]: unresolved import `agent_trust::suite`
+      5 error[E0599]: no associated function or constant named `generate_for` found for struct `ClientIdentity` in the current scope
+      3 error[E0599]: no method named `suite` found for struct `Adapter<P, C>` in the current scope
+      3 error[E0599]: no method named `suite` found for struct `ClientIdentity` in the current scope
+exit status: 101

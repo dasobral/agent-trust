@@ -8,6 +8,9 @@
 //! default, the in-process `MockEntropy` (NOT random), or a QRNG Open API endpoint. The
 //! lab seed drives only the delivery schedule (`Schedule`), a deterministic test-only
 //! generator that is never used for cryptography. Time comes from a fixed clock.
+//!
+//! Suite: every lab identity, and so the group and the APF key, belongs to one selected
+//! suite (C-42): `pq` (ML-DSA-44 and X-Wing) or `classical` (Ed25519 and X25519).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io::{BufRead, Write};
@@ -24,6 +27,7 @@ use sha2::{Digest, Sha256};
 use crate::adapter::{Adapter, ClientIdentity, Clock, SignedRequest, ADAPTER_FILE, AUTHORITY_FILE};
 use crate::client::{ClientEndpoint, JoinCandidate, PreparedJoin, StagedAdd};
 use crate::entropy::{LabEntropy, LabProvider};
+use crate::suite::Suite;
 use crate::wire::{operation_digest, Frontier, ReleaseCertificate, Right, SignedStructure};
 
 /// The lab's fixed trusted time (C-36).
@@ -93,11 +97,24 @@ pub fn run_lab(
     run_lab_with(dir, seed, LabEntropy::os()?, input, output)
 }
 
-/// [`run_lab`] with the selected entropy source (C-40).
+/// [`run_lab`] with the selected entropy source (C-40), in the `classical` suite. Kept for
+/// existing callers; [`run_lab_with_suite`] selects the suite (C-42).
 pub fn run_lab_with(
     dir: &Path,
     seed: u64,
     entropy: LabEntropy,
+    input: impl BufRead,
+    output: impl Write,
+) -> Result<(), String> {
+    run_lab_with_suite(dir, seed, entropy, Suite::Classical, input, output)
+}
+
+/// [`run_lab`] with the selected entropy source (C-40) and suite (C-42).
+pub fn run_lab_with_suite(
+    dir: &Path,
+    seed: u64,
+    entropy: LabEntropy,
+    suite: Suite,
     input: impl BufRead,
     mut output: impl Write,
 ) -> Result<(), String> {
@@ -105,6 +122,7 @@ pub fn run_lab_with(
         dir,
         schedule: Schedule(seed),
         entropy,
+        suite,
         world: None,
     };
     for line in input.lines() {
@@ -131,6 +149,8 @@ struct Lab<'a> {
     dir: &'a Path,
     schedule: Schedule,
     entropy: LabEntropy,
+    /// The suite of every lab identity (C-42).
+    suite: Suite,
     world: Option<World>,
 }
 
@@ -156,6 +176,14 @@ impl Lab<'_> {
             "entropy" => {
                 only(&args, &[])?;
                 return Ok(self.entropy.report());
+            }
+            "suite" => {
+                only(&args, &[])?;
+                let ciphersuite = u16::from(self.suite.ciphersuite());
+                return Ok(json!({
+                    "suite": self.suite.name(),
+                    "ciphersuite": format!("0x{ciphersuite:04x}"),
+                }));
             }
             "entropy_outage" => {
                 only(&args, &["available"])?;
@@ -216,7 +244,7 @@ impl Lab<'_> {
         std::fs::create_dir_all(self.dir)
             .map_err(|err| format!("malformed: lab directory: {err}"))?;
         let root_provider = self.entropy.provider();
-        let identity = ClientIdentity::generate(root_provider.rand())?;
+        let identity = ClientIdentity::generate_for(self.suite, root_provider.rand())?;
         let signer = identity.signer().clone();
         let pending = Adapter::begin_genesis(
             self.dir,
@@ -255,6 +283,7 @@ impl Lab<'_> {
         );
         self.world = Some(World {
             entropy: self.entropy.clone(),
+            suite: self.suite,
             adapter,
             group: group.clone(),
             root: root.clone(),
@@ -301,6 +330,8 @@ enum Attempt {
 struct World {
     /// The selected entropy source for new providers and identities.
     entropy: LabEntropy,
+    /// The suite of every new identity (C-42).
+    suite: Suite,
     adapter: Adapter<Provider, LabClock>,
     group: String,
     root: String,
@@ -401,7 +432,7 @@ impl World {
         let subject = text(args, "subject")?;
         let rights = texts(args, "rights")?;
         let provider = self.entropy.provider();
-        let identity = ClientIdentity::generate(provider.rand())?;
+        let identity = ClientIdentity::generate_for(self.suite, provider.rand())?;
         let body = json!({
             "command": "delegate", "subject": subject, "rights": rights,
             "resources": [self.group], "expires_at": DELEGATION_EXPIRES, "not_before": 0,
@@ -770,7 +801,7 @@ impl World {
             .collect();
         rights.push((right, generation));
         rights.sort();
-        let new_identity = ClientIdentity::generate(&self.entropy.rand())?;
+        let new_identity = ClientIdentity::generate_for(self.suite, &self.entropy.rand())?;
         let new_signer = new_identity.signer().clone();
         let staged = self
             .endpoint_mut(&subject)?

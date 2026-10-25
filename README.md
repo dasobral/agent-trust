@@ -23,7 +23,8 @@ messaging system.
 
 | Claim | Result |
 | --- | --- |
-| `full_lap_mls` | **`true`**, recorded 2026-10-24 on the current OpenMLS pin ([log](evidence/verify-2026-10-24-integration.txt)) |
+| `full_lap_mls` | **`true`**, recorded 2026-10-25 with the integration gate run in both suites, `pq` and `classical` ([log](evidence/verify-2026-10-25-pq.txt)) |
+| Post quantum suite | **Default** in the lab: MLS `0x0052`, X-Wing key exchange (ML-KEM-768 with X25519) and ML-DSA-44 signatures for every identity and the APF ([C-42](docs/adapter-contract.md#83-post-quantum-suite-c-42-d-13)); `classical` (`0x0001`) stays available |
 | `Bridge_remove^ETK` | **Open** cryptographic proof obligation |
 | Live Entropy Core run | **Not yet run** |
 | HPKE encapsulation randomness | **Derived** from the selected source: HMAC-DRBG output seeded from it ([§8](docs/adapter-contract.md#8-entropy-seam)) |
@@ -31,7 +32,7 @@ messaging system.
 `full_lap_mls` is `true` because one recorded run of `python3 scripts/verify.py`
 passed every gate of the claim gate
 ([`docs/adapter-contract.md`](docs/adapter-contract.md) §11): the build, every
-Rust and Python test, and the lab integration run. In that run the independent
+Rust and Python test, and the lab integration run, once in each suite. In that run the independent
 oracle accepted the exported lab traces and rejected the deliberately broken
 ones. The claim covers the executed schedules only; it is not a proof. Any later
 verifier run that fails a gate resets it to `false` in
