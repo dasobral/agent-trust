@@ -58,7 +58,7 @@
     "no_fence": {
       "deleted_rule": "a read revocation does not close the fence (rule F)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rA)",
@@ -71,7 +71,7 @@
     "no_cascade": {
       "deleted_rule": "the fence and the repair look only at a member's own direct fact, not its delegation chain (rule F)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rB)",
@@ -85,7 +85,7 @@
     "no_update_path": {
       "deleted_rule": "the removal commit carries no fresh path secret, so removed members derive the new key (rule C)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rA)",
@@ -99,7 +99,7 @@
     "remove_without_commit": {
       "deleted_rule": "the ledger drops members from the roster without a new epoch (rule C)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rA)",
@@ -111,7 +111,7 @@
     "stale_epoch": {
       "deleted_rule": "a sender may protect a released message under an older epoch it still holds (rule R)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rA)",
@@ -123,7 +123,7 @@
     "confused_deputy": {
       "deleted_rule": "an invocation release checks the executor's facts but not the origin's (rule R)",
       "safety_violated": [
-        "write_coherence"
+        "write_concordance"
       ],
       "shortest_counterexample": [
         "revoke(wA)",
@@ -135,7 +135,7 @@
     "no_one_shot": {
       "deleted_rule": "a receiver may accept the same release twice (rule A)",
       "safety_violated": [
-        "write_coherence"
+        "write_concordance"
       ],
       "shortest_counterexample": [
         "release_write(A,self)",
@@ -147,7 +147,7 @@
     "no_certificate": {
       "deleted_rule": "a receiver accepts a write on MLS sender authentication alone (rule A)",
       "safety_violated": [
-        "write_coherence"
+        "write_concordance"
       ],
       "shortest_counterexample": [
         "inject_write(A->B)"
@@ -157,7 +157,7 @@
     "external_rejoin": {
       "deleted_rule": "the sequencer accepts an external commit, so a removed party rejoins with its retained signature key (condition K2)",
       "safety_violated": [
-        "read_coherence"
+        "read_concordance"
       ],
       "shortest_counterexample": [
         "revoke(rA)",

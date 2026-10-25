@@ -32,15 +32,15 @@
 
 \begin{document}
 
-\title{Authorization--capability coherence:\\ revocation that survives retained keys in dynamic secure groups}
+\title{Two clocks, one cut:\\ may--can concordance and revocation in MLS groups}
 
 \author{Daniel Sobral}
 \affiliation{Quside Technologies, Barcelona, Spain}
 
-\date{23 October 2026}
+\date{25 October 2026}
 
 \begin{abstract}
-An authorization service decides who \emph{may} read or act in a group. A group-key protocol such as MLS decides who \emph{can}. The two descriptions evolve on different clocks, and a party removed from the first may keep the keys of the second. We give a minimal model in which both evolve and define \emph{coherence}: whoever can exercise a capability on an action must have been authorized at the instant that action was released. Naive composition of a correct authorization service with a correct group protocol is generically incoherent. We give a construction made of four local rules (a fence, a removal commit, a release rule and an acceptance rule). We prove that it is coherent for reading and for acting, including delegated and invoked authority with cascading revocation. Read coherence factorizes into two parts. The first is a combinatorial statement about rosters, proved here by induction over the protocol's transitions. The second is a cryptographic property of MLS, key confinement: an epoch key is hidden from every party outside that epoch's roster. We derive key confinement from published theorems. The symbolic form is a corollary of the machine-checked analysis of TreeKEM. The computational form follows from the ETK theorem for RFC~9420, because every commit the construction issues is an operation ETK models. Write coherence reduces to signature unforgeability. We also searched every reachable state of a finite model, $1.56\times10^6$ states, against an adversary that never forgets a key. The search finds no violation, and deleting any one of nine rules or conditions produces a counterexample that the search finds unaided. The price is explicit: the authorization ledger must be reachable at every release.
+An authorization service decides who \emph{may} read or act in a group. A group-key protocol such as MLS decides who \emph{can}. The two descriptions run on different clocks, and a party removed from the first may keep the keys of the second. We give a minimal model in which both evolve, and we fix the event that makes the two clocks comparable: the \emph{cut}, the ledger revision at which an action is released. A protocol is in \emph{may--can concordance} when whoever can exercise a capability on an action may do so at that action's cut. A no-go result shows that oblivious composition of a correct authorization service with a correct group protocol is generically discordant. We give a construction made of four local rules (a fence, a removal commit, a release rule and an acceptance rule). We prove that it is concordant for reading and for acting, including delegated and invoked authority with cascading revocation. Read concordance factorizes into two parts. The first is a combinatorial statement about rosters, proved here by induction over the protocol's transitions. The second is a cryptographic property of MLS, key confinement: an epoch key is hidden from every party outside that epoch's roster. We derive key confinement from published theorems. The symbolic form is a corollary of the machine-checked analysis of TreeKEM. The computational form follows from the ETK theorem for RFC~9420, because every commit the construction issues is an operation ETK models. Write concordance reduces to signature unforgeability. We also searched every reachable state of a finite model, $1.56\times10^6$ states, against an adversary that never forgets a key. The search finds no violation, and deleting any one of nine rules or conditions produces a counterexample that the search finds unaided. A second no-go result states the price: the authorization ledger must be reachable at every release.
 \end{abstract}
 
 \maketitle
@@ -53,7 +53,7 @@ Consider a group with three members, Alice, Bob and Carol, who share an end-to-e
 
 The difficulty is not a bug in either component but a mismatch of descriptions. The ledger describes authorization as a function of its revision number $v$. The group describes capability as a function of its epoch $e$. Nothing ties the two clocks together, so the phrase ``after Alice was revoked'' has no meaning for Bob's message until we say \emph{which event} defines ``now'' for that message. The situation resembles simultaneity in relativity: before one can compare two clocks, one must fix the event that serves as a common reference. Here that event is the moment the ledger \emph{releases} the action. We call the ledger revision at that moment the action's \emph{cut}.
 
-With the cut fixed, the requirement is easy to state. Every party that can exercise a capability on an action must have been authorized at the action's cut. We call this \emph{coherence}. Figure~\ref{fig:clocks} shows the window in which naive composition violates it.
+With the cut fixed, the requirement is easy to state. Every party that \emph{can} exercise a capability on an action must have been one that \emph{may}, at the action's cut. When the two descriptions agree in this sense we say they are in \emph{may--can concordance}, or simply that the protocol is \emph{concordant}. When they disagree it is \emph{discordant}. Figure~\ref{fig:clocks} shows the \emph{discordance window} that opens when the release ignores the roster.
 
 \begin{figure}[t]
 \centering
@@ -72,7 +72,7 @@ With the cut fixed, the requirement is easy to state. Every party that can exerc
   \node[blue!60!black,align=center,font=\footnotesize,anchor=west] at (4.7,1.3) {repair commit\\ removes Alice};
   % window
   \fill[pattern=north east lines,pattern color=red!40] (2.0,0.05) rectangle (4.6,0.65);
-  \node[font=\footnotesize,align=center] at (3.3,0.38) {window};
+  \node[font=\footnotesize,align=center] at (3.3,0.38) {discordance};
   % releases
   \fill[green!50!black] (1.0,0.7) circle (2.2pt);
   \node[font=\footnotesize,above] at (1.0,0.75) {cut $0$};
@@ -81,17 +81,17 @@ With the cut fixed, the requirement is easy to state. Every party that can exerc
   \fill[green!50!black] (6.1,1.9) circle (2.2pt);
   \node[font=\footnotesize,above] at (6.1,1.95) {cut $1$, key $k_1$};
 \end{tikzpicture}
-\caption{Two clocks. Horizontal: the ledger's history. Vertical: the group's epoch. Alice is revoked at revision 1, but she leaves the group only at the next epoch. A message released inside the hatched window has cut 1 (Alice not authorized) yet is protected under $k_0$, which Alice holds; this is the incoherence. Messages released before the revocation (left dot) or after the repair (right dot) are coherent. The construction of Sec.~\ref{sec:construction} closes a \emph{fence} over the window, so no release happens there.}
+\caption{Two clocks. Horizontal: the ledger's history. Vertical: the group's epoch. Alice is revoked at revision 1, but she leaves the group only at the next epoch. A message released inside the hatched discordance window has cut 1 (Alice may not read) yet is protected under $k_0$, which Alice holds (she can). Messages released before the revocation (left dot) or after the repair (right dot) are concordant. The construction of Sec.~\ref{sec:construction} closes a \emph{fence} over the window, so no release happens there.}
 \label{fig:clocks}
 \end{figure}
 
 \paragraph*{Results.} We work in a model that keeps only what the argument needs: a ledger of facts with lifetimes, justifications built from facts, and a group whose epochs have rosters and keys (Sec.~\ref{sec:model}). In this model:
 \begin{enumerate}
-\item Coherence is defined for reading and for acting [Eqs.~\eqref{eq:readcoh} and \eqref{eq:writecoh}], and naive composition violates it (Proposition~\ref{prop:naive}).
-\item Four local rules suffice for coherence (Sec.~\ref{sec:construction}). The proof of read coherence \emph{factorizes} into two parts. The first is a combinatorial lemma about rosters (Lemma~\ref{lem:roster}), proved by induction. The second is one property of MLS, key confinement: an epoch key is hidden from every party outside that epoch's roster. Theorem~\ref{thm:read} composes the two. Write coherence needs only signature unforgeability (Theorem~\ref{thm:write}).
+\item Concordance is defined for reading and for acting [Eqs.~\eqref{eq:readconc} and \eqref{eq:writeconc}]. A no-go result shows that oblivious composition violates it (Proposition~\ref{prop:oblivious}).
+\item Four local rules suffice for concordance (Sec.~\ref{sec:construction}). The proof of read concordance \emph{factorizes} into two parts. The first is a combinatorial lemma about rosters, roster inclusion (Lemma~\ref{lem:roster}), proved by induction. The second is one property of MLS, key confinement: an epoch key is hidden from every party outside that epoch's roster. The factorization theorem (Theorem~\ref{thm:read}) composes the two. Write concordance needs only signature unforgeability (Theorem~\ref{thm:write}).
 \item Key confinement follows from published results under five conditions K1--K5, all enforced by the construction (Sec.~\ref{sec:K}). Symbolically, it is a corollary of the machine-checked TreeKEM theorem (Proposition~\ref{prop:Ksym}). Computationally, it follows from the ETK theorem (Proposition~\ref{prop:Kcomp}). To make that possible, the policy binding lives in the ledger's signed acknowledgement of each commit, not in the MLS group context.
 \item Delegated authority and invocations need no new theory. A delegation chain is a justification with more facts, and cascading revocation follows from one locality property (Sec.~\ref{sec:delegation}).
-\item The cost is a ledger contact per release (Proposition~\ref{prop:price}). Under stated assumptions the construction makes progress after a revocation (Proposition~\ref{prop:progress}).
+\item The cost is a ledger contact per release, and a second no-go result shows that it cannot be avoided at the release cut (Proposition~\ref{prop:price}). Under stated assumptions the construction makes progress after a revocation (Proposition~\ref{prop:progress}).
 \item An exhaustive finite-state search supports the claims (Sec.~\ref{sec:evidence}). Its adversary never forgets a key, and every rule is shown necessary by an automatically found counterexample.
 \end{enumerate}
 Key confinement is the only cryptographic property of MLS that we use. Appendix~\ref{app:mapping} matches it, case by case, against the exact statements of the two analyses it rests on.
@@ -126,41 +126,41 @@ The \emph{readers} of group $g$ at revision $v$ are
 \cut(a)=\text{revision at the release of }a .
 \label{eq:cut}
 \end{equation}
-A read action is protected under the key of an epoch $e(a)$. Neither encryption, transmission nor receipt moves the cut. A message released before a revocation and read afterwards is judged at the earlier revision. This is a deliberate choice of semantics: the commit-immediate cut. Causal or lease-based cuts are possible and lead to different properties, which we do not treat.
+A read action is protected under the key of an epoch $e(a)$. Neither encryption, transmission nor receipt moves the cut. A message released before a revocation and read afterwards is judged at the earlier revision. This is a deliberate choice of semantics: the \emph{release cut}. Causal or lease-based cuts are possible and lead to different properties, which we do not treat.
 
 %=====================================================================
-\section{Coherence}\label{sec:coherence}
+\section{Concordance}\label{sec:concordance}
 %=====================================================================
 
-\begin{definition}[Read coherence]
-A protocol is \emph{read-coherent} if, in every execution, for every released read action $a$ in group $g$,
+\begin{definition}[Read concordance]
+A protocol is \emph{read-concordant} if, in every execution, for every released read action $a$ in group $g$,
 \begin{equation}
 \{p\}\derives k_{e(a)} \;\Longrightarrow\; p\in \Rd_{\cut(a)}(g).
-\label{eq:readcoh}
+\label{eq:readconc}
 \end{equation}
 \end{definition}
-In words, nobody can derive the key of a message without having been a reader at that message's cut. Equation~\eqref{eq:readcoh} is the symbolic statement. The computational statement is an indistinguishability game rather than an event. Fix a challenge action $a$ in group $g$. Let the \emph{coalition} $C_a=\{\,p:p\notin \Rd_{\cut(a)}(g)\,\}$ be all parties that were not readers at its cut. The adversary controls the network, receives everything the members of $C_a$ ever hold, at any time, and chooses two equal-length messages $m_0,m_1$. The honest sender protects $m_b$ for a uniform bit $b$. The protocol is read-coherent if no efficient adversary guesses $b$ with probability non-negligibly above $1/2$. We denote that excess by $\Adv^{\rm read}$.
+In words, nobody can derive the key of a message without having been a reader at that message's cut. Equation~\eqref{eq:readconc} is the symbolic statement. The computational statement is an indistinguishability game rather than an event. Fix a challenge action $a$ in group $g$. Let the \emph{coalition} $C_a=\{\,p:p\notin \Rd_{\cut(a)}(g)\,\}$ be all parties that were not readers at its cut. The adversary controls the network, receives everything the members of $C_a$ ever hold, at any time, and chooses two equal-length messages $m_0,m_1$. The honest sender protects $m_b$ for a uniform bit $b$. The protocol is read-concordant if no efficient adversary guesses $b$ with probability non-negligibly above $1/2$. We denote that excess by $\Adv^{\rm read}$.
 
 Two things lie outside this definition, deliberately. A party that \emph{was} a reader at the cut may read the message at any later time and leak it; no protocol can prevent that. Plaintext obtained before a revocation is not erased.
 
-\begin{definition}[Write coherence]
-A protocol is \emph{write-coherent} if, whenever an honest receiver accepts an action $a$ of type $\alpha$,
+\begin{definition}[Write concordance]
+A protocol is \emph{write-concordant} if, whenever an honest receiver accepts an action $a$ of type $\alpha$,
 \begin{equation}
 \exists J:\; J\justifies_{\cut(a)}\alpha,\quad \text{bytes accepted}=\text{bytes released},
-\label{eq:writecoh}
+\label{eq:writeconc}
 \end{equation}
 and each receiver accepts each release at most once.
 \end{definition}
-Write coherence concerns events observed at honest receivers, so it is a property of executions directly. It applies equally to writes, to administrative commits (where the ``receiver'' is the sequencer and every member processing the commit) and to admissions.
+Write concordance concerns events observed at honest receivers, so it is a property of executions directly. It applies equally to writes, to administrative commits (where the ``receiver'' is the sequencer and every member processing the commit) and to admissions.
 
-\begin{proposition}[Naive composition is incoherent]\label{prop:naive}
-Let the ledger be an ideal authorization service and the group an ideal group-key protocol, each meeting its own specification. If the release of an action does not depend on the group's roster, there is an execution violating Eq.~\eqref{eq:readcoh}.
+\begin{proposition}[No-go for oblivious composition]\label{prop:oblivious}
+Let the ledger be an ideal authorization service and the group an ideal group-key protocol, each meeting its own specification. Call the composition \emph{oblivious} if the release of an action does not depend on the group's roster. Every oblivious composition has an execution violating Eq.~\eqref{eq:readconc}.
 \end{proposition}
 \begin{proof}
 Start with $\roster_0=\{A,B\}$, both readers at revision 0. The ledger revokes $A$'s read fact, moving to revision 1. Before any removal commit, $B$ releases a message $a$ in epoch 0, so $\cut(a)=1$ and $e(a)=0$. Since $A\in\roster_0$, the group protocol has given $A$ the key, so $\{A\}\derives k_0$. Yet $A\notin \Rd_1(g)$.
 \end{proof}
 
-The proof uses no broken cryptography, no crash and no replay. It sits in the hatched window of Fig.~\ref{fig:clocks}. Any coherent protocol must ensure that no read release ever falls in such a window.
+The proof uses no broken cryptography, no crash and no replay. It sits in the discordance window of Fig.~\ref{fig:clocks}. Any concordant protocol must ensure that no read release ever falls in such a window.
 
 %=====================================================================
 \section{The construction}\label{sec:construction}
@@ -215,7 +215,7 @@ By induction over the ledger's steps. Initially every record was admitted with a
 Steps taken locally by clients (processing a commit, crashing, restoring an old snapshot) do not change ledger state. A client that has not installed $e^\ast$ cannot obtain a release, because Rule R compares its epoch with $e^\ast$.
 \end{proof}
 
-\begin{lemma}[Roster coherence]\label{lem:roster}
+\begin{lemma}[Roster inclusion]\label{lem:roster}
 For every released read action $a$ in group $g$,
 \begin{equation}
 \roster_{e(a)} \subseteq \Rd_{\cut(a)}(g).
@@ -235,7 +235,7 @@ Lemma~\ref{lem:roster} concerns rosters. To reach keys we need one property of M
 \item[K1.] \emph{Conformance.} Every commit is processed as RFC~9420 prescribes, so a commit containing a Remove carries a fresh UpdatePath. Honest members draw good randomness.
 \item[K2.] \emph{Member-only, modeled commits.} The ledger installs only commits sent by a current member. A commit carries Add or Remove proposals or none, a path where required, and possibly a new signature key for the committer. There are no external commits, no external self-add proposals, no group-context changes, and no re-initialization or branching.
 \item[K3.] \emph{One road to message keys.} Message keys are derived from the epoch secret only through the key schedule and the secret tree. No exporter secret is used outside Rule R.
-\item[K4.] \emph{Strong signatures.} Members sign with a strongly unforgeable (SUF-CMA) scheme, such as Ed25519 with strict verification~\cite{ed25519-provable}.
+\item[K4.] \emph{Strong primitives.} Members and the ledger sign with a strongly unforgeable (SUF-CMA) scheme, and the public-key encryption of the suite is IND-CCA. Both suites of the implementation are discussed after Proposition~\ref{prop:Kcomp}.
 \item[K5.] \emph{Fresh incarnations.} A party admitted or re-admitted enters with signature, initialization and leaf keys that no other incarnation ever used.
 \end{enumerate}
 
@@ -265,14 +265,16 @@ Assume K1--K5. By K2, every commit on the chain is an operation modeled by ETK~\
 ETK's predicate declares an epoch unsafe if some member's secrets are exposed in it, or if one of five traversal clauses, a)--e), holds. Appendix~\ref{app:mapping} shows that none applies. Exposures are recorded only for members of the epoch, and none of them is in $S$. Clause a) needs an injected commit, which requires knowledge of the parent epoch. Clauses b) and c) need an added member whose signature key is exposed or who is corrupted later. By K5 and $S\cap\roster_e=\emptyset$, no such member exists. Clause d) needs some party's state at $e$ to be known. For members of $\roster_e$ this fails by K1 and K5. For a removed member, ETK's knowledge relation stops at the commit that removed it, whose \textsf{secrets-replaced} flag cuts the propagation. Clause e) concerns external commits, excluded by K2.
 \end{proof}
 
+\emph{Instantiating K4.} The implementation offers two MLS cipher suites. In the classical suite (\texttt{0x0001}) signatures are Ed25519 with strict verification, which is SUF-CMA~\cite{ed25519-provable}, and HPKE uses DHKEM over X25519, which is IND-CCA under the strong Diffie--Hellman assumption in the random-oracle model~\cite{dhies}. The default post-quantum suite (\texttt{0x0052}) uses ML-DSA-44 and X-Wing. FIPS~204 states SUF-CMA as a design goal of ML-DSA~\cite{fips204}. For Dilithium, on which ML-DSA is based, Ref.~\cite{kls18} bounds the SUF-CMA advantage in the quantum random-oracle model by MLWE, SelfTargetMSIS and MSIS, for the deterministic signing variant that the implementation uses. Reference~\cite{fsa-fix} later found and corrected a gap in the chosen-message step of that proof. We have not checked whether the corrected proof covers the strong case, nor whether the bound carries over unchanged to the modifications FIPS~204 made. X-Wing is IND-CCA if either X25519 (strong Diffie--Hellman, random-oracle model) or ML-KEM-768 is~\cite{xwing}. HPKE in base mode is a KEM--DEM composition, so it is IND-CCA when its KEM is IND-CCA and its AEAD is secure~\cite{cramer-shoup}. One limit remains. ETK's Theorem~1 is proved in the classical random-oracle model. With the post-quantum suite, Proposition~\ref{prop:Kcomp} therefore holds against classical adversaries; a quantum random-oracle version of ETK is open.
+
 \emph{Where the policy binding lives.} An earlier design wrote the policy revision into the MLS group context through a GroupContextExtensions proposal in each repair commit. MLS would then confirm the revision cryptographically. ETK does not model that proposal type, and none of our proofs needs the binding. Rule R already binds each release to the epoch the ledger acknowledged. We therefore place the binding in the ledger's acknowledgement. The group context keeps at most a constant extension, fixed at creation, that names the ledger's key and the group, and that acts as part of the group's identity. Extending ETK's proof to group-context changes would let the binding return to MLS; we leave that question open. A caveat on scope: we matched the statements of the conference version of Ref.~\cite{etk}, not the proof in its full version.
 
 \emph{Why K2 cannot be dropped.} ETK observes that a party whose state was compromised can rejoin a group by external commit, signing with the signature key it kept~\cite{etk}. In our setting that party is precisely a revoked reader. It keeps its old signature key, signs an external commit, and rejoins without the ledger's consent. The finite-state search of Sec.~\ref{sec:evidence} finds this attack as soon as the sequencer accepts external commits.
 
-\subsection{Read coherence}
+\subsection{Read concordance: the factorization theorem}
 
-\begin{theorem}[Read coherence]\label{thm:read}
-Under K1--K5 the construction is read-coherent in the symbolic model: Eq.~\eqref{eq:readcoh} holds in every execution. Computationally, under the hypotheses of Proposition~\ref{prop:Kcomp}, an adversary that causes at most $q_m$ read messages has
+\begin{theorem}[Factorization]\label{thm:read}
+Under K1--K5 the construction is read-concordant in the symbolic model: Eq.~\eqref{eq:readconc} holds in every execution. Computationally, under the hypotheses of Proposition~\ref{prop:Kcomp}, an adversary that causes at most $q_m$ read messages has
 \begin{equation}
 \Adv^{\rm read}\;\le\;\Adv^{\rm euf}_{\rm ledger}+\Adv^{\rm ETK}+\epsilon_{\rm RO}+q_m\,\Adv^{\rm aead},
 \label{eq:readbound}
@@ -280,7 +282,7 @@ Under K1--K5 the construction is read-coherent in the symbolic model: Eq.~\eqref
 where $\epsilon_{\rm RO}$ is the random-oracle loss of the secret-tree derivation.
 \end{theorem}
 \begin{proof}
-\emph{Symbolic.} Fix a released read action $a$ and let $C_a$ be the parties that were not readers at its cut. Lemma~\ref{lem:roster} gives $\roster_{e(a)}\subseteq\Rd_{\cut(a)}(g)$, hence $C_a\cap\roster_{e(a)}=\emptyset$. Proposition~\ref{prop:Ksym} with $S=C_a$ gives $C_a\not\derives k_{e(a)}$. So any party that derives $k_{e(a)}$ lies outside $C_a$, which is Eq.~\eqref{eq:readcoh}.
+\emph{Symbolic.} Fix a released read action $a$ and let $C_a$ be the parties that were not readers at its cut. Lemma~\ref{lem:roster} gives $\roster_{e(a)}\subseteq\Rd_{\cut(a)}(g)$, hence $C_a\cap\roster_{e(a)}=\emptyset$. Proposition~\ref{prop:Ksym} with $S=C_a$ gives $C_a\not\derives k_{e(a)}$. So any party that derives $k_{e(a)}$ lies outside $C_a$, which is Eq.~\eqref{eq:readconc}.
 
 \emph{Computational.} We use four games.
 \begin{itemize}
@@ -294,15 +296,15 @@ In the last game the bit $b$ is hidden.
 
 Theorem~\ref{thm:read} is where the factorization pays off. All authorization reasoning sits in Lemma~\ref{lem:roster}, and all reasoning about MLS sits in key confinement. Neither knows about the other, and the theorem is their composition.
 
-\subsection{Write coherence}
+\subsection{Write concordance}
 
-\begin{theorem}[Write coherence]\label{thm:write}
+\begin{theorem}[Write concordance]\label{thm:write}
 Assume the ledger is atomic and its signing key is secret. Then for writes, admin commits and admissions,
 \begin{equation}
 \Adv^{\rm write}\;\le\;\Adv^{\rm euf}_{\rm ledger}+\Adv^{\rm cr}_{H},
 \label{eq:writebound}
 \end{equation}
-where $\Adv^{\rm write}$ is the probability that an honest receiver accepts an action violating Eq.~\eqref{eq:writecoh}.
+where $\Adv^{\rm write}$ is the probability that an honest receiver accepts an action violating Eq.~\eqref{eq:writeconc}.
 \end{theorem}
 \begin{proof}
 Suppose an honest receiver accepts bytes $b$ under certificate $c$. By Rule A, $c$ verifies and binds $H(b)$. Either the ledger issued $c$, or the adversary forged it, which is the first term. If the ledger issued $c$, it did so in a release step for some action with content hash $H(b')$. If $b\neq b'$ we have a collision, which is the second term. Otherwise the accepted action is the released one, and Rule R checked $J\justifies_v\alpha$ at the release revision $v=\cut(a)$. Each receiver accepts a release at most once because the spend mark is set atomically at the ledger before acceptance. That fact is deterministic, given atomicity.
@@ -321,9 +323,9 @@ J=J_O\cup J_E\cup\{i\},
 \end{equation}
 and $\Static$ requires that the requested right and resource lie in the scope of all three parts. The effective authority is therefore the \emph{intersection} of the origin's and the executor's. Theorem~\ref{thm:write} applies unchanged. Revoking any fact of the origin's chain stops the executor at the next release. The confused-deputy failure, where only $J_E\cup\{i\}$ is checked, is exactly the omission of $J_O$ from Eq.~\eqref{eq:invocation}. Section~\ref{sec:evidence} exhibits it as a counterexample.
 
-\subsection{Progress and its price}
+\subsection{Progress and the no-go for offline release}
 
-Safety alone is cheap, since a ledger that never releases anything is trivially coherent. The construction also makes progress.
+Safety alone is cheap, since a ledger that never releases anything is trivially concordant. The construction also makes progress.
 
 \begin{proposition}[Progress]\label{prop:progress}
 Suppose that after some revision $v^\ast$ there are no further policy changes. Suppose also that the ledger is reachable, that at least one member with a live record keeps acting, that messages between it, the ledger and the other members are eventually delivered, and that the repair commit is processed successfully by honest members. Then the fence is eventually open, and every later release requested by a member with a live record succeeds.
@@ -334,11 +336,11 @@ If the fence is closed after $v^\ast$, some record is dead and, by assumption, s
 
 The processing assumption matters. The sequencer sees only the public part of a commit and cannot verify its confirmation tag. A commit that passes public checks but fails to process would win the compare-and-swap and strand the group. That outcome is safe but not live. Requiring a second continuing member to confirm the new epoch before the fence opens removes this case, and it is how the implementation proceeds (Sec.~\ref{sec:implementation}).
 
-\begin{proposition}[Price of the cut]\label{prop:price}
-A protocol that lets a sender emit a fresh read-protected message without contacting the ledger cannot guarantee coherence with the release cut of Eq.~\eqref{eq:cut}.
+\begin{proposition}[No-go for offline release]\label{prop:price}
+A protocol that lets a sender emit a fresh read-protected message without contacting the ledger cannot guarantee concordance at the release cut of Eq.~\eqref{eq:cut}.
 \end{proposition}
 \begin{proof}
-Consider two executions that the disconnected sender cannot distinguish. In the first nothing happens at the ledger. In the second a reader $r\in\roster_e$ is revoked. If the sender emits under $k_e$ in the first execution, it emits identically in the second. There $r$ holds $k_e$ but is not a reader at any cut later than the revocation, so Eq.~\eqref{eq:readcoh} fails. If it does not emit in the first, the protocol is unavailable.
+Consider two executions that the disconnected sender cannot distinguish. In the first nothing happens at the ledger. In the second a reader $r\in\roster_e$ is revoked. If the sender emits under $k_e$ in the first execution, it emits identically in the second. There $r$ holds $k_e$ but is not a reader at any cut later than the revocation, so Eq.~\eqref{eq:readconc} fails. If it does not emit in the first, the protocol is unavailable.
 \end{proof}
 Proposition~\ref{prop:price} is elementary, in the spirit of the CAP argument~\cite{gilbert-lynch}. Its content is the identification of what must be given up. Offline emission is possible only under a weaker cut, for instance a lease whose issue revision stands in for the cut until the lease expires.
 
@@ -346,16 +348,16 @@ Proposition~\ref{prop:price} is elementary, in the spirit of the CAP argument~\c
 \section{Finite-state evidence}\label{sec:evidence}
 %=====================================================================
 
-The proofs above are by hand. As an independent check we built an executable model of the construction (\texttt{formal/model/coherence\_model.py}) and enumerated every reachable state within fixed resource bounds. The model has three parties. $A$ and $B$ hold root read facts, and $C$ reads through a delegation $d_{BC}$ from $B$. For writing, $A$ and $C$ hold root write facts, and an invocation lets $C$ write for $A$. The bounds are three policy changes, one re-issue per fact, three epochs, two read releases, two write releases and three acceptances. These bounds make the state space finite, so the search is exhaustive within them rather than cut off at a depth.
+The proofs above are by hand. As an independent check we built an executable model of the construction (\texttt{formal/model/concordance\_model.py}) and enumerated every reachable state within fixed resource bounds. The model has three parties. $A$ and $B$ hold root read facts, and $C$ reads through a delegation $d_{BC}$ from $B$. For writing, $A$ and $C$ hold root write facts, and an invocation lets $C$ write for $A$. The bounds are three policy changes, one re-issue per fact, three epochs, two read releases, two write releases and three acceptances. These bounds make the state space finite, so the search is exhaustive within them rather than cut off at a depth.
 
-The adversary is implicit and maximal. Every party keeps every epoch key it ever obtained, and every party is treated as possibly corrupt. No transition consults the property being checked. The check of Eq.~\eqref{eq:readcoh} is literally ``for each read release and each party that holds its epoch key, was that party a reader at the release?'' The model takes key distribution by roster as the meaning of a commit, so key confinement is built into the good model. Conditions K1 and K2 are tested separately: one mutant drops the fresh path secret, another lets the sequencer accept an external commit.
+The adversary is implicit and maximal. Every party keeps every epoch key it ever obtained, and every party is treated as possibly corrupt. No transition consults the property being checked. The check of Eq.~\eqref{eq:readconc} is literally ``for each read release and each party that holds its epoch key, was that party a reader at the release?'' The model takes key distribution by roster as the meaning of a commit, so key confinement is built into the good model. Conditions K1 and K2 are tested separately: one mutant drops the fresh path secret, another lets the sequencer accept an external commit.
 
-The good model has $1\,556\,555$ reachable states and $4\,104\,565$ transitions. Of these states, $1\,457\,995$ contain a read release and $1\,503\,996$ contain an accepted write, so the properties are exercised, not vacuous. No state violates read coherence, write coherence, the fence lemma or key confinement. In every reachable state with a closed fence, a member with a live record, and epochs to spare, a repair is enabled. The search also reaches, by shortest paths, a read release after a repair, the repair of a cascaded revocation, the re-admission of a revoked party under a new generation, and an accepted write by invocation.
+The good model has $1\,556\,555$ reachable states and $4\,104\,565$ transitions. Of these states, $1\,457\,995$ contain a read release and $1\,503\,996$ contain an accepted write, so the properties are exercised, not vacuous. No state violates read concordance, write concordance, the fence lemma or key confinement. In every reachable state with a closed fence, a member with a live record, and epochs to spare, a repair is enabled. The search also reaches, by shortest paths, a read release after a repair, the repair of a cascaded revocation, the re-admission of a revoked party under a new generation, and an accepted write by invocation.
 
 Each of nine \emph{mutants} deletes exactly one rule or condition. For each, the same search finds a shortest counterexample without guidance (Table~\ref{tab:mutants}). Every rule, and condition K2, is therefore load-bearing in the model. The last row is the rejoin attack of Ref.~\cite{etk}, transposed to a revoked reader.
 
 \begin{table}[t]
-\caption{Each mutant deletes one rule or condition. The search finds the shortest trace violating read (R) or write (W) coherence.}
+\caption{Each mutant deletes one rule or condition. The search finds the shortest trace violating read (R) or write (W) concordance.}
 \label{tab:mutants}
 \begin{ruledtabular}
 \begin{tabular}{@{}l@{\;}c@{\;}l@{}}
@@ -401,11 +403,11 @@ K1--K5 & Table~\ref{tab:K}, Appendix~\ref{app:mapping}\\
 \end{ruledtabular}
 \end{table}
 
-Three differences between the code and the model are worth stating.
+Four differences between the code and the model are worth stating.
 \begin{itemize}
-\item The implementation is \emph{stricter} in two places. First, a receiver delivers only while the epoch and generations are unchanged, whereas the model allows a pre-cut message to be accepted later. Theorems~\ref{thm:read} and \ref{thm:write} hold a fortiori, since only acceptances are removed, but Proposition~\ref{prop:progress} then promises nothing for in-flight messages. Second, the central fence opens only after a second continuing member confirms the repaired epoch, which discharges the processing assumption of Proposition~\ref{prop:progress}.
+\item The implementation is \emph{stricter} in three places. First, a receiver delivers only while the epoch and generations are unchanged, whereas the model allows a pre-cut message to be accepted later. Theorems~\ref{thm:read} and \ref{thm:write} hold a fortiori, since only acceptances are removed, but Proposition~\ref{prop:progress} then promises nothing for in-flight messages. Second, the central fence opens only after a second continuing member confirms the repaired epoch, which discharges the processing assumption of Proposition~\ref{prop:progress}. Third, every application message is both a write by its sender and a read-protected action for the group. Its release therefore checks both conditions of Rule R, and it also checks directly that every member of the current roster holds a live read justification, which is the conclusion of Lemma~\ref{lem:roster}.
 \item Delegations carry wall-clock validity windows, evaluated at release, so their expiry is not a ledger event and Eq.~\eqref{eq:locality} is not met literally. The theory predicts the consequence. If a member's delegation expires, releases are refused, which is safe. But the fence never closes, so no repair can remove that member, which is a loss of progress. Recording expiry as a ledger revocation restores Eq.~\eqref{eq:locality}.
-\item Condition K1 asks for good randomness. The adapter draws path secrets from its configured randomness provider, but the HPKE encapsulation inside OpenMLS uses an internal generator. That generator is still good randomness, so K1 holds. The distinction matters only for claims about where the entropy comes from.
+\item Condition K1 asks for good randomness. The adapter draws path secrets directly from the selected entropy source. The HPKE encapsulation inside OpenMLS draws from a deterministic random bit generator seeded from that same source. Both are good randomness, so K1 holds. The distinction matters only for claims about where the entropy comes from.
 \item The repair commit currently still carries a GroupContextExtensions proposal with the policy binding. This is the earlier design discussed in Sec.~\ref{sec:K}, and it lies outside ETK's model. A proposed correction moves the binding into the ledger's acknowledgement and freezes the context extension. Until it is applied, Proposition~\ref{prop:Kcomp} covers the construction but not this one commit type of the code. Proposition~\ref{prop:Ksym} covers both.
 \end{itemize}
 
@@ -417,21 +419,21 @@ The implementation's tests (a retained-key adversary on successor traffic, crash
 
 \paragraph*{Group key agreement and MLS.} RFC~9420 specifies MLS~\cite{rfc9420}, and RFC~9750 places access control in the application~\cite{rfc9750}. Continuous group key agreement was formalized with active security by Alwen \emph{et al.}~\cite{active-cgka}, and the modular analysis of MLS-era messaging~\cite{modular-mls} is the closest proof architecture. ETK analyses the final RFC including external operations~\cite{etk}. ETK also identifies the rejoin-by-external-commit weakness that condition K2 rules out. TreeSync~\cite{treesync} and the TreeKEM analysis~\cite{treekem-fstar} are machine-checked symbolic results. Key confinement rests on Refs.~\cite{treekem-fstar} and \cite{etk}, and Ed25519's strong unforgeability under strict verification on Ref.~\cite{ed25519-provable}. None of these works relates an external, independently evolving ledger to the group's epochs.
 
-\paragraph*{Administration and policy in groups.} Balb\'as, Collins and Vaudenay define administrated CGKA, in which only admins can change membership~\cite{acgka}. That is the closest cryptographic treatment of our admin right, with policy inside the group rather than in an external ledger. The IETF MIMI drafts give a hub provider the role of ordering messages and enforcing room policy on MLS groups~\cite{mimi}, which is architecturally close to our ledger and sequencer, without a coherence theorem. Ink~\&~Switch's Keyhive pairs delegation-chain capabilities for writing with a TreeKEM-like key agreement for reading~\cite{keyhive}, the same division of labor as here, in a local-first setting. Signal's private group system enforces group access at the server with anonymous credentials~\cite{signal-pgs}.
+\paragraph*{Administration and policy in groups.} Balb\'as, Collins and Vaudenay define administrated CGKA, in which only admins can change membership~\cite{acgka}. That is the closest cryptographic treatment of our admin right, with policy inside the group rather than in an external ledger. The IETF MIMI drafts give a hub provider the role of ordering messages and enforcing room policy on MLS groups~\cite{mimi}, which is architecturally close to our ledger and sequencer, without a concordance theorem. Ink~\&~Switch's Keyhive pairs delegation-chain capabilities for writing with a TreeKEM-like key agreement for reading~\cite{keyhive}, the same division of labor as here, in a local-first setting. Signal's private group system enforces group access at the server with anonymous credentials~\cite{signal-pgs}.
 
 \paragraph*{Revocation.} Security-mediated RSA withholds per-operation help after revocation while the client keeps its key share~\cite{sem}. It is the direct precedent for mediating every use, which we do not claim as new. The reference-monitor principle of complete mediation~\cite{anderson} is the engineering ancestor of Rules R and A.
 
-\paragraph*{What is new here.} We contribute the definition of coherence with an explicit cut, the factorization of read coherence into a combinatorial roster lemma and the key confinement of MLS, derived from published theorems, the uniform treatment of delegation and invocation through locality, and a construction whose every rule is shown necessary.
+\paragraph*{What is new here.} We contribute the definition of may--can concordance with an explicit cut, the factorization of read concordance into a combinatorial roster lemma and the key confinement of MLS, derived from published theorems, the uniform treatment of delegation and invocation through locality, and a construction whose every rule is shown necessary.
 
 %=====================================================================
 \section{Discussion}\label{sec:discussion}
 %=====================================================================
 
-Coherence asks one thing: capabilities exercised on an action must have been authorized at the instant the action was released. Once the cut is fixed, the problem splits cleanly. The ledger keeps the roster honest (Lemma~\ref{lem:roster}), MLS keeps keys inside the roster (Propositions~\ref{prop:Ksym} and \ref{prop:Kcomp}), and signatures keep acceptances honest (Theorem~\ref{thm:write}).
+Concordance asks one thing: whoever can exercise a capability on an action may do so at the instant the action was released. Once the cut is fixed, the problem splits cleanly. The ledger keeps the roster honest (Lemma~\ref{lem:roster}), MLS keeps keys inside the roster (Propositions~\ref{prop:Ksym} and \ref{prop:Kcomp}), and signatures keep acceptances honest (Theorem~\ref{thm:write}).
 
 Four steps remain open, in decreasing order of importance.
 \begin{enumerate}
-\item \emph{Align the code and check the full ETK proof.} Apply the proposed correction that moves the policy binding into the acknowledgement. Then check the proof in the full version of Ref.~\cite{etk} against the static coalition corruption pattern used here. Separately, an extension of ETK to group-context changes is a natural question for its authors.
+\item \emph{Align the code and check the full ETK proof.} Apply the proposed correction that moves the policy binding into the acknowledgement. Then check the proof in the full version of Ref.~\cite{etk} against the static coalition corruption pattern used here. For the post-quantum suite, check that the corrected ML-DSA proof~\cite{fsa-fix} covers strong unforgeability; a quantum random-oracle version of ETK would extend Proposition~\ref{prop:Kcomp} to quantum adversaries. Separately, an extension of ETK to group-context changes is a natural question for its authors.
 \item \emph{Mechanize Lemma~\ref{lem:fence} and Theorem~\ref{thm:write}.} Both are inductive invariants of a small transition system and suit a proof assistant or TLA$^+$ with its proof system.
 \item \emph{Other cuts.} Causal and lease cuts trade the ledger contact of Proposition~\ref{prop:price} for weaker guarantees. Each needs its own analogue of Lemma~\ref{lem:roster}.
 \item \emph{Finer read domains.} Here one group is one read domain. Per-resource read access within a group cannot be expressed by group keys alone and needs per-resource keys or separate groups.
@@ -511,7 +513,7 @@ Table~\ref{tab:K} lists where the implementation enforces each condition. Every 
 K1 & \cell{0.8\columnwidth}{repair commit built with \texttt{force\_self\_update(true)}; OpenMLS rejects a remove without a path}\\
 K2 & \cell{0.8\columnwidth}{sequencer accepts only \texttt{Sender::Member} commits (\texttt{process\_commit})}\\
 K3 & \cell{0.8\columnwidth}{no exporter secret is used in \texttt{src/}}\\
-K4 & \cell{0.8\columnwidth}{ciphersuite with Ed25519; OpenMLS and the ledger verify with \texttt{verify\_strict}}\\
+K4 & \cell{0.8\columnwidth}{default suite \texttt{0x0052}: ML-DSA-44 signatures, X-Wing HPKE; classical suite \texttt{0x0001}: Ed25519 verified with \texttt{verify\_strict}, DHKEM(X25519). OpenMLS and the ledger use the same signature scheme}\\
 K5 & \cell{0.8\columnwidth}{re-admission by a new KeyPackage; other rights by an update with a new signer}\\
 pending & \cell{0.8\columnwidth}{the repair commit still calls \texttt{propose\_group\_context\_extensions}; the proposed correction removes it}\\
 \end{tabular}
@@ -552,6 +554,18 @@ pending & \cell{0.8\columnwidth}{the repair commit still calls \texttt{propose\_
 \bibitem{wallez-thesis} T.~Wallez, \emph{Formal Verification for High Assurance Messaging Protocols}, Ph.D. thesis, Inria Paris (2025), Ch.~6, \url{https://www.twal.org/pdf/thesis.pdf}.
 
 \bibitem{ed25519-provable} J.~Brendel, C.~Cremers, D.~Jackson, and M.~Zhao, The provable security of Ed25519: Theory and practice, in \emph{IEEE Symposium on Security and Privacy} (2021).
+
+\bibitem{fips204} National Institute of Standards and Technology, \emph{Module-Lattice-Based Digital Signature Standard}, FIPS 204 (2024), Sec.~3.1.
+
+\bibitem{kls18} E.~Kiltz, V.~Lyubashevsky, and C.~Schaffner, A concrete treatment of Fiat--Shamir signatures in the quantum random-oracle model, in \emph{Eurocrypt 2018}; the bound for Dilithium is restated in L.~Ducas \emph{et al.}, \emph{CRYSTALS-Dilithium Algorithm Specifications and Supporting Documentation}, version 3.1 (2021), Sec.~6.2.
+
+\bibitem{fsa-fix} M.~Barbosa, G.~Barthe, C.~Doczkal, J.~Don, S.~Fehr, B.~Gr\'egoire, Y.-H.~Huang, A.~H\"ulsing, Y.~Lee, and X.~Wu, Fixing and mechanizing the security proof of Fiat--Shamir with aborts and Dilithium, in \emph{Crypto 2023}; IACR ePrint 2023/246.
+
+\bibitem{xwing} M.~Barbosa, D.~Connolly, J.~D.~Duarte, A.~Kaiser, P.~Schwabe, K.~Varner, and B.~Westerbaan, X-Wing: The hybrid KEM you've been looking for, IACR Communications in Cryptology \textbf{1}(1) (2024); IACR ePrint 2024/039.
+
+\bibitem{cramer-shoup} R.~Cramer and V.~Shoup, Design and analysis of practical public-key encryption schemes secure against adaptive chosen ciphertext attack, SIAM J. Comput. \textbf{33}, 167 (2003).
+
+\bibitem{dhies} M.~Abdalla, M.~Bellare, and P.~Rogaway, The oracle Diffie--Hellman assumptions and an analysis of DHIES, in \emph{CT-RSA 2001}.
 
 \end{thebibliography}
 

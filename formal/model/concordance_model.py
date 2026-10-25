@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Exhaustive finite-state check of the coherence construction.
+"""Exhaustive finite-state check of the concordance construction.
 
-This is the executable companion of formal/paper/coherence.tex. It models the
+This is the executable companion of formal/paper/concordance.tex. It models the
 ledger, a symbolic MLS group and a retained-key adversary, then enumerates
 every reachable state within fixed resource bounds (not a depth bound).
 
@@ -12,8 +12,8 @@ that holds an epoch key can read every message protected under it, whatever
 the ledger says.
 
 Usage:
-    python3 coherence_model.py            human-readable report
-    python3 coherence_model.py --json     machine-readable report
+    python3 concordance_model.py            human-readable report
+    python3 concordance_model.py --json     machine-readable report
 """
 
 from __future__ import annotations
@@ -250,7 +250,7 @@ def successors(state: State, mutant: str | None = None) -> Iterable[tuple[str, S
 
 # --- Properties --------------------------------------------------------------
 
-def read_coherence(state: State) -> bool:
+def read_concordance(state: State) -> bool:
     """Theorem 1: whoever can derive the key of a released message was authorized at its cut."""
     return all(
         p in authorized
@@ -260,7 +260,7 @@ def read_coherence(state: State) -> bool:
     )
 
 
-def write_coherence(state: State) -> bool:
+def write_concordance(state: State) -> bool:
     """Theorem 2: every acceptance traces to one release valid at its cut, once per receiver."""
     releases = {rid: ok for rid, _a, _p, ok in state.write_releases}
     pairs = [(rid, receiver) for rid, receiver, _ in state.accepts]
@@ -284,12 +284,12 @@ def key_confinement(state: State) -> bool:
 
 
 PROPERTIES = (
-    ("read_coherence", read_coherence),
-    ("write_coherence", write_coherence),
+    ("read_concordance", read_concordance),
+    ("write_concordance", write_concordance),
     ("fence_lemma", fence_lemma),
     ("key_confinement", key_confinement),
 )
-SAFETY = ("read_coherence", "write_coherence")
+SAFETY = ("read_concordance", "write_concordance")
 
 
 def failed(state: State) -> list[str]:

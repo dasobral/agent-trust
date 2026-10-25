@@ -36,7 +36,7 @@ MLS lets members change the extensions of the group context through a GroupConte
 \section{The question}
 %=====================================================================
 
-Every MLS epoch carries a \emph{group context}~\cite{rfc9420}: the protocol version, cipher suite, group identifier, epoch number, tree hash, confirmed transcript hash and a list of extensions. Applications often need to attach their own data to an epoch. RFC~9420 provides a way: a GroupContextExtensions proposal, committed like any other, replaces the extension list. In our own construction~\cite{coherence}, an earlier design used it to write the current authorization revision into each repair commit, so that MLS would confirm the revision cryptographically.
+Every MLS epoch carries a \emph{group context}~\cite{rfc9420}: the protocol version, cipher suite, group identifier, epoch number, tree hash, confirmed transcript hash and a list of extensions. Applications often need to attach their own data to an epoch. RFC~9420 provides a way: a GroupContextExtensions proposal, committed like any other, replaces the extension list. In our own construction~\cite{concordance}, an earlier design used it to write the current authorization revision into each repair commit, so that MLS would confirm the revision cryptographically.
 
 ETK~\cite{etk} proves that the core of RFC~9420, including external operations, realizes an ideal group-key functionality $\F$. In the safe epochs, defined by a predicate \textsf{safe}, application secrets are random. Its proposal actions are update, add, remove, external self-add and pre-shared key. GroupContextExtensions is not among them. A protocol that uses it therefore falls, strictly speaking, outside the theorem.
 
@@ -173,7 +173,7 @@ Three cases need more than this sketch.
 
 \bibitem{etk} C.~Cremers, E.~G\"unsay, V.~Wesselkamp, and M.~Zhao, ETK: External-operations TreeKEM and the security of MLS in RFC 9420, in \emph{Eurocrypt 2026}; full version IACR ePrint 2025/229.
 
-\bibitem{coherence} D.~Sobral, Authorization--capability coherence: revocation that survives retained keys in dynamic secure groups, manuscript (2026).
+\bibitem{concordance} D.~Sobral, Two clocks, one cut: may--can concordance and revocation in MLS groups, manuscript (2026).
 
 \end{thebibliography}
 
