@@ -1,0 +1,63 @@
+//! Writes v1 kernel stores (one per kernel revision) for the R-13d compatibility tests.
+#[path = "k_e774ba2.rs"]
+#[allow(dead_code)]
+mod k_e774ba2;
+#[path = "k_efc0892.rs"]
+#[allow(dead_code)]
+mod k_efc0892;
+use serde_json::{json, Value};
+
+macro_rules! scenario {
+    ($kernel:ty, $dir:expr) => {{
+        let owned: String = $dir.to_string(); let dir = std::path::Path::new(&owned);
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("authority.sqlite");
+        let _ = std::fs::remove_file(&path);
+        let mut k = <$kernel>::open(&path).unwrap();
+        let mut ok = |v: Value| k.execute(v.clone()).unwrap_or_else(|e| panic!("{e}: {v}"));
+        ok(json!({"command":"init","group":"group-a","root":"root"}));
+        for (subject, expires) in [("bob", 50u64), ("carol", 1_000_000u64)] {
+            ok(json!({"command":"delegate","actor":"root","subject":subject,
+                      "rights":["read","write","admit"],"resources":["group-a"],
+                      "expires_at":expires,"not_before":0,"depth":4,"now":10}));
+        }
+        for subject in ["bob", "carol"] {
+            ok(json!({"command":"admit","actor":"root","subject":subject,"now":10}));
+        }
+        ok(json!({"command":"invoke","actor":"root","executor":"carol","rights":["write"],
+                  "resources":["group-a"],"now":10}));
+        ok(json!({"command":"allocate","actor":"root","op":"op-1"}));
+        let head = ok(json!({"command":"checkpoint"}));
+        let generation = |subject: &str, right: &str| -> u64 {
+            head["grants"].as_array().unwrap().iter()
+                .find(|g| g["subject"] == subject && g["right"] == right).unwrap()["generation"]
+                .as_u64().unwrap()
+        };
+        let mut cover = vec![json!([{"subject":"root","right":"write","generation":generation("root","write")}])];
+        for reader in head["roster"].as_array().unwrap() {
+            let reader = reader.as_str().unwrap();
+            cover.push(json!([{"subject":reader,"right":"read","generation":generation(reader,"read")}]));
+        }
+        ok(json!({"command":"release","actor":"root","op":"op-1","right":"write",
+                  "policy_revision":head["policy_revision"],"epoch":head["epoch"],
+                  "branch":head["branch"],"digest":"cafebabe","cover":cover,"now":10}));
+        ok(json!({"command":"persist","op":"op-1","digest":"cafebabe","envelope":"0a0b0c0d"}));
+        for reader in ["bob", "carol"] {
+            ok(json!({"command":"consume","op":"op-1","recipient":reader,"actor":reader,"now":10}));
+        }
+        // R-12: bob's delegation expired at 50; this step records the expiry first.
+        ok(json!({"command":"grant","actor":"root","subject":"dave","right":"read",
+                  "generation":0,"fresh_keys":true,"now":100}));
+        let full = ok(json!({"command":"checkpoint"}));
+        drop(k);
+        std::fs::write(dir.join("checkpoint.json"), serde_json::to_string_pretty(&full).unwrap()).unwrap();
+        let kinds: Vec<_> = full["history"].as_array().unwrap().iter().map(|e| e["event"]["kind"].as_str().unwrap().to_owned()).collect();
+        println!("{}: {} events {:?}", $dir, kinds.len(), kinds);
+    }};
+}
+
+fn main() {
+    let out = std::env::args().nth(1).unwrap();
+    scenario!(k_e774ba2::Authority, &format!("{out}/v1-e774ba2"));
+    scenario!(k_efc0892::Authority, &format!("{out}/v1-efc0892"));
+}

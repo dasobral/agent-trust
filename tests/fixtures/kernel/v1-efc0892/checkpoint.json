@@ -1,0 +1,2116 @@
+{
+  "branch": "admit:2:carol",
+  "epoch": 2,
+  "fence_revision": 4,
+  "grants": [
+    {
+      "active": true,
+      "generation": 0,
+      "right": "read",
+      "subject": "root"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "write",
+      "subject": "root"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "admin",
+      "subject": "root"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "admit",
+      "subject": "root"
+    },
+    {
+      "active": false,
+      "generation": 0,
+      "right": "read",
+      "subject": "bob"
+    },
+    {
+      "active": false,
+      "generation": 0,
+      "right": "write",
+      "subject": "bob"
+    },
+    {
+      "active": false,
+      "generation": 0,
+      "right": "admit",
+      "subject": "bob"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "read",
+      "subject": "carol"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "write",
+      "subject": "carol"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "admit",
+      "subject": "carol"
+    },
+    {
+      "active": true,
+      "generation": 0,
+      "right": "read",
+      "subject": "dave"
+    }
+  ],
+  "group": "group-a",
+  "history": [
+    {
+      "event": {
+        "kind": "init",
+        "snapshot": {
+          "branch": "genesis",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            }
+          ],
+          "epoch": 0,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [],
+          "operations": [],
+          "policy_revision": 0,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 0,
+          "roster": [
+            "root"
+          ]
+        }
+      },
+      "hash": "2f5eb249d4245b2feddf6971efbc434b03f10cdb8585b8793048b6174726047b",
+      "previous": "",
+      "sequence": 0
+    },
+    {
+      "event": {
+        "kind": "delegate",
+        "snapshot": {
+          "branch": "genesis",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            }
+          ],
+          "epoch": 0,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [],
+          "operations": [],
+          "policy_revision": 1,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 1,
+          "roster": [
+            "root"
+          ]
+        }
+      },
+      "hash": "8709a3136fff02db9a067e632d4a6ce9364cea09acaddf1ce8e17e74e63d697e",
+      "previous": "2f5eb249d4245b2feddf6971efbc434b03f10cdb8585b8793048b6174726047b",
+      "sequence": 1
+    },
+    {
+      "event": {
+        "kind": "delegate",
+        "snapshot": {
+          "branch": "genesis",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 0,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [],
+          "operations": [],
+          "policy_revision": 2,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 2,
+          "roster": [
+            "root"
+          ]
+        }
+      },
+      "hash": "05f4d11d6c6e52f56e7eeef2551dcccea848523e43e71670a183b803d5300096",
+      "previous": "8709a3136fff02db9a067e632d4a6ce9364cea09acaddf1ce8e17e74e63d697e",
+      "sequence": 2
+    },
+    {
+      "event": {
+        "kind": "admit",
+        "snapshot": {
+          "branch": "admit:1:bob",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 1,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [],
+          "operations": [],
+          "policy_revision": 2,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 3,
+          "roster": [
+            "root",
+            "bob"
+          ]
+        }
+      },
+      "hash": "a3a4b7bf092e5ea8b808473514b0c7fd1178bbfbc54f3d1dc4758249de147091",
+      "previous": "05f4d11d6c6e52f56e7eeef2551dcccea848523e43e71670a183b803d5300096",
+      "sequence": 3
+    },
+    {
+      "event": {
+        "kind": "admit",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [],
+          "operations": [],
+          "policy_revision": 2,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 4,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "3e41c8ec8cf6b1c25b504508e7a05657f501fe2d5fad872a59c38f22d81c8d6b",
+      "previous": "a3a4b7bf092e5ea8b808473514b0c7fd1178bbfbc54f3d1dc4758249de147091",
+      "sequence": 4
+    },
+    {
+      "event": {
+        "kind": "invoke",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 5,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "4ed4f033c85d323af833f0c83bcd3574793213bf230b5e17047395c0c080f6b6",
+      "previous": "3e41c8ec8cf6b1c25b504508e7a05657f501fe2d5fad872a59c38f22d81c8d6b",
+      "sequence": 5
+    },
+    {
+      "event": {
+        "kind": "allocate",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": null,
+              "digest": null,
+              "envelope": null,
+              "epoch": null,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": null,
+              "resource": "group-a",
+              "revision": null,
+              "right": null,
+              "roster": [],
+              "status": "allocated",
+              "writer_generation": null
+            }
+          ],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 6,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "bb44fa1d0cd9fa52e97729617bcb01f23005df308b6b777fcc7f862ebd972994",
+      "previous": "4ed4f033c85d323af833f0c83bcd3574793213bf230b5e17047395c0c080f6b6",
+      "sequence": 6
+    },
+    {
+      "event": {
+        "kind": "release",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "released",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 7,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "3eab475cf0491988ea41ea88ba039f05f3f670f6f19513995b5efd201fe82fe8",
+      "previous": "bb44fa1d0cd9fa52e97729617bcb01f23005df308b6b777fcc7f862ebd972994",
+      "sequence": 7
+    },
+    {
+      "event": {
+        "kind": "persist",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "envelope_digest": "b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "persisted",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 8,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "f86a5708cbeea8bfe8b31d8fcfb7df8ede63751700f5740bfac97c366b7eddde",
+      "previous": "3eab475cf0491988ea41ea88ba039f05f3f670f6f19513995b5efd201fe82fe8",
+      "sequence": 8
+    },
+    {
+      "event": {
+        "kind": "consume",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [
+            {
+              "op": "op-1",
+              "recipient": "bob"
+            }
+          ],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "envelope_digest": "b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "persisted",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 9,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "ff6558647b733f8d40a9dcea97743eaba052fe0f985cef1f099043189cb1e344",
+      "previous": "f86a5708cbeea8bfe8b31d8fcfb7df8ede63751700f5740bfac97c366b7eddde",
+      "sequence": 9
+    },
+    {
+      "event": {
+        "kind": "consume",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [
+            {
+              "op": "op-1",
+              "recipient": "bob"
+            },
+            {
+              "op": "op-1",
+              "recipient": "carol"
+            }
+          ],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": null,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "envelope_digest": "b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "persisted",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 3,
+          "read_fenced": false,
+          "repair_pending": null,
+          "revision": 10,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "0a6c7ff7a8ba6b25acc734d97e572b13ebb4d38aeabe8319bb6bf8e0697746a6",
+      "previous": "ff6558647b733f8d40a9dcea97743eaba052fe0f985cef1f099043189cb1e344",
+      "sequence": 10
+    },
+    {
+      "event": {
+        "kind": "expire",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [
+            {
+              "op": "op-1",
+              "recipient": "bob"
+            },
+            {
+              "op": "op-1",
+              "recipient": "carol"
+            }
+          ],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": 4,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "envelope_digest": "b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "persisted",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 4,
+          "read_fenced": true,
+          "repair_pending": null,
+          "revision": 11,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "1e4e6a2d9d350cfabb7f8e800b19f79ed71615ce7e8e9747bf927e91b49641d5",
+      "previous": "0a6c7ff7a8ba6b25acc734d97e572b13ebb4d38aeabe8319bb6bf8e0697746a6",
+      "sequence": 11
+    },
+    {
+      "event": {
+        "kind": "grant",
+        "snapshot": {
+          "branch": "admit:2:carol",
+          "consumed": [
+            {
+              "op": "op-1",
+              "recipient": "bob"
+            },
+            {
+              "op": "op-1",
+              "recipient": "carol"
+            }
+          ],
+          "delegations": [
+            {
+              "depth": 8,
+              "expires_at": 18446744073709551615,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admin",
+                "admit"
+              ],
+              "subject": "root"
+            },
+            {
+              "depth": 4,
+              "expires_at": 50,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "bob"
+            },
+            {
+              "depth": 4,
+              "expires_at": 1000000,
+              "not_before": 0,
+              "parent": "root",
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "read",
+                "write",
+                "admit"
+              ],
+              "subject": "carol"
+            }
+          ],
+          "epoch": 2,
+          "fence_revision": 4,
+          "grants": [
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admin",
+              "subject": "root"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "root"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "read",
+              "subject": "bob"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "write",
+              "subject": "bob"
+            },
+            {
+              "active": false,
+              "generation": 0,
+              "right": "admit",
+              "subject": "bob"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "write",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "admit",
+              "subject": "carol"
+            },
+            {
+              "active": true,
+              "generation": 0,
+              "right": "read",
+              "subject": "dave"
+            }
+          ],
+          "group": "group-a",
+          "invocations": [
+            {
+              "active": true,
+              "executor": "carol",
+              "id": "invocation:5",
+              "origin": "root",
+              "parent": null,
+              "resources": [
+                "group-a"
+              ],
+              "rights": [
+                "write"
+              ]
+            }
+          ],
+          "operations": [
+            {
+              "actor": "root",
+              "branch": "admit:2:carol",
+              "digest": "cafebabe",
+              "envelope": null,
+              "envelope_digest": "b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507",
+              "epoch": 2,
+              "invocation": null,
+              "op": "op-1",
+              "policy_revision": 3,
+              "resource": "group-a",
+              "revision": 6,
+              "right": "write",
+              "roster": [
+                {
+                  "generation": 0,
+                  "subject": "root"
+                },
+                {
+                  "generation": 0,
+                  "subject": "bob"
+                },
+                {
+                  "generation": 0,
+                  "subject": "carol"
+                }
+              ],
+              "status": "persisted",
+              "writer_generation": 0
+            }
+          ],
+          "policy_revision": 5,
+          "read_fenced": true,
+          "repair_pending": null,
+          "revision": 12,
+          "roster": [
+            "root",
+            "bob",
+            "carol"
+          ]
+        }
+      },
+      "hash": "b474812f6a704e0e40b7dec08905657b9a5e1ab3c44954720e560659169ac492",
+      "previous": "1e4e6a2d9d350cfabb7f8e800b19f79ed71615ce7e8e9747bf927e91b49641d5",
+      "sequence": 12
+    }
+  ],
+  "history_root": "b474812f6a704e0e40b7dec08905657b9a5e1ab3c44954720e560659169ac492",
+  "invocations": [
+    {
+      "active": true,
+      "executor": "carol",
+      "id": "invocation:5",
+      "origin": "root",
+      "parent": null,
+      "resources": [
+        "group-a"
+      ],
+      "rights": [
+        "write"
+      ]
+    }
+  ],
+  "policy_digest": "668ad60bc6b04675c4adfe2b3000372a0c94d50a4cee91f29548ed46066da2c4",
+  "policy_revision": 5,
+  "read_fenced": true,
+  "repair_pending": null,
+  "revision": 12,
+  "roster": [
+    "root",
+    "bob",
+    "carol"
+  ]
+}
