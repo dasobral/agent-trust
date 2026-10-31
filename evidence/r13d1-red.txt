@@ -1,0 +1,13 @@
+# R-13d.1 red, 09ca39c + tests/authority_compact_history.rs, 2026-10-31
+# command: cargo test --locked --test authority_compact_history
+# behavioral: 5 assertion failures, 2 guards pass (v1 checkpoint, tip tamper);
+# request_time_does_not_grow_with_history ran > 13 min on the quadratic kernel (debug build) and was stopped by hand: no exit code.
+test head_checkpoint_omits_history_and_invocations ... FAILED
+test full_history_rebuilds_snapshots_and_since_returns_stored_events ... FAILED
+test events_after_init_are_compact_v2_records_without_snapshots_or_envelopes ... FAILED
+test a_truncated_or_edited_tip_fails_the_next_request ... ok
+test v1_stores_continue_with_v2_events ... FAILED
+test v1_stores_open_with_the_same_checkpoint ... ok
+test history_bytes_grow_linearly_with_events has been running for over 60 seconds
+test request_time_does_not_grow_with_history has been running for over 60 seconds
+test history_bytes_grow_linearly_with_events ... FAILED

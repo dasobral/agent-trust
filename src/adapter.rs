@@ -2762,9 +2762,20 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             .execute(json!({"command":"checkpoint", "history":"none"}))
     }
 
-    /// The full kernel checkpoint, history included: only C-32 recovery reads events.
-    fn kernel_history(&mut self) -> Result<Value, String> {
-        self.kernel.execute(json!({"command":"checkpoint"}))
+    /// The kernel head and the events after sequence `since` (C-32 recovery). Every
+    /// kernel event advances `revision` by one, so the events after a revision are the
+    /// events after the sequence of the same number; a store where that does not hold
+    /// falls back to the whole history, and recovery filters by revision either way.
+    fn kernel_history(&mut self, since: u64) -> Result<Value, String> {
+        match self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":{"since":since}}))
+        {
+            Err(err) if err.starts_with("stale_frontier") => {
+                self.kernel.execute(json!({"command":"checkpoint"}))
+            }
+            other => other,
+        }
     }
 
     /// C-25: whether `subject` is a current roster member.
@@ -3730,6 +3741,24 @@ fn submitted_commit(body: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| corrupt_intent())
 }
 
+/// The `revision` after a kernel history event: in its snapshot (v1) or the event (v2).
+fn event_revision(event: &Value) -> Option<u64> {
+    event["revision"]
+        .as_u64()
+        .or_else(|| event["snapshot"]["revision"].as_u64())
+}
+
+/// Operation `op` after a kernel history event: in its snapshot (v1) or among the rows it
+/// wrote (v2).
+fn event_operation<'e>(event: &'e Value, op: &str) -> Option<&'e Value> {
+    if event["v"] == json!(2) {
+        return event["after"]["ops"].get(op).map(|row| &row["operation"]);
+    }
+    event["snapshot"]["operations"]
+        .as_array()
+        .and_then(|operations| operations.iter().find(|o| o["op"] == json!(op)))
+}
+
 /// The fields of the kernel release response for `op`, rebuilt from the last history
 /// event, which recovery has shown to be that release (C-32).
 fn release_response(checkpoint: &Value, op: &str) -> Result<Value, String> {
@@ -3737,10 +3766,8 @@ fn release_response(checkpoint: &Value, op: &str) -> Result<Value, String> {
         .as_array()
         .and_then(|history| history.last())
         .ok_or("corrupt_history: kernel history")?;
-    let operation = last["event"]["snapshot"]["operations"]
-        .as_array()
-        .and_then(|operations| operations.iter().find(|o| o["op"] == json!(op)))
-        .ok_or("corrupt_history: released operation")?;
+    let operation =
+        event_operation(&last["event"], op).ok_or("corrupt_history: released operation")?;
     if operation["status"] != json!("released") {
         return Err("corrupt_history: released operation".into());
     }
@@ -3767,7 +3794,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     fn recover(&mut self) -> Result<(), String> {
         let intents = self.intents()?;
         for intent in intents {
-            let checkpoint = self.kernel_history()?;
+            let checkpoint = self.kernel_history(intent.revision)?;
             // The events after the intent's revision: R-12 `expire` events, which the
             // kernel records in the step's transaction even when the step fails, then the
             // step's own event if it was applied.
@@ -3776,8 +3803,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 .ok_or("malformed: kernel history")?
                 .iter()
                 .filter(|entry| {
-                    entry["event"]["snapshot"]["revision"]
-                        .as_u64()
+                    event_revision(&entry["event"])
                         .is_some_and(|revision| revision > intent.revision)
                 })
                 .map(|entry| entry["event"]["kind"].as_str().unwrap_or_default())

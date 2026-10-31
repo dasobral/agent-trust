@@ -20,7 +20,6 @@ use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::RustCrypto;
 use openmls_traits::OpenMlsProvider;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
-use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -999,14 +998,6 @@ fn consumed_of(state: &Value) -> Result<Vec<(String, String)>, String> {
 // Trace export (C-37)
 // ---------------------------------------------------------------------------
 
-/// The kernel's hash-chain input; the field order is the kernel's serialization order.
-#[derive(Serialize)]
-struct ChainInput<'a> {
-    sequence: u64,
-    previous: &'a str,
-    event: &'a Value,
-}
-
 /// One accepted or rejected adapter request (C-5).
 struct TraceRow {
     id: i64,
@@ -1033,50 +1024,6 @@ fn open_read_only(path: &Path) -> Result<Connection, String> {
 
 fn sql(err: rusqlite::Error) -> String {
     format!("malformed: export database {err}")
-}
-
-/// The kernel history as `(kind, snapshot)`, after checking its hash chain.
-fn read_history(kernel: &Connection) -> Result<Vec<(String, Value)>, String> {
-    let mut statement = kernel
-        .prepare("SELECT sequence, previous, hash, event FROM authority_events ORDER BY sequence")
-        .map_err(sql)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })
-        .map_err(sql)?;
-    let mut history = Vec::new();
-    let mut previous_hash = String::new();
-    for row in rows {
-        let (sequence, previous, hash, raw) = row.map_err(sql)?;
-        let event: Value =
-            serde_json::from_str(&raw).map_err(|_| "corrupt_history: event".to_string())?;
-        let expected = u64::try_from(history.len()).map_err(|_| "corrupt_history")?;
-        let input = serde_json::to_vec(&ChainInput {
-            sequence: expected,
-            previous: &previous,
-            event: &event,
-        })
-        .map_err(|_| "corrupt_history: event".to_string())?;
-        if u64::try_from(sequence).ok() != Some(expected)
-            || previous != previous_hash
-            || hex::encode(Sha256::digest(input)) != hash
-        {
-            return Err("corrupt_history: hash chain".into());
-        }
-        let kind = event["kind"]
-            .as_str()
-            .ok_or("corrupt_history: kind")?
-            .to_owned();
-        history.push((kind, event["snapshot"].clone()));
-        previous_hash = hash;
-    }
-    Ok(history)
 }
 
 fn read_trace(store: &Connection) -> Result<Vec<TraceRow>, String> {
@@ -1134,7 +1081,8 @@ fn kernel_kinds(command: &str) -> Result<(&'static [&'static str], bool), String
 pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
     let kernel = open_read_only(&dir.join(AUTHORITY_FILE))?;
     let store = open_read_only(&dir.join(ADAPTER_FILE))?;
-    let history = read_history(&kernel)?;
+    // R-13d: one event at a time, chain-checked, with its v1 snapshot rebuilt.
+    let (history, history_errors) = crate::authority::history_snapshots(&kernel);
     let trace = read_trace(&store)?;
     let apf_public: String = store
         .query_row(
@@ -1157,7 +1105,22 @@ pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
         confirmed: BTreeMap::new(),
         offer_admins: Vec::new(),
     };
-    let mut history = history.into_iter().peekable();
+    let mut history = history.peekable();
+    let outcome = export_events(&mut export, &mut history, trace);
+    let failed = history_errors.borrow_mut().take();
+    if let Some(error) = failed {
+        return Err(error);
+    }
+    outcome?;
+    Ok(export.events)
+}
+
+/// The body of `export_v2_trace`: matches the adapter trace to the kernel history.
+fn export_events(
+    export: &mut Export<'_>,
+    history: &mut std::iter::Peekable<impl Iterator<Item = (String, Value)>>,
+    trace: Vec<TraceRow>,
+) -> Result<(), String> {
     let (kind, mut current) = history
         .next()
         .ok_or("uninitialized: empty kernel history")?;
@@ -1169,7 +1132,7 @@ pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
     for row in trace {
         // R-12: an expiry belongs to no request; it precedes the step that recorded it,
         // which may have failed.
-        current = export.expiries(&mut history, current)?;
+        current = export.expiries(history, current)?;
         if row.outcome != "ok" && row.outcome != "recovered" {
             continue;
         }
@@ -1224,13 +1187,13 @@ pub fn export_v2_trace(dir: &Path) -> Result<Vec<Value>, String> {
             export.offer_admins.push(actor.to_owned());
         }
     }
-    export.expiries(&mut history, current)?;
+    export.expiries(history, current)?;
     if let Some((kind, _)) = history.next() {
         return Err(format!(
             "binding_mismatch: kernel event {kind} has no accepted trace event"
         ));
     }
-    Ok(export.events)
+    Ok(())
 }
 
 struct Export<'a> {
@@ -1286,7 +1249,7 @@ impl Export<'_> {
     /// returns the snapshot after them.
     fn expiries(
         &mut self,
-        history: &mut std::iter::Peekable<std::vec::IntoIter<(String, Value)>>,
+        history: &mut std::iter::Peekable<impl Iterator<Item = (String, Value)>>,
         mut current: Value,
     ) -> Result<Value, String> {
         while history.peek().is_some_and(|(kind, _)| kind == "expire") {

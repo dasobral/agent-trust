@@ -335,6 +335,8 @@ Target: the live set is bounded by members plus messages in flight; time per req
 |---|---|---|---|---|
 | Before R-13 | `e774ba2` | 744 / 1 213 | 27.8 / 137.7 MB | quadratic |
 | R-13a + R-13c | `efc0892` | 239 / 238 | 11.6 / 11.6 MB | quadratic, and the same in both suites |
-| R-13d | next | target: flat | target: constant per event | target: bounded live set |
+| R-13d.1 | next commit | 0.21 at 100 000 events (`pq`-sized envelopes), flat | 1.7 KB per event, constant; RSS 10 MiB, flat | linear storage, flat time |
+
+At 100 000 events, reopening (with full chain validation) takes 185 ms (`evidence/f8-bench/scale-r13d1.txt`).
 
 The figures for `efc0892` are measured on the committed `src/authority.rs` (`evidence/f8-bench/`, with the committed kernel as `authority_base.rs`). The verifier passed every gate after each stage (`evidence/r13a-green.txt`, `evidence/r13c-green.txt`).

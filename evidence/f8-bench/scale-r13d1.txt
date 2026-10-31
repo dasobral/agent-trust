@@ -1,0 +1,14 @@
+# R-13d.1 production-scale run, 2026-10-31, release build, committed src/authority.rs
+# command: scale 5450 10000  (pq-sized envelopes, 7 readers, head checkpoint before each mutation; source evidence/f8-bench/scale.rs)
+events,bytes_per_event,ms_per_request,rss_mib
+10022,1684,0.212,9.9
+20022,1689,0.272,10.0
+30022,1691,0.215,10.1
+40022,1692,0.213,10.1
+50022,1693,0.212,10.1
+60022,1693,0.216,10.1
+70022,1693,0.217,10.1
+80022,1694,0.213,10.1
+90022,1694,0.212,10.1
+100022,1694,0.213,10.1
+reopen_ms,185,file_mb,213.7

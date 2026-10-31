@@ -1,6 +1,7 @@
 //! R-13a (D-17): `checkpoint` reads that do not materialize the whole history.
 //! `history` absent or `"all"` keeps today's response; `"none"` returns the head only;
-//! `{"since": s}` returns the events after sequence `s`.
+//! `{"since": s}` returns the events after sequence `s`. R-13d: the head also omits the
+//! invocations, and `since` returns the stored events without rebuilt snapshots.
 use agent_trust::authority::Authority;
 use serde_json::{json, Value};
 use std::fs;
@@ -134,7 +135,10 @@ fn head_checkpoint_is_the_full_checkpoint_without_history() {
         "a head checkpoint must not carry the history: {head}"
     );
     assert_eq!(head["history_root"], full["history_root"]);
-    assert_eq!(head, without_history(full));
+    // R-13d: the head omits the invocations too; they grow with the history.
+    let mut expected = without_history(full);
+    expected.as_object_mut().unwrap().remove("invocations");
+    assert_eq!(head, expected);
 }
 
 #[test]
@@ -162,10 +166,15 @@ fn since_returns_exactly_the_events_after_the_sequence() {
             &mut authority,
             json!({"command":"checkpoint", "history":{"since":since}}),
         );
+        // R-13d: `since` returns the stored events; only `"all"` rebuilds snapshots.
         let expected: Vec<Value> = history
             .iter()
             .filter(|event| event["sequence"].as_u64().unwrap() > since)
             .cloned()
+            .map(|mut event| {
+                event["event"].as_object_mut().unwrap().remove("snapshot");
+                event
+            })
             .collect();
         assert_eq!(read["history"], json!(expected), "since {since}");
         assert_eq!(

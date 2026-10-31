@@ -3,8 +3,10 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeSet, HashSet};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
+use std::rc::Rc;
 
 const MAX_ID: usize = 256;
 const MAX_PAYLOAD: usize = 4096;
@@ -13,7 +15,70 @@ const MAX_ENVELOPE: usize = 2_097_152;
 
 pub struct Authority {
     conn: Connection,
+    /// R-13d: the chain tip `(sequence, hash)` this handle last validated.
+    anchor: Option<(u64, String)>,
+    /// R-13d: the working set as loaded, or as last saved, in this request, with its head.
+    base: Option<(State, Head)>,
+    /// R-13d: the request that the events appended by `save` record, and its cause.
+    recorded: Value,
+    cause: Option<String>,
 }
+
+/// R-13d: the bounded part of the state, kept in `authority_meta['state']`. Operations
+/// and invocations live in their own tables; a request loads only the ones it names.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Head {
+    group: String,
+    revision: u64,
+    epoch: u64,
+    branch: String,
+    read_fenced: bool,
+    roster: Vec<String>,
+    grants: Vec<Grant>,
+    delegations: Vec<Delegation>,
+    policy_revision: u64,
+    fence_revision: Option<u64>,
+    repair_pending: Option<String>,
+    invocations_count: u64,
+    /// Running commitment to every invocation, in creation order.
+    invocations_root: String,
+}
+
+/// R-13d: one row of `authority_ops`: an operation and the recipients that consumed it,
+/// in consumption order.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct OpRow {
+    operation: Operation,
+    consumed_by: Vec<String>,
+}
+
+/// R-13d: what one event changed. `before` holds the old values of exactly the fields and
+/// rows that `after` sets; a new operation's `before` row is null.
+#[derive(Default, Serialize, Deserialize)]
+struct Effects {
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    head: serde_json::Map<String, Value>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ops: BTreeMap<String, Option<OpRow>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    invocations: Vec<Invocation>,
+}
+
+/// R-13d: a v2 history event. Its hash covers its exact stored bytes (`event_hash_v2`).
+#[derive(Serialize, Deserialize)]
+struct EventV2 {
+    v: u64,
+    kind: String,
+    revision: u64,
+    request: Value,
+    cause: Option<String>,
+    before: Effects,
+    after: Effects,
+    /// `SHA-256` of the head row after the event.
+    head_hash: String,
+}
+
+const ZERO_ROOT: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
@@ -119,7 +184,9 @@ struct PolicyView<'a> {
     policy_revision: u64,
     grants: &'a [Grant],
     delegations: &'a [Delegation],
-    invocations: &'a [Invocation],
+    /// R-13d: the invocations enter through their running commitment.
+    invocations_count: u64,
+    invocations_root: &'a str,
 }
 #[derive(Serialize)]
 struct HashInput<'a> {
@@ -129,14 +196,31 @@ struct HashInput<'a> {
 }
 
 impl Authority {
+    /// Opens a kernel store. The whole hash chain is validated once per handle; a v1 store
+    /// (a snapshot per event) is migrated to the R-13d tables in the same transaction.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
         let conn = Connection::open(path).map_err(db)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
             CREATE TABLE IF NOT EXISTS authority_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);")
+            CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS authority_ops (op TEXT PRIMARY KEY, row TEXT NOT NULL, written INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS authority_invocations (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, record TEXT NOT NULL, written INTEGER NOT NULL);")
             .map_err(db)?;
-        let this = Self { conn };
-        this.validate_history()?;
+        let mut this = Self {
+            conn,
+            anchor: None,
+            base: None,
+            recorded: Value::Null,
+            cause: None,
+        };
+        this.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
+        match this.open_checks() {
+            Ok(()) => this.conn.execute_batch("COMMIT").map_err(db)?,
+            Err(error) => {
+                let _ = this.conn.execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        }
         Ok(this)
     }
 
@@ -146,12 +230,14 @@ impl Authority {
             .ok_or_else(|| "malformed: request object".to_string())?;
         let command = req_id(obj, "command")?;
         self.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
-        // R-13a: the history is validated once per request, at the start of its
-        // transaction; `expire` and the step read the state without validating again.
-        if let Err(error) = self.validate_history() {
+        // R-13a, R-13d: the history is validated once per request, at the start of its
+        // transaction, from the tip this handle validated last.
+        if let Err(error) = self.revalidate() {
             let _ = self.conn.execute_batch("ROLLBACK");
             return Err(error);
         }
+        self.recorded = recorded_request(obj);
+        self.cause = obj.get("cause").and_then(Value::as_str).map(str::to_owned);
         // R-12: the expiry events come first, in the step's transaction. A failed step
         // rolls back to the savepoint only, so the expiry is recorded whatever the step's
         // outcome; a failed sweep rolls back everything.
@@ -195,7 +281,17 @@ impl Authority {
         let Some(now) = o.get("now").and_then(Value::as_u64) else {
             return Ok(());
         };
-        let mut s = self.load()?;
+        let mut s = self.load(o)?;
+        let step = std::mem::replace(
+            &mut self.recorded,
+            json!({"command":"expire", "now":now, "step":command}),
+        );
+        let swept = self.sweep(&mut s, now);
+        self.recorded = step;
+        swept
+    }
+
+    fn sweep(&mut self, s: &mut State, now: u64) -> Result<(), String> {
         let expired: Vec<(String, Vec<String>)> = s
             .delegations
             .iter()
@@ -203,7 +299,7 @@ impl Authority {
             .map(|d| (d.subject.clone(), d.rights.clone()))
             .collect();
         for (subject, delegated) in expired {
-            let targets = descendants(&s, &subject);
+            let targets = descendants(s, &subject);
             let mut changed = false;
             let mut fences = false;
             for g in &mut s.grants {
@@ -214,13 +310,13 @@ impl Authority {
                 }
             }
             if changed {
-                bump(&mut s);
-                bump_policy(&mut s);
+                bump(s);
+                bump_policy(s);
                 if fences {
                     s.read_fenced = true;
                     s.fence_revision = Some(s.policy_revision);
                 }
-                self.save(&s, "expire")?;
+                self.save(s, "expire")?;
             }
         }
         Ok(())
@@ -282,15 +378,16 @@ impl Authority {
                 fence_revision: None,
                 repair_pending: None,
             };
+            self.base = None;
             self.save(&state, "init")?;
             return Ok(json!({"revision":0,"epoch":0,"branch":branch}));
         }
         if !initialized {
             return Err("uninitialized".into());
         }
-        let mut state = self.load()?;
+        let mut state = self.load(obj)?;
         match command {
-            "checkpoint" => self.checkpoint(&state, history_selector(obj)?),
+            "checkpoint" => self.checkpoint(history_selector(obj)?),
             "grant" => self.grant(&mut state, obj),
             "delegate" => self.delegate(&mut state, obj),
             "invoke" => self.invoke(&mut state, obj),
@@ -1058,61 +1155,64 @@ impl Authority {
         Ok(json!({"epoch":s.epoch,"branch":s.branch,"policy_revision":s.policy_revision}))
     }
 
-    /// R-13a: `history` selects which events the response carries; the head fields and
-    /// `history_root` are always present.
-    fn checkpoint(&self, s: &State, selector: HistorySelector) -> Result<Value, String> {
-        let tip: Option<(i64, String)> = self
-            .conn
-            .query_row(
-                "SELECT sequence,hash FROM authority_events ORDER BY sequence DESC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()
-            .map_err(db)?;
-        let (tip_sequence, root) = match tip {
-            Some((sequence, hash)) => (
-                u64::try_from(sequence).map_err(|_| "corrupt_history".to_string())?,
-                hash,
-            ),
-            None => return Err("corrupt_history".into()),
-        };
-        let mut response = json!({"group":s.group,"revision":s.revision,"policy_revision":s.policy_revision,"policy_digest":policy_digest(s)?,"fence_revision":s.fence_revision,"repair_pending":s.repair_pending,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root});
-        let after: i64 = match selector {
+    /// R-13a, R-13d: `history` selects which events the response carries; the head
+    /// fields and `history_root` are always present. `"all"` rebuilds the v1 snapshot of
+    /// every event; `{"since": s}` returns the stored events after `s` as they are.
+    fn checkpoint(&self, selector: HistorySelector) -> Result<Value, String> {
+        let head = &self
+            .base
+            .as_ref()
+            .ok_or_else(|| "uninitialized".to_string())?
+            .1;
+        let (tip_sequence, root) = self.tip()?.ok_or_else(|| "corrupt_history".to_string())?;
+        let mut response = json!({"group":head.group,"revision":head.revision,"policy_revision":head.policy_revision,"policy_digest":policy_digest(head)?,"fence_revision":head.fence_revision,"repair_pending":head.repair_pending,"epoch":head.epoch,"branch":head.branch,"read_fenced":head.read_fenced,"roster":head.roster,"grants":head.grants,"history_root":root});
+        let since = match selector {
             HistorySelector::None => return Ok(response),
-            HistorySelector::All => -1,
+            HistorySelector::All => None,
             // A reader ahead of the tip saw a history this store no longer holds.
             HistorySelector::Since(since) if since > tip_sequence => {
                 return Err("stale_frontier: history since is past the tip".into())
             }
-            HistorySelector::Since(since) => {
-                i64::try_from(since).map_err(|_| "malformed: history".to_string())?
-            }
+            HistorySelector::Since(since) => Some(since),
         };
-        let mut stmt = self
-            .conn
-            .prepare("SELECT sequence,previous,hash,event FROM authority_events WHERE sequence > ?1 ORDER BY sequence")
-            .map_err(db)?;
-        let rows = stmt
-            .query_map([after], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, String>(3)?,
-                ))
-            })
-            .map_err(db)?;
+        response["invocations"] = Value::Array(self.all_invocations()?);
         let mut history = Vec::new();
-        for row in rows {
-            let (sequence, previous, hash, raw) = row.map_err(db)?;
-            let sequence: u64 = sequence
-                .try_into()
-                .map_err(|_| "corrupt_history".to_string())?;
-            let event: Value =
-                serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
-            history
-                .push(json!({"sequence":sequence,"previous":previous,"hash":hash,"event":event}));
+        match since {
+            None => {
+                let errors = Rc::new(RefCell::new(None));
+                for entry in HistoryEntries::new(&self.conn, true, Rc::clone(&errors)) {
+                    history.push(entry);
+                }
+                let failed = errors.borrow_mut().take();
+                if let Some(error) = failed {
+                    return Err(error);
+                }
+            }
+            Some(since) => {
+                let mut stmt = self
+                    .conn
+                    .prepare("SELECT sequence,previous,hash,event FROM authority_events WHERE sequence > ?1 ORDER BY sequence")
+                    .map_err(db)?;
+                let after = i64::try_from(since).map_err(|_| "malformed: history".to_string())?;
+                let rows = stmt
+                    .query_map([after], |r| {
+                        Ok((
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                        ))
+                    })
+                    .map_err(db)?;
+                for row in rows {
+                    let (sequence, previous, hash, raw) = row.map_err(db)?;
+                    let event: Value =
+                        serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
+                    history.push(
+                        json!({"sequence":sequence,"previous":previous,"hash":hash,"event":event}),
+                    );
+                }
+            }
         }
         response["history"] = Value::Array(history);
         Ok(response)
@@ -1126,61 +1226,288 @@ impl Authority {
             .optional()
             .map_err(db)
     }
-    /// The current state row. `execute` has validated the history in this transaction.
-    fn load(&self) -> Result<State, String> {
+
+    /// R-13d: the working set of one request: the head, the operation named by `op`, and
+    /// every invocation named by `invocation`, `parent_invocation` or that operation,
+    /// with their parent chains. `execute` has validated the history in this transaction.
+    fn load(&mut self, o: &serde_json::Map<String, Value>) -> Result<State, String> {
         let raw = self
             .get_meta("state")?
             .ok_or_else(|| "uninitialized".to_string())?;
-        serde_json::from_str(&raw).map_err(|_| "corrupt_history".into())
+        let head: Head = serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
+        let mut s = state_from_head(&head);
+        if let Some(op) = o.get("op").and_then(Value::as_str) {
+            if let Some(row) = self.op_row(op)? {
+                for recipient in &row.consumed_by {
+                    s.consumed.push(Consumption {
+                        op: op.to_owned(),
+                        recipient: recipient.clone(),
+                    });
+                }
+                s.operations.push(row.operation);
+            }
+        }
+        let mut pending: Vec<String> = ["invocation", "parent_invocation"]
+            .iter()
+            .filter_map(|k| o.get(*k).and_then(Value::as_str).map(str::to_owned))
+            .collect();
+        pending.extend(s.operations.iter().filter_map(|x| x.invocation.clone()));
+        while let Some(id) = pending.pop() {
+            if s.invocations.iter().any(|x| x.id == id) {
+                continue;
+            }
+            if let Some(invocation) = self.invocation_row(&id)? {
+                if let Some(parent) = &invocation.parent {
+                    pending.push(parent.clone());
+                }
+                s.invocations.push(invocation);
+            }
+        }
+        self.base = Some((s.clone(), head));
+        Ok(s)
     }
-    /// Appends one hash-chained event and the new snapshot; returns the event hash.
-    fn save(&mut self, state: &State, kind: &str) -> Result<String, String> {
-        let snapshot = serde_json::to_value(state).map_err(|_| "malformed".to_string())?;
-        let event = json!({"kind":kind,"snapshot":snapshot});
-        let seq: u64 = self
+
+    fn op_row(&self, op: &str) -> Result<Option<OpRow>, String> {
+        let raw: Option<String> = self
+            .conn
+            .query_row("SELECT row FROM authority_ops WHERE op=?1", [op], |r| {
+                r.get(0)
+            })
+            .optional()
+            .map_err(db)?;
+        raw.map(|raw| serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string()))
+            .transpose()
+    }
+
+    fn invocation_row(&self, id: &str) -> Result<Option<Invocation>, String> {
+        let raw: Option<String> = self
             .conn
             .query_row(
-                "SELECT COALESCE(MAX(sequence)+1,0) FROM authority_events",
-                [],
-                |r| r.get::<_, i64>(0),
+                "SELECT record FROM authority_invocations WHERE id=?1",
+                [id],
+                |r| r.get(0),
             )
-            .map_err(db)?
-            .try_into()
-            .map_err(|_| "corrupt_history".to_string())?;
-        let previous = if seq == 0 {
-            String::new()
-        } else {
-            self.conn
-                .query_row(
-                    "SELECT hash FROM authority_events WHERE sequence=?1",
-                    [(seq - 1) as i64],
-                    |r| r.get(0),
-                )
-                .map_err(db)?
+            .optional()
+            .map_err(db)?;
+        raw.map(|raw| serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string()))
+            .transpose()
+    }
+
+    fn all_invocations(&self) -> Result<Vec<Value>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT record FROM authority_invocations ORDER BY ordinal")
+            .map_err(db)?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(db)?;
+        rows.map(|raw| {
+            serde_json::from_str(&raw.map_err(db)?).map_err(|_| "corrupt_history".to_string())
+        })
+        .collect()
+    }
+
+    /// R-13d: appends one hash-chained v2 event that records the request and the before
+    /// and after values of what changed since the working set was loaded or last saved,
+    /// and writes the changed rows; returns the event hash.
+    fn save(&mut self, state: &State, kind: &str) -> Result<String, String> {
+        let malformed = |_| "malformed".to_string();
+        let (base_state, base_head) = match self.base.take() {
+            Some((s, h)) => (Some(s), Some(h)),
+            None => (None, None),
         };
-        let hash = event_hash(seq, &previous, &event)?;
-        let state_raw = serde_json::to_string(state).map_err(|_| "malformed".to_string())?;
+        let known: HashSet<&str> = base_state
+            .iter()
+            .flat_map(|b| b.invocations.iter().map(|x| x.id.as_str()))
+            .collect();
+        let new_invocations: Vec<Invocation> = state
+            .invocations
+            .iter()
+            .filter(|x| !known.contains(x.id.as_str()))
+            .cloned()
+            .collect();
+        let first_ordinal = base_head.as_ref().map_or(0, |h| h.invocations_count);
+        let mut root = base_head
+            .as_ref()
+            .map_or_else(|| ZERO_ROOT.to_owned(), |h| h.invocations_root.clone());
+        for invocation in &new_invocations {
+            root = invocation_leaf(&root, invocation)?;
+        }
+        let head = head_from_state(state, first_ordinal + new_invocations.len() as u64, root);
+        let head_raw = serde_json::to_string(&head).map_err(malformed)?;
+        let head_value = serde_json::to_value(&head).map_err(malformed)?;
+        let old_head = match &base_head {
+            Some(h) => serde_json::to_value(h).map_err(malformed)?,
+            None => json!({}),
+        };
+        let mut before = Effects::default();
+        let mut after = Effects::default();
+        for (key, value) in head_value.as_object().into_iter().flatten() {
+            let old = old_head.get(key);
+            if old != Some(value) {
+                if let Some(old) = old {
+                    before.head.insert(key.clone(), old.clone());
+                }
+                after.head.insert(key.clone(), value.clone());
+            }
+        }
+        for operation in &state.operations {
+            let row = op_row_of(state, operation);
+            let old = base_state.as_ref().and_then(|b| {
+                b.operations
+                    .iter()
+                    .find(|x| x.op == operation.op)
+                    .map(|x| op_row_of(b, x))
+            });
+            let changed = match &old {
+                Some(old) => {
+                    serde_json::to_value(old).map_err(malformed)?
+                        != serde_json::to_value(&row).map_err(malformed)?
+                }
+                None => true,
+            };
+            if changed {
+                before.ops.insert(operation.op.clone(), old);
+                after.ops.insert(operation.op.clone(), Some(row));
+            }
+        }
+        after.invocations = new_invocations;
+        let (sequence, previous) = match self.tip()? {
+            Some((sequence, hash)) => (sequence + 1, hash),
+            None => (0, String::new()),
+        };
+        let event = EventV2 {
+            v: 2,
+            kind: kind.to_owned(),
+            revision: state.revision,
+            request: self.recorded.clone(),
+            cause: self.cause.clone(),
+            before,
+            after,
+            head_hash: hex::encode(Sha256::digest(head_raw.as_bytes())),
+        };
+        let raw = serde_json::to_string(&event).map_err(malformed)?;
+        let hash = event_hash_v2(sequence, &previous, &raw);
+        let written = i64::try_from(sequence).map_err(|_| "corrupt_history".to_string())?;
         self.conn
             .execute(
                 "INSERT INTO authority_events(sequence,previous,hash,event) VALUES(?1,?2,?3,?4)",
-                rusqlite::params![
-                    seq as i64,
-                    previous,
-                    &hash,
-                    serde_json::to_string(&event).map_err(|_| "malformed".to_string())?
-                ],
+                rusqlite::params![written, previous, &hash, raw],
             )
             .map_err(db)?;
-        self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[state_raw]).map_err(db)?;
+        self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[&head_raw]).map_err(db)?;
+        if sequence == 0 {
+            self.conn
+                .execute(
+                    "INSERT INTO authority_meta(k,v) VALUES('format','2') ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                    [],
+                )
+                .map_err(db)?;
+        }
+        for (op, row) in &event.after.ops {
+            let row = serde_json::to_string(row).map_err(malformed)?;
+            self.conn
+                .execute(
+                    "INSERT INTO authority_ops(op,row,written) VALUES(?1,?2,?3) ON CONFLICT(op) DO UPDATE SET row=excluded.row, written=excluded.written",
+                    rusqlite::params![op, row, written],
+                )
+                .map_err(db)?;
+        }
+        for (index, invocation) in event.after.invocations.iter().enumerate() {
+            let ordinal = i64::try_from(first_ordinal + index as u64)
+                .map_err(|_| "corrupt_history".to_string())?;
+            let record = serde_json::to_string(invocation).map_err(malformed)?;
+            self.conn
+                .execute(
+                    "INSERT INTO authority_invocations(ordinal,id,record,written) VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![ordinal, invocation.id, record, written],
+                )
+                .map_err(db)?;
+        }
+        self.base = Some((state.clone(), head));
         Ok(hash)
     }
-    fn validate_history(&self) -> Result<(), String> {
+
+    /// The last event's `(sequence, hash)`, as stored.
+    fn tip(&self) -> Result<Option<(u64, String)>, String> {
+        let tip: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT sequence,hash FROM authority_events ORDER BY sequence DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        tip.map(|(sequence, hash)| {
+            u64::try_from(sequence)
+                .map(|sequence| (sequence, hash))
+                .map_err(|_| "corrupt_history".to_string())
+        })
+        .transpose()
+    }
+
+    /// Once per handle: the whole chain, then the v1 migration if needed, then the head.
+    fn open_checks(&mut self) -> Result<(), String> {
+        let tip = self.validate_chain(None)?;
+        match tip {
+            None => {
+                if self.get_meta("state")?.is_some() {
+                    return Err("corrupt_history".into());
+                }
+            }
+            Some(tip) => {
+                if self.get_meta("format")?.as_deref() != Some("2") {
+                    self.migrate(tip.0)?;
+                }
+                self.anchor = Some(tip);
+                self.check_head()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// R-13d: every request starts here. It checks that the event at the tip this handle
+    /// validated last is unchanged, validates every event appended after it (by this
+    /// handle or another), rehashes the tip, and checks the head row against the tip.
+    fn revalidate(&mut self) -> Result<(), String> {
+        let tip = self.validate_chain(self.anchor.clone())?;
+        match &tip {
+            Some((sequence, hash)) => {
+                let (previous, stored, raw) = self.event_row(*sequence)?;
+                if stored != *hash || row_hash(*sequence, &previous, &raw)? != *hash {
+                    return Err("corrupt_history".into());
+                }
+            }
+            None => {
+                if self.get_meta("state")?.is_some() {
+                    return Err("corrupt_history".into());
+                }
+            }
+        }
+        self.anchor = tip;
+        if self.anchor.is_some() {
+            self.check_head()?;
+        }
+        Ok(())
+    }
+
+    /// Validates the chain after `from` (or from genesis) and returns the new tip.
+    fn validate_chain(&self, from: Option<(u64, String)>) -> Result<Option<(u64, String)>, String> {
+        let (start, mut previous, mut count) = match &from {
+            Some((sequence, hash)) => {
+                let (_, stored, _) = self.event_row(*sequence)?;
+                if stored != *hash {
+                    return Err("corrupt_history".into());
+                }
+                (*sequence as i64, hash.clone(), sequence + 1)
+            }
+            None => (-1, String::new(), 0),
+        };
         let mut stmt = self
             .conn
-            .prepare("SELECT sequence,previous,hash,event FROM authority_events ORDER BY sequence")
+            .prepare("SELECT sequence,previous,hash,event FROM authority_events WHERE sequence > ?1 ORDER BY sequence")
             .map_err(db)?;
         let rows = stmt
-            .query_map([], |r| {
+            .query_map([start], |r| {
                 Ok((
                     r.get::<_, i64>(0)?,
                     r.get::<_, String>(1)?,
@@ -1189,34 +1516,118 @@ impl Authority {
                 ))
             })
             .map_err(db)?;
-        let mut previous = String::new();
-        let mut count = 0u64;
-        let mut last_snapshot: Option<Value> = None;
         for row in rows {
-            let (seq, prev, hash, raw) = row.map_err(db)?;
-            let seq: u64 = seq.try_into().map_err(|_| "corrupt_history".to_string())?;
-            let event: Value =
-                serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
-            if seq != count || prev != previous || event_hash(seq, &prev, &event)? != hash {
+            let (sequence, prev, hash, raw) = row.map_err(db)?;
+            let sequence: u64 = sequence
+                .try_into()
+                .map_err(|_| "corrupt_history".to_string())?;
+            if sequence != count || prev != previous || row_hash(sequence, &prev, &raw)? != hash {
                 return Err("corrupt_history".into());
             }
-            last_snapshot = event.get("snapshot").cloned();
             previous = hash;
             count += 1;
         }
-        let state = self.get_meta("state")?;
-        if count == 0 {
-            if state.is_some() {
-                return Err("corrupt_history".into());
-            }
+        Ok(if count == 0 {
+            None
         } else {
-            let state = state.ok_or_else(|| "corrupt_history".to_string())?;
+            Some((count - 1, previous))
+        })
+    }
+
+    fn event_row(&self, sequence: u64) -> Result<(String, String, String), String> {
+        let sequence = i64::try_from(sequence).map_err(|_| "corrupt_history".to_string())?;
+        self.conn
+            .query_row(
+                "SELECT previous,hash,event FROM authority_events WHERE sequence=?1",
+                [sequence],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(db)?
+            .ok_or_else(|| "corrupt_history".to_string())
+    }
+
+    /// The head row must be the one the tip event committed to: by `head_hash` for a v2
+    /// tip, by the snapshot for a v1 tip (a migrated store before its next event).
+    fn check_head(&self) -> Result<(), String> {
+        let (sequence, _) = self
+            .anchor
+            .clone()
+            .ok_or_else(|| "corrupt_history".to_string())?;
+        let (_, _, raw) = self.event_row(sequence)?;
+        let head_raw = self
+            .get_meta("state")?
+            .ok_or_else(|| "corrupt_history".to_string())?;
+        let event: Value = serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
+        let valid = if is_v2(&raw) {
+            event["head_hash"].as_str()
+                == Some(hex::encode(Sha256::digest(head_raw.as_bytes())).as_str())
+        } else {
+            let state: State = serde_json::from_value(event["snapshot"].clone())
+                .map_err(|_| "corrupt_history".to_string())?;
+            let expected = full_head(&state)?;
             let actual: Value =
-                serde_json::from_str(&state).map_err(|_| "corrupt_history".to_string())?;
-            if last_snapshot.as_ref() != Some(&actual) {
-                return Err("corrupt_history".into());
-            }
+                serde_json::from_str(&head_raw).map_err(|_| "corrupt_history".to_string())?;
+            serde_json::to_value(&expected).map_err(|_| "corrupt_history".to_string())? == actual
+        };
+        if !valid {
+            return Err("corrupt_history".into());
         }
+        Ok(())
+    }
+
+    /// R-13d: a v1 store keeps its events. Its state row must equal the last snapshot, as
+    /// before; the head row and the operation and invocation tables are written from that
+    /// snapshot, as written by the last v1 event.
+    fn migrate(&mut self, tip: u64) -> Result<(), String> {
+        let corrupt = |_| "corrupt_history".to_string();
+        let (_, _, raw) = self.event_row(tip)?;
+        if is_v2(&raw) {
+            return Err("corrupt_history".into());
+        }
+        let event: Value = serde_json::from_str(&raw).map_err(corrupt)?;
+        let snapshot = event
+            .get("snapshot")
+            .cloned()
+            .ok_or_else(|| "corrupt_history".to_string())?;
+        let row: Value = serde_json::from_str(
+            &self
+                .get_meta("state")?
+                .ok_or_else(|| "corrupt_history".to_string())?,
+        )
+        .map_err(corrupt)?;
+        if row != snapshot {
+            return Err("corrupt_history".into());
+        }
+        let state: State = serde_json::from_value(snapshot).map_err(corrupt)?;
+        let head = full_head(&state)?;
+        let written = tip as i64;
+        let head_raw = serde_json::to_string(&head).map_err(corrupt)?;
+        self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[&head_raw]).map_err(db)?;
+        for operation in &state.operations {
+            let row = serde_json::to_string(&op_row_of(&state, operation)).map_err(corrupt)?;
+            self.conn
+                .execute(
+                    "INSERT INTO authority_ops(op,row,written) VALUES(?1,?2,?3)",
+                    rusqlite::params![operation.op, row, written],
+                )
+                .map_err(db)?;
+        }
+        for (ordinal, invocation) in state.invocations.iter().enumerate() {
+            let record = serde_json::to_string(invocation).map_err(corrupt)?;
+            self.conn
+                .execute(
+                    "INSERT INTO authority_invocations(ordinal,id,record,written) VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![ordinal as i64, invocation.id, record, written],
+                )
+                .map_err(db)?;
+        }
+        self.conn
+            .execute(
+                "INSERT INTO authority_meta(k,v) VALUES('format','2') ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                [],
+            )
+            .map_err(db)?;
         Ok(())
     }
 }
@@ -1255,6 +1666,267 @@ fn event_hash(seq: u64, previous: &str, event: &Value) -> Result<String, String>
     .map_err(|_| "corrupt_history".to_string())?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
+/// R-13d: the request an event records. A persisted envelope is recorded by its digest
+/// (R-13c), and the cause is recorded beside the request.
+fn recorded_request(o: &serde_json::Map<String, Value>) -> Value {
+    let mut request = o.clone();
+    request.remove("cause");
+    if let Some(envelope) = request.remove("envelope") {
+        let digest = envelope
+            .as_str()
+            .and_then(|hex_text| hex::decode(hex_text).ok())
+            .map(|bytes| hex::encode(Sha256::digest(bytes)));
+        request.insert("envelope_digest".into(), json!(digest));
+    }
+    Value::Object(request)
+}
+
+/// R-13d: a v2 event hash covers the exact stored bytes, so validating the chain needs
+/// no JSON parsing.
+fn event_hash_v2(sequence: u64, previous: &str, raw: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"agent-trust/kernel-event/v2\0");
+    hasher.update(sequence.to_be_bytes());
+    hasher.update(previous.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(raw.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// A v2 event serializes `v` first; a v1 event starts with `kind`.
+fn is_v2(raw: &str) -> bool {
+    raw.starts_with("{\"v\":2,")
+}
+
+fn row_hash(sequence: u64, previous: &str, raw: &str) -> Result<String, String> {
+    if is_v2(raw) {
+        Ok(event_hash_v2(sequence, previous, raw))
+    } else {
+        let event: Value = serde_json::from_str(raw).map_err(|_| "corrupt_history".to_string())?;
+        event_hash(sequence, previous, &event)
+    }
+}
+
+/// R-13d: the running invocation commitment, `SHA-256(root || SHA-256(record))`.
+fn invocation_leaf(root: &str, invocation: &Invocation) -> Result<String, String> {
+    let record = serde_json::to_vec(invocation).map_err(|_| "malformed".to_string())?;
+    let mut hasher = Sha256::new();
+    hasher.update(hex::decode(root).map_err(|_| "corrupt_history".to_string())?);
+    hasher.update(Sha256::digest(record));
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn head_from_state(s: &State, invocations_count: u64, invocations_root: String) -> Head {
+    Head {
+        group: s.group.clone(),
+        revision: s.revision,
+        epoch: s.epoch,
+        branch: s.branch.clone(),
+        read_fenced: s.read_fenced,
+        roster: s.roster.clone(),
+        grants: s.grants.clone(),
+        delegations: s.delegations.clone(),
+        policy_revision: s.policy_revision,
+        fence_revision: s.fence_revision,
+        repair_pending: s.repair_pending.clone(),
+        invocations_count,
+        invocations_root,
+    }
+}
+
+/// The head of a whole v1 state, every invocation folded into the commitment.
+fn full_head(s: &State) -> Result<Head, String> {
+    let mut root = ZERO_ROOT.to_owned();
+    for invocation in &s.invocations {
+        root = invocation_leaf(&root, invocation)?;
+    }
+    Ok(head_from_state(s, s.invocations.len() as u64, root))
+}
+
+fn state_from_head(h: &Head) -> State {
+    State {
+        group: h.group.clone(),
+        revision: h.revision,
+        epoch: h.epoch,
+        branch: h.branch.clone(),
+        read_fenced: h.read_fenced,
+        roster: h.roster.clone(),
+        grants: h.grants.clone(),
+        delegations: h.delegations.clone(),
+        operations: vec![],
+        consumed: vec![],
+        invocations: vec![],
+        policy_revision: h.policy_revision,
+        fence_revision: h.fence_revision,
+        repair_pending: h.repair_pending.clone(),
+    }
+}
+
+fn op_row_of(s: &State, operation: &Operation) -> OpRow {
+    OpRow {
+        operation: operation.clone(),
+        consumed_by: s
+            .consumed
+            .iter()
+            .filter(|c| c.op == operation.op)
+            .map(|c| c.recipient.clone())
+            .collect(),
+    }
+}
+
+/// R-13d: the v1 snapshot after a v2 event, from the snapshot before it.
+fn apply_v2(previous: Option<Value>, event: &Value) -> Result<Value, String> {
+    let corrupt = || "corrupt_history".to_string();
+    let mut snapshot =
+        previous.unwrap_or_else(|| json!({"operations":[], "consumed":[], "invocations":[]}));
+    let after = &event["after"];
+    let object = snapshot.as_object_mut().ok_or_else(corrupt)?;
+    if let Some(head) = after.get("head").and_then(Value::as_object) {
+        for (key, value) in head {
+            if key != "invocations_count" && key != "invocations_root" {
+                object.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    if let Some(ops) = after.get("ops").and_then(Value::as_object) {
+        for (op, row) in ops {
+            let operation = row["operation"].clone();
+            let operations = object
+                .get_mut("operations")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(corrupt)?;
+            match operations.iter_mut().find(|x| x["op"] == json!(op)) {
+                Some(slot) => *slot = operation,
+                None => operations.push(operation),
+            }
+            let earlier = event["before"]["ops"][op]["consumed_by"]
+                .as_array()
+                .map_or(0, Vec::len);
+            let recipients = row["consumed_by"].as_array().ok_or_else(corrupt)?;
+            let consumed = object
+                .get_mut("consumed")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(corrupt)?;
+            for recipient in recipients.iter().skip(earlier) {
+                consumed.push(json!({"op":op, "recipient":recipient}));
+            }
+        }
+    }
+    if let Some(invocations) = after.get("invocations").and_then(Value::as_array) {
+        object
+            .get_mut("invocations")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(corrupt)?
+            .extend(invocations.iter().cloned());
+    }
+    Ok(snapshot)
+}
+
+/// R-13d: the history as `checkpoint` entries, read one event at a time and checked
+/// against the chain, with the v1 snapshot of each event rebuilt when `snapshots` is set.
+/// Memory stays at one snapshot. The first error stops the iteration and is left in
+/// `errors`.
+struct HistoryEntries<'c> {
+    conn: &'c Connection,
+    next: u64,
+    previous: String,
+    snapshot: Option<Value>,
+    snapshots: bool,
+    errors: Rc<RefCell<Option<String>>>,
+}
+
+impl<'c> HistoryEntries<'c> {
+    fn new(conn: &'c Connection, snapshots: bool, errors: Rc<RefCell<Option<String>>>) -> Self {
+        Self {
+            conn,
+            next: 0,
+            previous: String::new(),
+            snapshot: None,
+            snapshots,
+            errors,
+        }
+    }
+
+    fn step(&mut self) -> Result<Option<Value>, String> {
+        let corrupt = || "corrupt_history".to_string();
+        let sequence = i64::try_from(self.next).map_err(|_| corrupt())?;
+        let row: Option<(String, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT previous,hash,event FROM authority_events WHERE sequence=?1",
+                [sequence],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        let Some((previous, hash, raw)) = row else {
+            return Ok(None);
+        };
+        if previous != self.previous || row_hash(self.next, &previous, &raw)? != hash {
+            return Err(corrupt());
+        }
+        let mut event: Value = serde_json::from_str(&raw).map_err(|_| corrupt())?;
+        if self.snapshots {
+            let snapshot = if is_v2(&raw) {
+                apply_v2(self.snapshot.take(), &event)?
+            } else {
+                event.get("snapshot").cloned().ok_or_else(corrupt)?
+            };
+            event["snapshot"] = snapshot.clone();
+            self.snapshot = Some(snapshot);
+        }
+        let entry = json!({"sequence":self.next,"previous":previous,"hash":hash,"event":event});
+        self.previous = hash;
+        self.next += 1;
+        Ok(Some(entry))
+    }
+}
+
+impl Iterator for HistoryEntries<'_> {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Value> {
+        if self.errors.borrow().is_some() {
+            return None;
+        }
+        match self.step() {
+            Ok(entry) => entry,
+            Err(error) => {
+                *self.errors.borrow_mut() = Some(error);
+                None
+            }
+        }
+    }
+}
+
+/// R-13d: the kernel history of a store as `(kind, v1 snapshot)`, one event at a time,
+/// checked against the hash chain (C-37 export). The first error stops the iteration and
+/// is left in the returned cell, which the caller must check when it is done.
+pub fn history_snapshots(
+    conn: &Connection,
+) -> (
+    impl Iterator<Item = (String, Value)> + '_,
+    Rc<RefCell<Option<String>>>,
+) {
+    let errors = Rc::new(RefCell::new(None));
+    let entries = HistoryEntries::new(conn, true, Rc::clone(&errors));
+    let failed = Rc::clone(&errors);
+    let iterator = entries.map_while(move |mut entry| {
+        let kind = entry["event"]["kind"].as_str().map(str::to_owned);
+        let snapshot = entry["event"]
+            .as_object_mut()
+            .and_then(|event| event.remove("snapshot"));
+        match (kind, snapshot) {
+            (Some(kind), Some(snapshot)) => Some((kind, snapshot)),
+            _ => {
+                *failed.borrow_mut() = Some("corrupt_history: kind".into());
+                None
+            }
+        }
+    });
+    (iterator, errors)
+}
+
 /// R-12: the mutating commands that carry `now`. `subject_status` also carries it but is
 /// read-only (C-7), so it never records an expiry.
 const EXPIRY_COMMANDS: &[&str] = &[
@@ -1286,13 +1958,14 @@ fn bump(s: &mut State) {
 fn bump_policy(s: &mut State) {
     s.policy_revision = s.policy_revision.saturating_add(1);
 }
-fn policy_digest(s: &State) -> Result<String, String> {
+fn policy_digest(h: &Head) -> Result<String, String> {
     let bytes = serde_json::to_vec(&PolicyView {
-        group: &s.group,
-        policy_revision: s.policy_revision,
-        grants: &s.grants,
-        delegations: &s.delegations,
-        invocations: &s.invocations,
+        group: &h.group,
+        policy_revision: h.policy_revision,
+        grants: &h.grants,
+        delegations: &h.delegations,
+        invocations_count: h.invocations_count,
+        invocations_root: &h.invocations_root,
     })
     .map_err(|_| "corrupt_history".to_string())?;
     Ok(hex::encode(Sha256::digest(bytes)))

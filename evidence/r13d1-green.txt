@@ -1,0 +1,20 @@
+# R-13d.1 green, 2026-10-31
+# command: cargo test --locked --test authority_compact_history   (exit 0)
+test head_checkpoint_omits_history_and_invocations ... ok
+test full_history_rebuilds_snapshots_and_since_returns_stored_events ... ok
+test events_after_init_are_compact_v2_records_without_snapshots_or_envelopes ... ok
+test a_truncated_or_edited_tip_fails_the_next_request ... ok
+test v1_stores_open_with_the_same_checkpoint ... ok
+test v1_stores_continue_with_v2_events ... ok
+test history_bytes_grow_linearly_with_events ... ok
+test request_time_does_not_grow_with_history ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+# command: cargo test --locked   (exit 0): 29 suites, 208 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (208 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true
