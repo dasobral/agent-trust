@@ -281,3 +281,50 @@ Consequences:
 1. Stages 1 to 4 (R-13a to R-13d) are approved. They are implemented test-first, in order, one commit each.
 2. The approval brings compromise and rollback of the authority's own durable store into the threat model. This changes `docs/specification.md:17`, which today puts it "outside this profile". The hardening layers and their claim boundary are specified as R-13 contract text in `docs/adapter-contract.md` §10 before stage 4, because the stage 4 event format has to carry the hardening fields (one migration, not two).
 3. No implementation can make every attack impossible. One attacker defeats any check on that host: root on the APF host holding the APF key **and** every actor key. Another needs an outside witness: the APF's own clock (`now`), which nobody signs. The contract text states these residuals explicitly.
+
+## 11. Production design (after D-17)
+
+On 2026-10-31 Daniel added: "We must find the way to fully optimize memory growth. Your benchmarks are not promising for production use." He also rejected any design that gives up defending against APF key theft. This section supersedes stages 2 and 4 of §8. Stages 1 and 3 stay as they are.
+
+### 11.1 Why stages 1 to 3 are not enough
+
+After layers a to d, a request still costs time linear in the history: 2.7 ms at 502 events. Storage stays quadratic: 11.3 MB at 502 events, `c ≈ 90` bytes per event² from `H ≈ c·n²/2`. At 100 000 events this extrapolates to about 0.5 s per request, a 9 MB state copy and about 450 GB of history.
+
+| Growth source | Today | Production fix |
+|---|---|---|
+| One full state copy per event | Storage quadratic | Compact events: the kernel request, its effects, and commitments. No state copy. |
+| `operations`, `consumed` and `invocations` never shrink, and the whole state is loaded, serialized and compared on every request | O(n) per request and in memory | SQLite tables keyed by `op`, `(op, recipient)` and invocation id. Memory holds only the policy (roster, grants, delegations, frontier, counters), bounded by members. |
+| Dead operations stay live (abandoned, fully consumed, or past the frontier: F-7 makes them unconsumable) | The live set grows with history | Garbage collection into tombstones of about 100 bytes, which keep the error codes `replay`, `binding_mismatch` and `duplicate_operation`. The log keeps the full record. |
+| The adapter keeps every envelope, and `checkpoint` builds the whole history in RAM | O(n) storage and memory spikes | Envelopes of dead operations leave the hot store with the operation. Head-only `checkpoint` (stage 1). |
+
+Target: the live set is bounded by members plus messages in flight; time per request is flat in the history length; the log grows by a constant number of bytes per event; memory use is flat. A growth test asserts these figures at 10k–100k events.
+
+### 11.2 Integrity without re-reading the history, including against APF key theft
+
+- **Event format v2:** `{version, kind, request, effects, cause, commitment, rules_version}`.
+  - `request` is the normalized kernel request, including `now`.
+  - `cause` is the SHA-256 of the actor-signed `SignedRequest` that caused the event. It is null for genesis and for R-12 `expire` events, whose cause is the step that triggered them.
+  - `commitment` commits to the policy and to every live table, and is updated incrementally per row.
+  - The hash chain covers each event.
+- **Signed head:** the APF signs `{group, sequence, hash}` after each mutation. Only the latest signed head is stored. It is returned to the client.
+- **Actor-signed anchors:**
+  - Every client request carries `known_head`, the latest head the client has seen, inside the body that the actor signs. Clients therefore co-sign the history continuously.
+  - The adapter refuses a request whose `known_head` is ahead of the history, or whose hash differs at that sequence (`fork_detected`). This refusal is what detects rollback and forks.
+- **Checkpoints:** periodic events that commit to the full live state.
+- **At `open`:**
+  1. Recompute the chain from the latest checkpoint to the tip, and require that it matches at least one actor-signed `known_head` at or after the checkpoint. Any rewrite before that anchor, the checkpoint included, breaks the hash that the actors signed.
+  2. Check the live tables against the checkpoint commitment.
+  3. Replay every event after the checkpoint under the kernel rules: legality, the actor signature on its `cause` under the key history, and monotonic `now`.
+  4. Check every stored release certificate's `kernel_event_hash`.
+
+  The cost of `open` is O(events since the checkpoint plus the live state). It does not grow with the total history.
+- **Offline:** `verify --full` replays from genesis.
+- **APF key:** refused at `open` unless the file's mode is 0600 and it belongs to the user running the APF. A path override keeps the key out of the data directory.
+
+| Attacker | Detected | When |
+|---|---|---|
+| Writes `authority.sqlite` or `adapter.sqlite` without the APF key | Yes | Next request (signed head and commitment) or `open` |
+| Rolls back the whole data directory | Yes | First request from any client that saw a later head |
+| Holds the APF key and rewrites, forges or truncates history | Yes | `open` (actor-signed anchors, actor signatures on each `cause`) or the next client request |
+| Holds the APF key and moves `now` | Partly | Monotonic `now` at replay. A time witness is outside the profile. |
+| Holds the APF key and the keys of the actors involved | No | Their signatures *are* those actors. A limit set by who holds the keys. |
