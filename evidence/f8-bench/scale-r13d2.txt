@@ -1,0 +1,14 @@
+# R-13d.2 production-scale run, 2026-10-31, release build, committed src/authority.rs (row provenance on)
+# command: scale 5450 10000  (source evidence/f8-bench/scale.rs)
+events,bytes_per_event,ms_per_request,rss_mib
+10022,1684,0.325,9.9
+20022,1689,0.497,10.1
+30022,1691,0.331,10.2
+40022,1692,0.336,10.2
+50022,1693,0.335,10.2
+60022,1693,0.343,10.2
+70022,1693,0.344,10.2
+80022,1694,0.334,10.2
+90022,1694,0.341,10.2
+100022,1694,0.338,10.2
+reopen_ms,224,file_mb,232.3

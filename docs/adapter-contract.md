@@ -810,7 +810,14 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
   - No format, behavior or error code changes for existing callers. Evidence: `evidence/r13a-red.txt`, `evidence/r13a-green.txt`.
 - **R-13c, implemented:** the kernel binds a persisted envelope by `envelope_digest = SHA-256(bytes)` and keeps neither the bytes nor their hex. `persist` and `emit` compare bytes through the digest, so two hex spellings of the same bytes are the same envelope. Stores written before R-13c keep their hex and compare bytes. The adapter store keeps the exact bytes. The C-37 export reads them from there and refuses bytes that differ from the kernel digest (`binding_mismatch`). Evidence: `evidence/r13c-red.txt`, `evidence/r13c-green.txt`.
 - **R-13d.1, implemented:** compact v2 events and a bounded live state (`docs/authority-contract.md`, `checkpoint`). v1 stores open, keep their checkpoint except `policy_digest`, and continue (`tests/fixtures/kernel`). C-32 recovery reads the events after the intent's revision, and the C-37 export reads the history one event at a time. The v2 trace format is unchanged. The R-11 `policy_digest` is still the kernel digest at the canonical step; its preimage now covers the invocations through their commitment. At 100 000 events with `pq`-sized envelopes, a request takes 0.21 ms, every event about 1.7 KB, and memory 10 MiB, all flat (`evidence/f8-bench/scale-r13d1.txt`). Evidence: `evidence/r13d1-red.txt`, `evidence/r13d1-green.txt`.
-- **R-13d.2 to R-13d.6:** row provenance, the signed head and key file, `known_head` anchors, cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
+- **R-13d.2, implemented: row provenance.** The kernel keeps an append-only Merkle tree (a Merkle mountain range) over the event hashes in `authority_mmr`. Each handle derives the tree's root from the chain it validated at `open`, and extends it with every event that a later request validates. Every request checks the stored peaks against that root. Every operation or invocation row a request reads must equal what the event that wrote it recorded, and that event must hash to its leaf, with a proof through the stored tree. The cost is O(log n) per row. What each edit triggers:
+  - An edited row, a rewritten event (even one with a recomputed hash), or an edited peak fails the next request that reads it.
+  - An edited inner node fails the next request whose proof uses it.
+  - A deleted row fails closed: the request finds no row.
+  - A store without the tree builds it at `open`.
+  - At 100 000 events, a request takes 0.34 ms, flat (`evidence/f8-bench/scale-r13d2.txt`).
+  - Evidence: `evidence/r13d2-red.txt`, `evidence/r13d2-green.txt`.
+- **R-13d.3 to R-13d.6:** the signed head and key file, `known_head` anchors, cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 
 ## 11. Claim gate for `full_construction_mls`

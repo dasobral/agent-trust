@@ -1,0 +1,18 @@
+# R-13d.2 green, 2026-10-31
+# command: cargo test --locked --test authority_row_provenance   (exit 0)
+test an_edited_peak_fails_every_request ... ok
+test an_edited_operation_row_fails_the_next_request_on_it ... ok
+test an_event_rewritten_with_a_valid_hash_fails_the_next_request_that_reads_its_row ... ok
+test an_edited_invocation_row_fails_the_next_request_that_names_it ... ok
+test an_edited_inner_node_fails_the_next_request_whose_proof_uses_it ... ok
+test a_store_without_the_tree_builds_it_at_open ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+# command: cargo test --locked   (exit 0): 30 suites, 214 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (214 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

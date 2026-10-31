@@ -22,6 +22,34 @@ pub struct Authority {
     /// R-13d: the request that the events appended by `save` record, and its cause.
     recorded: Value,
     cause: Option<String>,
+    /// R-13d.2: the Merkle tree over the event hashes as this handle validated them.
+    mmr: Mmr,
+}
+
+/// R-13d.2: an append-only Merkle tree (a Merkle mountain range) over the event hashes,
+/// kept as its peaks. Leaf `i` is the hash of event `i`.
+#[derive(Clone, Default)]
+struct Mmr {
+    leaves: u64,
+    peaks: Vec<[u8; 32]>,
+}
+
+impl Mmr {
+    fn append(&mut self, leaf: [u8; 32]) {
+        let mut node = leaf;
+        let mut n = self.leaves;
+        while n & 1 == 1 {
+            let left = self.peaks.pop().unwrap_or([0; 32]);
+            node = mmr_node(&left, &node);
+            n >>= 1;
+        }
+        self.peaks.push(node);
+        self.leaves += 1;
+    }
+
+    fn root(&self) -> [u8; 32] {
+        mmr_root(self.leaves, &self.peaks)
+    }
 }
 
 /// R-13d: the bounded part of the state, kept in `authority_meta['state']`. Operations
@@ -204,7 +232,8 @@ impl Authority {
             CREATE TABLE IF NOT EXISTS authority_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS authority_ops (op TEXT PRIMARY KEY, row TEXT NOT NULL, written INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_invocations (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, record TEXT NOT NULL, written INTEGER NOT NULL);")
+            CREATE TABLE IF NOT EXISTS authority_invocations (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, record TEXT NOT NULL, written INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS authority_mmr (height INTEGER NOT NULL, idx INTEGER NOT NULL, hash TEXT NOT NULL, PRIMARY KEY(height, idx));")
             .map_err(db)?;
         let mut this = Self {
             conn,
@@ -212,6 +241,7 @@ impl Authority {
             base: None,
             recorded: Value::Null,
             cause: None,
+            mmr: Mmr::default(),
         };
         this.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
         match this.open_checks() {
@@ -1237,7 +1267,8 @@ impl Authority {
         let head: Head = serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
         let mut s = state_from_head(&head);
         if let Some(op) = o.get("op").and_then(Value::as_str) {
-            if let Some(row) = self.op_row(op)? {
+            if let Some((row, written)) = self.op_row(op)? {
+                self.verify_op_row(op, &row, written)?;
                 for recipient in &row.consumed_by {
                     s.consumed.push(Consumption {
                         op: op.to_owned(),
@@ -1256,7 +1287,8 @@ impl Authority {
             if s.invocations.iter().any(|x| x.id == id) {
                 continue;
             }
-            if let Some(invocation) = self.invocation_row(&id)? {
+            if let Some((invocation, written)) = self.invocation_row(&id)? {
+                self.verify_invocation_row(&invocation, written)?;
                 if let Some(parent) = &invocation.parent {
                     pending.push(parent.clone());
                 }
@@ -1267,30 +1299,199 @@ impl Authority {
         Ok(s)
     }
 
-    fn op_row(&self, op: &str) -> Result<Option<OpRow>, String> {
-        let raw: Option<String> = self
-            .conn
-            .query_row("SELECT row FROM authority_ops WHERE op=?1", [op], |r| {
-                r.get(0)
-            })
-            .optional()
-            .map_err(db)?;
-        raw.map(|raw| serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string()))
-            .transpose()
-    }
-
-    fn invocation_row(&self, id: &str) -> Result<Option<Invocation>, String> {
-        let raw: Option<String> = self
+    /// An operation row and the sequence of the event that wrote it.
+    fn op_row(&self, op: &str) -> Result<Option<(OpRow, u64)>, String> {
+        let row: Option<(String, i64)> = self
             .conn
             .query_row(
-                "SELECT record FROM authority_invocations WHERE id=?1",
-                [id],
-                |r| r.get(0),
+                "SELECT row,written FROM authority_ops WHERE op=?1",
+                [op],
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()
             .map_err(db)?;
-        raw.map(|raw| serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string()))
+        row.map(|(raw, written)| parse_row(&raw, written))
             .transpose()
+    }
+
+    /// An invocation row and the sequence of the event that wrote it.
+    fn invocation_row(&self, id: &str) -> Result<Option<(Invocation, u64)>, String> {
+        let row: Option<(String, i64)> = self
+            .conn
+            .query_row(
+                "SELECT record,written FROM authority_invocations WHERE id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        row.map(|(raw, written)| parse_row(&raw, written))
+            .transpose()
+    }
+
+    /// R-13d.2: the event that wrote a row, checked against its hash and the tree; its
+    /// parsed body and whether it is v2.
+    fn written_event(&self, written: u64) -> Result<(Value, bool), String> {
+        let (previous, hash, raw) = self.event_row(written)?;
+        if row_hash(written, &previous, &raw)? != hash {
+            return Err("corrupt_history".into());
+        }
+        self.verify_leaf(written, &hash)?;
+        let event = serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
+        Ok((event, is_v2(&raw)))
+    }
+
+    /// R-13d.2: an operation row must be what the event that wrote it recorded.
+    fn verify_op_row(&self, op: &str, row: &OpRow, written: u64) -> Result<(), String> {
+        let corrupt = |_| "corrupt_history".to_string();
+        let (event, v2) = self.written_event(written)?;
+        let row = serde_json::to_value(row).map_err(corrupt)?;
+        let expected = if v2 {
+            event["after"]["ops"].get(op).cloned()
+        } else {
+            let state: State =
+                serde_json::from_value(event["snapshot"].clone()).map_err(corrupt)?;
+            state
+                .operations
+                .iter()
+                .find(|x| x.op == op)
+                .map(|x| serde_json::to_value(op_row_of(&state, x)))
+                .transpose()
+                .map_err(corrupt)?
+        };
+        if expected.as_ref() != Some(&row) {
+            return Err("corrupt_history".into());
+        }
+        Ok(())
+    }
+
+    /// R-13d.2: an invocation row must be one the event that wrote it recorded.
+    fn verify_invocation_row(&self, invocation: &Invocation, written: u64) -> Result<(), String> {
+        let (event, v2) = self.written_event(written)?;
+        let record = serde_json::to_value(invocation).map_err(|_| "corrupt_history".to_string())?;
+        let written_by = if v2 {
+            &event["after"]["invocations"]
+        } else {
+            &event["snapshot"]["invocations"]
+        };
+        if !written_by
+            .as_array()
+            .is_some_and(|records| records.contains(&record))
+        {
+            return Err("corrupt_history".into());
+        }
+        Ok(())
+    }
+
+    /// R-13d.2: leaf `index` with hash `leaf` is in the stored tree, whose peaks
+    /// `revalidate` matched to this handle's root in this transaction.
+    fn verify_leaf(&self, index: u64, leaf: &str) -> Result<(), String> {
+        let n = u128::from(self.mmr.leaves);
+        if u128::from(index) >= n {
+            return Err("corrupt_history".into());
+        }
+        let mut node = leaf_bytes(leaf)?;
+        let (mut height, mut j) = (0u32, u128::from(index));
+        // The parent of (height, j) exists once both of its children are complete.
+        while ((j | 1) + 1) << height <= n {
+            let sibling = self.db_node(height, (j ^ 1) as u64)?;
+            node = if j & 1 == 1 {
+                mmr_node(&sibling, &node)
+            } else {
+                mmr_node(&node, &sibling)
+            };
+            j >>= 1;
+            height += 1;
+        }
+        if self.db_node(height, j as u64)? != node {
+            return Err("corrupt_history".into());
+        }
+        Ok(())
+    }
+
+    fn db_node(&self, height: u32, idx: u64) -> Result<[u8; 32], String> {
+        let idx = i64::try_from(idx).map_err(|_| "corrupt_history".to_string())?;
+        let hash: String = self
+            .conn
+            .query_row(
+                "SELECT hash FROM authority_mmr WHERE height=?1 AND idx=?2",
+                rusqlite::params![height, idx],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(db)?
+            .ok_or_else(|| "corrupt_history".to_string())?;
+        leaf_bytes(&hash)
+    }
+
+    fn db_put(&self, height: u32, idx: u64, node: &[u8; 32]) -> Result<(), String> {
+        let idx = i64::try_from(idx).map_err(|_| "corrupt_history".to_string())?;
+        self.conn
+            .execute(
+                "INSERT INTO authority_mmr(height,idx,hash) VALUES(?1,?2,?3)",
+                rusqlite::params![height, idx, hex::encode(node)],
+            )
+            .map_err(db)?;
+        Ok(())
+    }
+
+    /// R-13d.2: appends leaf `index` to the stored tree, with every parent it completes.
+    fn db_append(&self, index: u64, leaf: &str) -> Result<(), String> {
+        let mut node = leaf_bytes(leaf)?;
+        self.db_put(0, index, &node)?;
+        let (mut height, mut j) = (0u32, index);
+        while j & 1 == 1 {
+            let left = self.db_node(height, j - 1)?;
+            node = mmr_node(&left, &node);
+            height += 1;
+            j >>= 1;
+            self.db_put(height, j, &node)?;
+        }
+        Ok(())
+    }
+
+    fn db_leaves(&self) -> Result<u64, String> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM authority_mmr WHERE height=0",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(db)?;
+        u64::try_from(count).map_err(|_| "corrupt_history".to_string())
+    }
+
+    /// R-13d.2: the root of the stored tree over `leaves` leaves, from its peaks.
+    fn db_root(&self, leaves: u64) -> Result<[u8; 32], String> {
+        let mut peaks = Vec::new();
+        let mut offset = 0u64;
+        for height in (0..64u32).rev() {
+            if leaves >> height & 1 == 1 {
+                peaks.push(self.db_node(height, offset >> height)?);
+                offset += 1u64 << height;
+            }
+        }
+        Ok(mmr_root(leaves, &peaks))
+    }
+
+    /// R-13d.2: the stored tree, rebuilt from the event hashes (run after they validated).
+    fn rebuild_mmr(&self) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM authority_mmr", [])
+            .map_err(db)?;
+        let hashes: Vec<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT hash FROM authority_events ORDER BY sequence")
+                .map_err(db)?;
+            let rows = stmt.query_map([], |r| r.get(0)).map_err(db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(db)?
+        };
+        for (index, hash) in hashes.iter().enumerate() {
+            self.db_append(index as u64, hash)?;
+        }
+        Ok(())
     }
 
     fn all_invocations(&self) -> Result<Vec<Value>, String> {
@@ -1393,6 +1594,7 @@ impl Authority {
                 rusqlite::params![written, previous, &hash, raw],
             )
             .map_err(db)?;
+        self.db_append(sequence, &hash)?;
         self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[&head_raw]).map_err(db)?;
         if sequence == 0 {
             self.conn
@@ -1447,7 +1649,17 @@ impl Authority {
 
     /// Once per handle: the whole chain, then the v1 migration if needed, then the head.
     fn open_checks(&mut self) -> Result<(), String> {
-        let tip = self.validate_chain(None)?;
+        let mut mmr = Mmr::default();
+        let tip = self.validate_chain(None, &mut mmr)?;
+        // R-13d.2: a store written before the tree (or with a short one) gets it rebuilt
+        // from the hashes just validated; then the stored tree must match.
+        if self.db_leaves()? != mmr.leaves {
+            self.rebuild_mmr()?;
+        }
+        if self.db_root(mmr.leaves)? != mmr.root() {
+            return Err("corrupt_history".into());
+        }
+        self.mmr = mmr;
         match tip {
             None => {
                 if self.get_meta("state")?.is_some() {
@@ -1469,7 +1681,12 @@ impl Authority {
     /// validated last is unchanged, validates every event appended after it (by this
     /// handle or another), rehashes the tip, and checks the head row against the tip.
     fn revalidate(&mut self) -> Result<(), String> {
-        let tip = self.validate_chain(self.anchor.clone())?;
+        let mut mmr = self.mmr.clone();
+        let tip = self.validate_chain(self.anchor.clone(), &mut mmr)?;
+        if self.db_root(mmr.leaves)? != mmr.root() {
+            return Err("corrupt_history".into());
+        }
+        self.mmr = mmr;
         match &tip {
             Some((sequence, hash)) => {
                 let (previous, stored, raw) = self.event_row(*sequence)?;
@@ -1491,7 +1708,11 @@ impl Authority {
     }
 
     /// Validates the chain after `from` (or from genesis) and returns the new tip.
-    fn validate_chain(&self, from: Option<(u64, String)>) -> Result<Option<(u64, String)>, String> {
+    fn validate_chain(
+        &self,
+        from: Option<(u64, String)>,
+        mmr: &mut Mmr,
+    ) -> Result<Option<(u64, String)>, String> {
         let (start, mut previous, mut count) = match &from {
             Some((sequence, hash)) => {
                 let (_, stored, _) = self.event_row(*sequence)?;
@@ -1524,6 +1745,7 @@ impl Authority {
             if sequence != count || prev != previous || row_hash(sequence, &prev, &raw)? != hash {
                 return Err("corrupt_history".into());
             }
+            mmr.append(leaf_bytes(&hash)?);
             previous = hash;
             count += 1;
         }
@@ -1666,6 +1888,42 @@ fn event_hash(seq: u64, previous: &str, event: &Value) -> Result<String, String>
     .map_err(|_| "corrupt_history".to_string())?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
+/// R-13d.2: an inner tree node.
+fn mmr_node(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update([1u8]);
+    hasher.update(left);
+    hasher.update(right);
+    hasher.finalize().into()
+}
+
+/// R-13d.2: the tree root, over its leaf count and its peaks from left to right.
+fn mmr_root(leaves: u64, peaks: &[[u8; 32]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"agent-trust/mmr\0");
+    hasher.update(leaves.to_be_bytes());
+    for peak in peaks {
+        hasher.update(peak);
+    }
+    hasher.finalize().into()
+}
+
+fn leaf_bytes(hash: &str) -> Result<[u8; 32], String> {
+    hex::decode(hash)
+        .ok()
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+        .ok_or_else(|| "corrupt_history".to_string())
+}
+
+/// A stored row and the sequence of the event that wrote it.
+fn parse_row<T: serde::de::DeserializeOwned>(raw: &str, written: i64) -> Result<(T, u64), String> {
+    let corrupt = || "corrupt_history".to_string();
+    Ok((
+        serde_json::from_str(raw).map_err(|_| corrupt())?,
+        u64::try_from(written).map_err(|_| corrupt())?,
+    ))
+}
+
 /// R-13d: the request an event records. A persisted envelope is recorded by its digest
 /// (R-13c), and the cause is recorded beside the request.
 fn recorded_request(o: &serde_json::Map<String, Value>) -> Value {

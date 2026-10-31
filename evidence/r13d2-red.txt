@@ -1,0 +1,20 @@
+# R-13d.2 red, 8981638 + tests/authority_row_provenance.rs, 2026-10-31
+# command: cargo test --locked --test authority_row_provenance   (exit 101)
+# behavioral: three requests on edited rows or a rewritten event succeed (a replayed consume, a forged invocation);
+# setup: two tests need the authority_mmr table, which d.1 does not have (no such table).
+test an_edited_tree_fails_the_next_request ... FAILED
+test an_edited_operation_row_fails_the_next_request_on_it ... FAILED
+test an_event_rewritten_with_a_valid_hash_fails_the_next_request_that_reads_its_row ... FAILED
+test a_store_without_the_tree_builds_it_at_open ... FAILED
+test an_edited_invocation_row_fails_the_next_request_that_names_it ... FAILED
+thread 'an_edited_tree_fails_the_next_request' (215232) panicked at tests/authority_row_provenance.rs:94:10:
+called `Result::unwrap()` on an `Err` value: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: authority_mmr"))
+thread 'an_edited_operation_row_fails_the_next_request_on_it' (215231) panicked at tests/authority_row_provenance.rs:22:22:
+expected corrupt_history, got Object {"op": String("op-1"), "recipient": String("alice")}
+thread 'an_event_rewritten_with_a_valid_hash_fails_the_next_request_that_reads_its_row' (215233) panicked at tests/authority_row_provenance.rs:22:22:
+expected corrupt_history, got Object {"op": String("op-1"), "recipient": String("alice")}
+thread 'a_store_without_the_tree_builds_it_at_open' (215229) panicked at tests/authority_row_provenance.rs:94:10:
+called `Result::unwrap()` on an `Err` value: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: authority_mmr"))
+thread 'an_edited_invocation_row_fails_the_next_request_that_names_it' (215230) panicked at tests/authority_row_provenance.rs:22:22:
+expected corrupt_history, got Object {"op": String("op-2")}
+test result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
