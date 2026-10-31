@@ -40,6 +40,8 @@ ml-dsa = "=0.1.1"
 # MockEntropy, a seeded in-process backend that is NOT an entropy source.
 openmls_qrand = { git = "https://github.com/dasobral/openmls-qrand.git", branch = "main", features = ["mock"] }
 toml = "1"
+# R-13d.3: the effective user that must own the APF key file.
+libc = "0.2"
 url = "2"
 
 [dev-dependencies]

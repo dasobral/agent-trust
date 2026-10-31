@@ -1,0 +1,17 @@
+# R-13d.3 green, 2026-10-31
+# command: cargo test --locked --test adapter_history_head   (exit 0)
+test an_apf_key_file_readable_by_others_is_refused ... ok
+test the_head_is_apf_signed_and_names_the_kernel_tip ... ok
+test a_substituted_kernel_history_fails_open ... ok
+test a_rolled_back_kernel_store_fails_open ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+# command: cargo test --locked   (exit 0): 31 suites, 218 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# note: the first full run failed 7 adapter_recovery tests at reopen ("kernel history ahead of the signed head"): C-32 recovery closed intents without signing the head; fixed in finish_intent.
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (218 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

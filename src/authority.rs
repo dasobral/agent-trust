@@ -418,6 +418,7 @@ impl Authority {
         let mut state = self.load(obj)?;
         match command {
             "checkpoint" => self.checkpoint(history_selector(obj)?),
+            "history_head" => self.history_head(obj),
             "grant" => self.grant(&mut state, obj),
             "delegate" => self.delegate(&mut state, obj),
             "invoke" => self.invoke(&mut state, obj),
@@ -1246,6 +1247,25 @@ impl Authority {
         }
         response["history"] = Value::Array(history);
         Ok(response)
+    }
+
+    /// R-13d.3: the tip `{sequence, hash}` validated at the start of this request, or the
+    /// event at `at`, checked against the tree.
+    fn history_head(&self, o: &serde_json::Map<String, Value>) -> Result<Value, String> {
+        let (tip, hash) = self
+            .anchor
+            .clone()
+            .ok_or_else(|| "corrupt_history".to_string())?;
+        let Some(at) = o.get("at") else {
+            return Ok(json!({"sequence":tip, "hash":hash}));
+        };
+        let at = at.as_u64().ok_or_else(|| "malformed: at".to_string())?;
+        if at > tip {
+            return Err("stale_frontier: history head past the tip".into());
+        }
+        let (_, hash, _) = self.event_row(at)?;
+        self.verify_leaf(at, &hash)?;
+        Ok(json!({"sequence":at, "hash":hash}))
     }
 
     fn get_meta(&self, key: &str) -> Result<Option<String>, String> {

@@ -35,8 +35,8 @@ use crate::client::{context_frontier, unknown_payloads, ADAPTER_EXTENSIONS, ZERO
 use crate::suite::{Suite, SEED_LEN};
 use crate::wire::{
     AckKind, AdmissionCertificate, ApfAnchor, AuthzIncarnation, CanonicalAck, ConsumeReceipt,
-    Envelope, FounderCertificate, Frontier, ReleaseCertificate, RepairConfirmation, Right,
-    SignedStructure, ADMISSION_EXTENSION_TYPE, ANCHOR_VERSION, APF_ANCHOR_EXTENSION_TYPE,
+    Envelope, FounderCertificate, Frontier, HistoryHead, ReleaseCertificate, RepairConfirmation,
+    Right, SignedStructure, ADMISSION_EXTENSION_TYPE, ANCHOR_VERSION, APF_ANCHOR_EXTENSION_TYPE,
     AUTHZ_INCARNATION_EXTENSION_TYPE,
 };
 
@@ -185,6 +185,65 @@ fn draw_seed(rand: &impl OpenMlsRand) -> Result<[u8; KEY_LEN], String> {
 /// `SignatureKeyPair::from_raw` over a seed in `suite` (C-6, C-42).
 /// Never `SignatureKeyPair::new` or the provider's `signature_key_gen` (§8).
 /// The caller wipes its own copy of `seed` afterwards.
+/// R-13d.3: the kernel tip, signed by the APF.
+fn signed_head(
+    kernel: &mut Authority,
+    apf: &SignatureKeyPair,
+    group: &str,
+) -> Result<Vec<u8>, String> {
+    let tip = kernel.execute(json!({"command":"history_head"}))?;
+    HistoryHead {
+        apf_key_id: Sha256::digest(apf.public()).to_vec(),
+        group: group.to_owned(),
+        sequence: tip["sequence"]
+            .as_u64()
+            .ok_or("malformed: kernel history head")?,
+        history_hash: tip["hash"]
+            .as_str()
+            .and_then(|hash| hex::decode(hash).ok())
+            .ok_or("malformed: kernel history head")?,
+    }
+    .sign(apf)
+}
+
+fn put_history_head(store: &Connection, head: &[u8]) -> rusqlite::Result<usize> {
+    store.execute(
+        "INSERT INTO adapter_meta(k, v) VALUES ('history_head', ?1)
+         ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        [hex::encode(head)],
+    )
+}
+
+fn store_signed_head(
+    kernel: &mut Authority,
+    store: &Connection,
+    apf: &SignatureKeyPair,
+    group: &str,
+) -> Result<(), String> {
+    let head = signed_head(kernel, apf, group)?;
+    put_history_head(store, &head).map_err(db)?;
+    Ok(())
+}
+
+/// R-13d.3: the APF key file must belong to the effective user and grant nothing to the
+/// group or to others.
+fn check_key_file(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::metadata(path)
+            .map_err(|_| "malformed: cannot read apf key file".to_string())?;
+        // SAFETY: `geteuid` has no preconditions and cannot fail.
+        let user = unsafe { libc::geteuid() };
+        if metadata.mode() & 0o077 != 0 || metadata.uid() != user {
+            return Err("malformed: apf key file permissions".into());
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
 fn key_pair_from_seed(suite: Suite, seed: &[u8; KEY_LEN]) -> SignatureKeyPair {
     suite.key_pair_from_seed(seed)
 }
@@ -322,6 +381,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 &root_key,
                 None,
             )?;
+            store_signed_head(&mut kernel, &store, &apf, group)?;
             sync_dir(dir);
             remove_marker(&paths)?;
             Ok((kernel, store))
@@ -363,6 +423,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             }
         }
 
+        // R-13d.3: the APF key is private to the user that runs the APF.
+        check_key_file(&paths.key)?;
         let mut seed = [0u8; KEY_LEN];
         let mut file = File::open(&paths.key)
             .map_err(|_| "malformed: cannot read apf key file".to_string())?;
@@ -441,8 +503,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             crash: None,
             crashed: false,
         };
+        // R-13d.3: the kernel history must extend the APF-signed head.
+        let signed = adapter.check_signed_head_prefix()?;
         // C-32: finish or discard every intent a crash left behind.
         adapter.recover()?;
+        adapter.check_signed_head_tip(signed)?;
 
         // C-8: the sequencer must now sit at the kernel frontier. A state that recovery
         // cannot explain still fails closed here.
@@ -464,6 +529,54 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     /// The APF public key, in the group's suite (C-42).
     pub fn apf_public_key(&self) -> &[u8] {
         self.apf.public()
+    }
+
+    /// R-13d.3: the latest APF-signed history head (`wire::HistoryHead`).
+    pub fn history_head(&self) -> Result<Vec<u8>, String> {
+        let head = meta_opt(&self.store, "history_head")?
+            .ok_or_else(|| "uninitialized: no history head".to_string())?;
+        hex::decode(head).map_err(|_| "malformed: stored history head".to_string())
+    }
+
+    /// R-13d.3, before C-32 recovery: the stored head must carry the APF's signature and
+    /// name an event of the kernel history; recovery may only have added events after it.
+    /// A store written before R-13d.3 has none.
+    fn check_signed_head_prefix(&mut self) -> Result<Option<HistoryHead>, String> {
+        let Some(stored) = meta_opt(&self.store, "history_head")? else {
+            return Ok(None);
+        };
+        let corrupt = |detail: &str| format!("corrupt_history: {detail}");
+        let bytes = hex::decode(stored).map_err(|_| corrupt("history head encoding"))?;
+        let head = HistoryHead::verify(&bytes, self.apf.public(), self.provider.crypto())
+            .map_err(|_| corrupt("history head signature"))?;
+        if head.group != self.group || head.apf_key_id != self.apf_key_id() {
+            return Err(corrupt("history head binding"));
+        }
+        let at = self
+            .kernel
+            .execute(json!({"command":"history_head", "at":head.sequence}))
+            .map_err(|_| corrupt("kernel history ends before the signed head"))?;
+        if at["hash"].as_str().and_then(|h| hex::decode(h).ok()) != Some(head.history_hash.clone())
+        {
+            return Err(corrupt("kernel history differs from the signed head"));
+        }
+        Ok(Some(head))
+    }
+
+    /// R-13d.3, after C-32 recovery: the kernel tip is the signed head. A store from
+    /// before R-13d.3 gets its first head here.
+    fn check_signed_head_tip(&mut self, before: Option<HistoryHead>) -> Result<(), String> {
+        if before.is_none() && meta_opt(&self.store, "history_head")?.is_none() {
+            return store_signed_head(&mut self.kernel, &self.store, &self.apf, &self.group);
+        }
+        let head = self
+            .check_signed_head_prefix()?
+            .ok_or_else(|| "corrupt_history: history head missing".to_string())?;
+        let tip = self.kernel.execute(json!({"command":"history_head"}))?;
+        if tip["sequence"].as_u64() != Some(head.sequence) {
+            return Err("corrupt_history: kernel history ahead of the signed head".into());
+        }
+        Ok(())
     }
 
     /// The group's suite (C-42).
@@ -733,8 +846,18 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         effect: &Effect,
         outcome: &str,
     ) -> Result<(), String> {
+        // R-13d.3: the head after this request's kernel call, signed in its final
+        // transaction.
+        let head = match signed_head(&mut self.kernel, &self.apf, &self.group) {
+            Ok(head) => head,
+            Err(err) => {
+                self.crashed = true;
+                return Err(err);
+            }
+        };
         let result = (|| -> rusqlite::Result<()> {
             self.store.execute_batch("BEGIN IMMEDIATE")?;
+            put_history_head(&self.store, &head)?;
             apply_effect(&self.store, effect)?;
             append_trace(&self.store, Some(actor), sequence, Some(command), outcome)?;
             self.store
@@ -2248,6 +2371,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
             if sequencer.frontier()? != frontier {
                 return Err("binding_mismatch: sequencer frontier".to_string());
             }
+            store_signed_head(&mut kernel, &store, &apf, &group)?;
             sync_dir(&dir);
             remove_marker(&paths)?;
             Ok((kernel, store, sequencer))
@@ -3922,8 +4046,11 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             Finish::Fixed(_) | Finish::Confirm(_) => Value::Null,
         };
         let (value, effect) = self.outputs(&intent.actor, finish, response)?;
+        // R-13d.3: a recovered request signs the head, as `close` does.
+        let head = signed_head(&mut self.kernel, &self.apf, &self.group)?;
         let result = (|| -> rusqlite::Result<()> {
             self.store.execute_batch("BEGIN IMMEDIATE")?;
+            put_history_head(&self.store, &head)?;
             apply_effect(&self.store, &effect)?;
             self.store.execute(
                 "INSERT INTO adapter_recovered(actor, sequence, command, response)

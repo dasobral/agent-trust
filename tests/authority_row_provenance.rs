@@ -232,7 +232,10 @@ fn an_edited_inner_node_fails_the_next_request_whose_proof_uses_it() {
         "UPDATE authority_mmr SET hash = '0000000000000000000000000000000000000000000000000000000000000000' WHERE height = 0 AND idx = 9",
     );
     // Not a peak: a request that reads no row written under it is unaffected.
-    ok(&mut kernel, json!({"command":"checkpoint", "history":"none"}));
+    ok(
+        &mut kernel,
+        json!({"command":"checkpoint", "history":"none"}),
+    );
     code(
         kernel.execute(json!({"command":"allocate", "actor":"bob", "op":"op-2", "invocation":id})),
         "corrupt_history",

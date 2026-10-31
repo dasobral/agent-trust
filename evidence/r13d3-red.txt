@@ -1,0 +1,16 @@
+# R-13d.3 red, 196a3ba + stubs (wire::HistoryHead, Adapter::history_head returns an error) + tests/adapter_history_head.rs, 2026-10-31
+# command: cargo test --locked --test adapter_history_head   (exit 101)
+# behavioral: no signed head; a rolled-back and a substituted kernel store open; a 0640/0604/0644 key file opens.
+test the_head_is_apf_signed_and_names_the_kernel_tip ... FAILED
+test an_apf_key_file_readable_by_others_is_refused ... FAILED
+test a_rolled_back_kernel_store_fails_open ... FAILED
+test a_substituted_kernel_history_fails_open ... FAILED
+thread 'the_head_is_apf_signed_and_names_the_kernel_tip' (228999) panicked at tests/adapter_history_head.rs:52:40:
+a signed history head: "uninitialized: no history head"
+thread 'an_apf_key_file_readable_by_others_is_refused' (228998) panicked at tests/adapter_history_head.rs:139:42:
+a shared key file must not open
+thread 'a_rolled_back_kernel_store_fails_open' (228996) panicked at tests/adapter_history_head.rs:105:38:
+a rolled-back kernel store must not open
+thread 'a_substituted_kernel_history_fails_open' (228997) panicked at tests/adapter_history_head.rs:122:38:
+a substituted history must not open
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s

@@ -817,7 +817,17 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
   - A store without the tree builds it at `open`.
   - At 100 000 events, a request takes 0.34 ms, flat (`evidence/f8-bench/scale-r13d2.txt`).
   - Evidence: `evidence/r13d2-red.txt`, `evidence/r13d2-green.txt`.
-- **R-13d.3 to R-13d.6:** the signed head and key file, `known_head` anchors, cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
+- **R-13d.3, implemented: the signed history head and the key file.**
+  - The kernel answers `history_head` (`{sequence, hash}` of the tip, or of event `at`, checked against the tree).
+  - The APF signs `HistoryHead { apf_key_id, group, sequence, history_hash }` (label `agent-trust/history-head/v1`). It signs at genesis and creation (before the genesis marker is removed), and in the final store transaction of every request that reached the kernel (`close`, and C-32 recovery). It keeps the latest as `adapter_meta['history_head']`, readable through `Adapter::history_head()`.
+  - `Adapter::open` checks the head in two steps:
+    - Before C-32 recovery, the stored head must verify under the APF key and name an event of the kernel history.
+    - After recovery, the kernel tip must be that head (`corrupt_history: …`).
+  - Effect: a rolled-back or substituted `authority.sqlite` does not open without the APF key.
+  - A store from before R-13d.3 gets its first head at `open`. That is also what a writer who deletes the head achieves. R-13d.4 anchors close this through the heads that clients hold.
+  - `open` refuses an APF key file that grants anything to the group or to others, or that belongs to another user: `malformed: apf key file permissions`.
+  - Evidence: `evidence/r13d3-red.txt`, `evidence/r13d3-green.txt`.
+- **R-13d.4 to R-13d.6:** `known_head` anchors, cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 
 ## 11. Claim gate for `full_construction_mls`

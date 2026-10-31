@@ -840,3 +840,42 @@ impl SignedStructure for RepairConfirmation {
         Ok(confirmation)
     }
 }
+
+pub const HISTORY_HEAD_LABEL: &[u8] = b"agent-trust/history-head/v1";
+
+/// R-13d.3: the APF's signature over the kernel history tip. The adapter signs it after
+/// every request that reaches the kernel, keeps the latest, and checks it at `open`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HistoryHead {
+    pub apf_key_id: Vec<u8>,
+    pub group: String,
+    /// The sequence of the last kernel event.
+    pub sequence: u64,
+    /// That event's hash (32 bytes).
+    pub history_hash: Vec<u8>,
+}
+
+impl SignedStructure for HistoryHead {
+    fn tbs(&self) -> Result<Vec<u8>, String> {
+        let mut w = Writer::default();
+        w.opaque(HISTORY_HEAD_LABEL)?;
+        w.opaque(&self.apf_key_id)?;
+        w.opaque(self.group.as_bytes())?;
+        w.u64(self.sequence)?;
+        w.opaque(&self.history_hash)?;
+        Ok(w.finish())
+    }
+
+    fn decode_tbs(bytes: &[u8]) -> Result<Self, String> {
+        let mut r = Reader::new(bytes);
+        r.label(HISTORY_HEAD_LABEL)?;
+        let head = Self {
+            apf_key_id: r.opaque()?,
+            group: r.string()?,
+            sequence: r.u64()?,
+            history_hash: r.opaque()?,
+        };
+        r.finish()?;
+        Ok(head)
+    }
+}
