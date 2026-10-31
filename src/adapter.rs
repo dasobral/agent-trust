@@ -206,6 +206,51 @@ fn signed_head(
     .sign(apf)
 }
 
+/// R-13d.5: every request that reached the kernel, keyed by its digest (`cause`).
+const REQUESTS_TABLE: &str = "CREATE TABLE IF NOT EXISTS adapter_requests (
+     cause TEXT PRIMARY KEY,
+     actor TEXT NOT NULL,
+     sequence TEXT NOT NULL,
+     body BLOB NOT NULL,
+     signature BLOB NOT NULL
+ );
+ CREATE TABLE IF NOT EXISTS adapter_key_history (
+     actor TEXT NOT NULL,
+     public_key BLOB NOT NULL,
+     PRIMARY KEY (actor, public_key)
+ );";
+
+/// R-13d.5: `SHA-256(RequestTBS ‖ signature)`, the `cause` a kernel event records.
+fn request_cause(group: &str, request: &SignedRequest) -> Result<String, String> {
+    let mut hasher = Sha256::new();
+    hasher.update(SignedRequest::to_be_signed(
+        group,
+        &request.actor,
+        request.sequence,
+        &request.body,
+    )?);
+    hasher.update(&request.signature);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// R-13d.5: the kernel event kinds a request command can cause, as in the C-37 export.
+fn command_steps(command: &str) -> &'static [&'static str] {
+    match command {
+        "submit_commit" => &["admit", "repair_stage", "rekey"],
+        "confirm_repair" => &["repair_open"],
+        "grant" => &["grant"],
+        "delegate" => &["delegate"],
+        "revoke" => &["revoke"],
+        "invoke" => &["invoke"],
+        "allocate" => &["allocate"],
+        "release" => &["release"],
+        "persist" => &["persist"],
+        "consume" => &["consume"],
+        "abandon" => &["abandon"],
+        _ => &[],
+    }
+}
+
 /// R-13d.4: the latest signed request of each actor that carried a `known_head`.
 const ANCHORS_TABLE: &str = "CREATE TABLE IF NOT EXISTS adapter_anchors (
      actor TEXT PRIMARY KEY,
@@ -489,6 +534,10 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         store.execute_batch(INTENT_TABLES).map_err(db)?;
         // Stores written before R-13d.4 gain the anchors table.
         store.execute_batch(ANCHORS_TABLE).map_err(db)?;
+        // Stores written before R-13d.5 gain the requests table; their events from the
+        // current tip on must have causes.
+        store.execute_batch(REQUESTS_TABLE).map_err(db)?;
+        let upgraded = meta_opt(&store, "causes_from")?.is_none();
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -529,6 +578,19 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         // C-32: finish or discard every intent a crash left behind.
         adapter.recover()?;
         adapter.check_signed_head_tip(signed)?;
+        if upgraded {
+            let tip = adapter.kernel.execute(json!({"command":"history_head"}))?;
+            let from = tip["sequence"].as_u64().unwrap_or_default() + 1;
+            adapter
+                .store
+                .execute(
+                    "INSERT INTO adapter_meta(k, v) VALUES ('causes_from', ?1)",
+                    [from.to_string()],
+                )
+                .map_err(db)?;
+        }
+        // R-13d.5: the clients' anchors, the kernel replay and the signed requests.
+        adapter.verify_since_anchor()?;
 
         // C-8: the sequencer must now sit at the kernel frontier. A state that recovery
         // cannot explain still fails closed here.
@@ -557,6 +619,202 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let head = meta_opt(&self.store, "history_head")?
             .ok_or_else(|| "uninitialized: no history head".to_string())?;
         hex::decode(head).map_err(|_| "malformed: stored history head".to_string())
+    }
+
+    /// R-13d.5: a stored signed request must verify under its actor's registered key or a
+    /// key that a rekey retired.
+    fn verify_stored_request(&self, request: &SignedRequest) -> Result<(), String> {
+        let mut keys: Vec<Vec<u8>> = self.registered_key(&request.actor)?.into_iter().collect();
+        {
+            let mut stmt = self
+                .store
+                .prepare("SELECT public_key FROM adapter_key_history WHERE actor = ?1")
+                .map_err(db)?;
+            let rows = stmt
+                .query_map([&request.actor], |r| r.get::<_, Vec<u8>>(0))
+                .map_err(db)?;
+            for key in rows {
+                keys.push(key.map_err(db)?);
+            }
+        }
+        let tbs = SignedRequest::to_be_signed(
+            &self.group,
+            &request.actor,
+            request.sequence,
+            &request.body,
+        )?;
+        let crypto = self.provider.crypto();
+        let scheme = self.suite.signature_scheme();
+        if keys.iter().any(|key| {
+            crypto
+                .verify_signature(scheme, &tbs, key, &request.signature)
+                .is_ok()
+        }) {
+            return Ok(());
+        }
+        Err(format!(
+            "corrupt_history: a stored request signature ({} #{})",
+            request.actor, request.sequence
+        ))
+    }
+
+    /// R-13d.5, at `open`, after the signed head: the history must be one the clients and
+    /// the actors vouch for, from the latest client anchor on.
+    /// 1. Every anchor verifies under its actor's key and names an event of the history.
+    /// 2. The kernel replays every request after the latest anchor (`Authority::replay`).
+    /// 3. Every event after it, from `causes_from` on, records the digest of a stored
+    ///    actor-signed request of a matching command; one request causes one step.
+    /// 4. Every release certificate issued after it names its release event.
+    ///
+    /// Without an anchor the whole history is checked.
+    fn verify_since_anchor(&mut self) -> Result<(), String> {
+        let corrupt = |detail: &str| format!("corrupt_history: {detail}");
+        let anchors: Vec<(String, String, i64, String, Vec<u8>, Vec<u8>)> = {
+            let mut stmt = self
+                .store
+                .prepare("SELECT actor, sequence, head_sequence, head_hash, body, signature FROM adapter_anchors")
+                .map_err(db)?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                })
+                .map_err(db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(db)?
+        };
+        let mut anchor: Option<u64> = None;
+        for (actor, sequence, head_sequence, head_hash, body, signature) in anchors {
+            let request = SignedRequest {
+                actor,
+                sequence: sequence.parse().map_err(|_| corrupt("client anchor"))?,
+                body,
+                signature,
+            };
+            self.verify_stored_request(&request)?;
+            let known: Value =
+                serde_json::from_slice(&request.body).map_err(|_| corrupt("client anchor"))?;
+            if known["known_head"] != json!({"sequence":head_sequence, "hash":head_hash}) {
+                return Err(corrupt("client anchor body"));
+            }
+            let head_sequence =
+                u64::try_from(head_sequence).map_err(|_| corrupt("client anchor"))?;
+            match self
+                .kernel
+                .execute(json!({"command":"history_head", "at":head_sequence}))
+            {
+                Ok(at) if at["hash"] == json!(head_hash) => {}
+                _ => return Err(corrupt("the history differs from a client anchor")),
+            }
+            anchor = anchor.max(Some(head_sequence));
+        }
+        self.kernel.replay(anchor)?;
+
+        let causes_from: u64 = meta_opt(&self.store, "causes_from")?
+            .and_then(|from| from.parse().ok())
+            .unwrap_or(0);
+        let events = self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":{"since":anchor.unwrap_or(0)}}))?;
+        let mut entries: Vec<Value> = events["history"].as_array().cloned().unwrap_or_default();
+        if anchor.is_none() {
+            // Event 0, the genesis `init`, has no request to verify.
+            entries.retain(|entry| entry["sequence"] != json!(0));
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut last: Option<String> = None;
+        // The events of one request: R-12 expiries, then at most one step.
+        let mut stepped = false;
+        for entry in entries {
+            let sequence = entry["sequence"].as_u64().unwrap_or_default();
+            let event = &entry["event"];
+            if sequence < causes_from || event["v"] != json!(2) {
+                continue;
+            }
+            let cause = event["cause"]
+                .as_str()
+                .ok_or_else(|| corrupt("an event that no signed request caused"))?
+                .to_owned();
+            let expiry = event["kind"] == json!("expire");
+            if last.as_deref() == Some(cause.as_str()) {
+                if stepped {
+                    return Err(corrupt("one signed request caused two steps"));
+                }
+            } else {
+                stepped = false;
+                if !seen.insert(cause.clone()) {
+                    return Err(corrupt("one signed request caused two steps"));
+                }
+                let request = self.stored_request(&cause)?;
+                self.verify_stored_request(&request)?;
+                let command = body_command(&request.body).unwrap_or_default();
+                let step = if event["kind"] == json!("expire") {
+                    event["request"]["step"]["command"].as_str()
+                } else {
+                    event["kind"].as_str()
+                };
+                if !step.is_some_and(|step| command_steps(&command).contains(&step)) {
+                    return Err(corrupt(
+                        "an event of another command than its signed request",
+                    ));
+                }
+                last = Some(cause);
+            }
+            stepped |= !expiry;
+            if event["kind"] == json!("release") {
+                for op in event["after"]["ops"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(op, _)| op)
+                {
+                    if let Some(certificate) = self.stored_certificate(op)? {
+                        let released = ReleaseCertificate::verify(
+                            &certificate,
+                            self.apf.public(),
+                            self.provider.crypto(),
+                        )
+                        .map_err(|_| corrupt("a stored release certificate"))?;
+                        if json!(released.kernel_event_hash) != entry["hash"] {
+                            return Err(corrupt("a release certificate names another event"));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// R-13d.5: the stored signed request with digest `cause`, which must match it.
+    fn stored_request(&self, cause: &str) -> Result<SignedRequest, String> {
+        let row: Option<(String, String, Vec<u8>, Vec<u8>)> = self
+            .store
+            .query_row(
+                "SELECT actor, sequence, body, signature FROM adapter_requests WHERE cause = ?1",
+                [cause],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        let (actor, sequence, body, signature) =
+            row.ok_or_else(|| "corrupt_history: a missing signed request".to_string())?;
+        let request = SignedRequest {
+            actor,
+            sequence: sequence
+                .parse()
+                .map_err(|_| "corrupt_history: a stored request".to_string())?,
+            body,
+            signature,
+        };
+        if request_cause(&self.group, &request)? != cause {
+            return Err("corrupt_history: a stored request digest".into());
+        }
+        Ok(request)
     }
 
     /// R-13d.4: a request's `known_head`, the latest APF-signed head its client saw, must
@@ -849,7 +1107,26 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 .map_err(db)?;
                 Ok(Begun::Done(Ok(value)))
             }
-            Checked::Kernel(step) => {
+            Checked::Kernel(mut step) => {
+                // R-13d.5: the kernel records the digest of the signed request that
+                // caused its events; the request is kept with the intent.
+                let cause = request_cause(&self.group, request)?;
+                self.store
+                    .execute(
+                        "INSERT OR IGNORE INTO adapter_requests(cause, actor, sequence, body, signature)
+                         VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![
+                            cause,
+                            request.actor,
+                            request.sequence.to_string(),
+                            request.body,
+                            request.signature
+                        ],
+                    )
+                    .map_err(db)?;
+                if let Some(fields) = step.request.as_object_mut() {
+                    fields.insert("cause".into(), json!(cause));
+                }
                 // C-31: the intent records the kernel revision before the call.
                 let revision = self.kernel_checkpoint()?["revision"]
                     .as_u64()
@@ -1586,6 +1863,15 @@ fn init_store(
         .and_then(|()| store.execute_batch(OFFERS_TABLE))
         .and_then(|()| store.execute_batch(INTENT_TABLES))
         .and_then(|()| store.execute_batch(ANCHORS_TABLE))
+        .and_then(|()| store.execute_batch(REQUESTS_TABLE))
+        .and_then(|()| {
+            store
+                .execute(
+                    "INSERT INTO adapter_meta(k, v) VALUES ('causes_from', '0')",
+                    [],
+                )
+                .map(|_| ())
+        })
     {
         let _ = store.execute_batch("ROLLBACK");
         return Err(db(err));
@@ -3383,6 +3669,11 @@ fn insert_offer(store: &Connection, offer: &Offer) -> rusqlite::Result<()> {
 /// registered key, so the old key no longer authenticates; clears the offer; and indexes
 /// the subject's retained admission or founder certificate under the new leaf key (§4.3).
 fn rotate_key(store: &Connection, record: &RekeyRecord) -> rusqlite::Result<()> {
+    // R-13d.5: the retired key still verifies the requests it signed.
+    store.execute(
+        "INSERT OR IGNORE INTO adapter_key_history(actor, public_key) VALUES (?1, ?2)",
+        params![record.subject, record.old_key.as_slice()],
+    )?;
     let rotated = store.execute(
         "UPDATE adapter_keys SET public_key = ?2 WHERE actor = ?1 AND public_key = ?3",
         params![

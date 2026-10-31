@@ -1,0 +1,18 @@
+# R-13d.5 (adapter) green, 2026-10-31
+# command: cargo test --locked --test adapter_key_theft   (exit 0)
+test every_kernel_event_of_a_request_records_its_signed_request ... ok
+test a_step_appended_with_the_stolen_apf_key_is_refused_at_open ... ok
+test a_signed_request_reused_for_a_second_step_is_refused_at_open ... ok
+test an_older_kernel_store_behind_a_client_anchor_is_refused_at_open ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+# notes: the first green run passed 3 of 4: one request's events were grouped by cause, so a step reusing the preceding cause was hidden; a request now causes R-12 expiries and at most one step.
+#        then 2 adapter_recovery tests failed (a stored request signature): a rekey retired the signing key; retired keys are kept in adapter_key_history.
+# command: cargo test --locked   (exit 0): 34 suites, 231 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (231 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

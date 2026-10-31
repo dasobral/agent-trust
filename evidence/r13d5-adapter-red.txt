@@ -1,0 +1,16 @@
+# R-13d.5 (adapter) red, 4b068b0 + tests/adapter_key_theft.rs, 2026-10-31
+# command: cargo test --locked --test adapter_key_theft   (exit 101)
+# behavioral: kernel events record no cause; with the stolen APF key, an appended step, a reused signed request and an older kernel store behind a client anchor all open.
+test a_signed_request_reused_for_a_second_step_is_refused_at_open ... FAILED
+test every_kernel_event_of_a_request_records_its_signed_request ... FAILED
+test a_step_appended_with_the_stolen_apf_key_is_refused_at_open ... FAILED
+test an_older_kernel_store_behind_a_client_anchor_is_refused_at_open ... FAILED
+thread 'a_signed_request_reused_for_a_second_step_is_refused_at_open' (273943) panicked at tests/adapter_key_theft.rs:125:58:
+called `Option::unwrap()` on a `None` value
+thread 'every_kernel_event_of_a_request_records_its_signed_request' (273946) panicked at tests/adapter_key_theft.rs:87:58:
+called `Option::unwrap()` on a `None` value
+thread 'a_step_appended_with_the_stolen_apf_key_is_refused_at_open' (273944) panicked at tests/adapter_key_theft.rs:69:31:
+the forged directory must not open
+thread 'an_older_kernel_store_behind_a_client_anchor_is_refused_at_open' (273945) panicked at tests/adapter_key_theft.rs:69:31:
+the forged directory must not open
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s

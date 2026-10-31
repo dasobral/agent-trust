@@ -839,7 +839,31 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
   - The lab attaches every actor's head to its requests.
   - Effect: a rollback of the whole data directory, which no check on the APF host can see, fails the first request of a client that saw a later head.
   - Evidence: `evidence/r13d4-red.txt`, `evidence/r13d4-green.txt`.
-- **R-13d.5 and R-13d.6:** cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
+- **R-13d.5, implemented: replay and signed causes (the defense against APF key theft).**
+  - **Kernel.** `Authority::replay(after)` re-executes every recorded request after an anchor and requires byte-identical events, with a `now` that never goes back.
+    - It starts from the state as of the anchor, rebuilt from the events' `before` values.
+    - It runs in a scratch kernel that holds only the head, the touched operations and the invocations they name.
+    - An R-12 expiry records the whole step request.
+    - A replayed `persist` binds the recorded digest.
+  - **Adapter: causes.** Every kernel request carries `cause = SHA-256(RequestTBS ‖ signature)` of the signed request that caused it. The kernel records it in its events. The adapter keeps the request in `adapter_requests`, in the transaction of the intent. Keys that a rekey retires are kept in `adapter_key_history`.
+  - **Adapter: checks at `open`**, after the signed head:
+    1. every client anchor verifies under its actor's key and names an event of the history;
+    2. the kernel replays every request after the latest anchor;
+    3. every event after it carries the cause of a stored signed request, of a command that can cause that event kind. A request causes its R-12 expiries and at most one step;
+    4. every release certificate issued after it names its release event.
+  - The cost is bounded by the events since the latest anchor. Without any anchor, the whole history is checked.
+  - A store from before R-13d.5 checks causes from its tip on (`causes_from`).
+  - **Effect:** an attacker with the APF key and every file, but no actor key, cannot open the adapter after any of these:
+    - appending a step, legal or not;
+    - reusing a signed request for another step;
+    - rewriting what a step did;
+    - restoring a store behind a client's anchor.
+  - **Residuals:**
+    - A retired actor key still verifies, without a time window.
+    - An attacker who replaces an actor's registered key in `adapter.sqlite`, and re-signs that actor's stored requests and anchors, is detected at that actor's next request (its signature no longer verifies, so the actor sees `unauthenticated`), and by R-13d.6.
+    - `now` is asserted by the APF and only checked to be monotonic.
+  - Evidence: `evidence/r13d5-kernel-red.txt`, `evidence/r13d5-kernel-green.txt`, `evidence/r13d5-adapter-red.txt`, `evidence/r13d5-adapter-green.txt`.
+- **R-13d.6:** `verify --full`: replay from genesis, with key registrations traced to the root key. Specified in `docs/F-8-analysis.md` §11.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 
 ## 11. Claim gate for `full_construction_mls`
