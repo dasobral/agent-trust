@@ -1109,3 +1109,56 @@ impl<P: OpenMlsProvider> ClientEndpoint<P> {
         })
     }
 }
+
+/// R-13d.4: a client's view of the APF history head. The client verifies every signed
+/// head it receives, refuses one that goes back, and sends the latest as `known_head` in
+/// the body of every request it signs, so the APF cannot serve it a rolled-back history.
+pub struct HeadTracker {
+    apf_public: Vec<u8>,
+    group: String,
+    latest: Option<crate::wire::HistoryHead>,
+}
+
+impl HeadTracker {
+    pub fn new(apf_public: &[u8], group: &str) -> Self {
+        Self {
+            apf_public: apf_public.to_vec(),
+            group: group.to_owned(),
+            latest: None,
+        }
+    }
+
+    /// Accepts a signed head from the APF: it must carry the APF's signature, name this
+    /// group, and not go back from the latest head (`fork_detected`).
+    pub fn observe(&mut self, signed: &[u8]) -> Result<(), String> {
+        let head: crate::wire::HistoryHead = verify_without_provider(signed, &self.apf_public)?;
+        if head.group != self.group
+            || head.apf_key_id != Sha256::digest(&self.apf_public).as_slice()
+        {
+            return Err("binding_mismatch: history head".into());
+        }
+        if let Some(latest) = &self.latest {
+            if head.sequence < latest.sequence
+                || (head.sequence == latest.sequence && head.history_hash != latest.history_hash)
+            {
+                return Err("fork_detected: the APF history head went back".into());
+            }
+        }
+        self.latest = Some(head);
+        Ok(())
+    }
+
+    /// The latest head, as the `known_head` request field.
+    pub fn known_head(&self) -> Option<serde_json::Value> {
+        self.latest.as_ref().map(|head| {
+            serde_json::json!({"sequence":head.sequence, "hash":hex::encode(&head.history_hash)})
+        })
+    }
+
+    /// Adds `known_head` to a request body once a head is known.
+    pub fn attach(&self, body: &mut serde_json::Value) {
+        if let (Some(known), Some(fields)) = (self.known_head(), body.as_object_mut()) {
+            fields.insert("known_head".into(), known);
+        }
+    }
+}

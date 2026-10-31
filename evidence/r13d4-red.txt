@@ -1,0 +1,18 @@
+# R-13d.4 red, 73b0135 + HeadTracker stub (observe returns an error) + tests/adapter_known_head.rs, 2026-10-31
+# command: cargo test --locked --test adapter_known_head   (exit 101)
+# behavioral: a known_head ahead of or different from the history is accepted (the field is passed through to the kernel); a malformed known_head is accepted;
+# stub: HeadTracker::observe is unimplemented.
+test a_rolled_back_data_directory_is_detected_by_a_client_that_saw_a_later_head ... FAILED
+test the_tracker_verifies_heads_and_refuses_one_that_goes_back ... FAILED
+test a_malformed_known_head_is_refused ... FAILED
+test a_head_this_history_does_not_hold_is_fork_detected ... FAILED
+test a_request_with_a_head_of_this_history_is_accepted ... ok
+thread 'a_rolled_back_data_directory_is_detected_by_a_client_that_saw_a_later_head' (246961) panicked at tests/adapter_known_head.rs:133:54:
+called `Result::unwrap()` on an `Err` value: "unimplemented"
+thread 'the_tracker_verifies_heads_and_refuses_one_that_goes_back' (246962) panicked at tests/adapter_known_head.rs:167:28:
+called `Result::unwrap()` on an `Err` value: "unimplemented"
+thread 'a_malformed_known_head_is_refused' (246959) panicked at tests/adapter_known_head.rs:57:22:
+expected malformed, got {"op":"op-1"}
+thread 'a_head_this_history_does_not_hold_is_fork_detected' (246958) panicked at tests/adapter_known_head.rs:57:22:
+expected fork_detected, got {"op":"op-1"}
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s

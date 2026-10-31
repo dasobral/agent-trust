@@ -1,0 +1,17 @@
+# R-13d.4 green, 2026-10-31
+# command: cargo test --locked --test adapter_known_head   (exit 0)
+test a_head_this_history_does_not_hold_is_fork_detected ... ok
+test a_request_with_a_head_of_this_history_is_accepted ... ok
+test a_malformed_known_head_is_refused ... ok
+test the_tracker_verifies_heads_and_refuses_one_that_goes_back ... ok
+test a_rolled_back_data_directory_is_detected_by_a_client_that_saw_a_later_head ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+# command: cargo test --locked   (exit 0): 32 suites, 223 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0); the lab sends known_head on every request
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (223 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

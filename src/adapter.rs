@@ -206,6 +206,25 @@ fn signed_head(
     .sign(apf)
 }
 
+/// R-13d.4: the latest signed request of each actor that carried a `known_head`.
+const ANCHORS_TABLE: &str = "CREATE TABLE IF NOT EXISTS adapter_anchors (
+     actor TEXT PRIMARY KEY,
+     sequence TEXT NOT NULL,
+     head_sequence INTEGER NOT NULL,
+     head_hash TEXT NOT NULL,
+     body BLOB NOT NULL,
+     signature BLOB NOT NULL
+ );";
+
+/// The `command` of a request body, for its trace event.
+fn body_command(body: &[u8]) -> Option<String> {
+    serde_json::from_slice::<Value>(body)
+        .ok()?
+        .get("command")?
+        .as_str()
+        .map(str::to_owned)
+}
+
 fn put_history_head(store: &Connection, head: &[u8]) -> rusqlite::Result<usize> {
     store.execute(
         "INSERT INTO adapter_meta(k, v) VALUES ('history_head', ?1)
@@ -468,6 +487,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         store.execute_batch(OFFERS_TABLE).map_err(db)?;
         // Stores written before phase 4.5 gain the intent tables (C-31, C-32).
         store.execute_batch(INTENT_TABLES).map_err(db)?;
+        // Stores written before R-13d.4 gain the anchors table.
+        store.execute_batch(ANCHORS_TABLE).map_err(db)?;
         let group = meta(&store, "group")?;
         if meta(&store, "apf_public_key")? != hex::encode(apf.public()) {
             return Err("binding_mismatch: apf key".into());
@@ -536,6 +557,69 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let head = meta_opt(&self.store, "history_head")?
             .ok_or_else(|| "uninitialized: no history head".to_string())?;
         hex::decode(head).map_err(|_| "malformed: stored history head".to_string())
+    }
+
+    /// R-13d.4: a request's `known_head`, the latest APF-signed head its client saw, must
+    /// name an event of this history with that hash; otherwise the APF serves a history
+    /// that the client knows to be older or different (`fork_detected`). The latest such
+    /// signed request of each actor is kept as an anchor of the history.
+    fn check_known_head(&mut self, request: &SignedRequest) -> Result<(), String> {
+        let Ok(Value::Object(fields)) = serde_json::from_slice::<Value>(&request.body) else {
+            return Ok(());
+        };
+        let Some(known) = fields.get("known_head") else {
+            return Ok(());
+        };
+        let malformed = || "malformed: known_head".to_string();
+        let known = known
+            .as_object()
+            .filter(|known| known.len() == 2)
+            .ok_or_else(malformed)?;
+        let sequence = known
+            .get("sequence")
+            .and_then(Value::as_u64)
+            .ok_or_else(malformed)?;
+        let hash = known
+            .get("hash")
+            .and_then(Value::as_str)
+            .filter(|hash| {
+                hash.len() == 64
+                    && hash
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+            .ok_or_else(malformed)?;
+        match self
+            .kernel
+            .execute(json!({"command":"history_head", "at":sequence}))
+        {
+            Ok(at) if at["hash"] == json!(hash) => {}
+            Ok(_) => return Err("fork_detected: the history differs at the client's head".into()),
+            Err(err) if err.starts_with("stale_frontier") => {
+                return Err("fork_detected: the client knows a later history".into())
+            }
+            Err(err) => return Err(err),
+        }
+        let sequence = i64::try_from(sequence).map_err(|_| malformed())?;
+        self.store
+            .execute(
+                "INSERT INTO adapter_anchors(actor, sequence, head_sequence, head_hash, body, signature)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(actor) DO UPDATE SET sequence = excluded.sequence,
+                     head_sequence = excluded.head_sequence, head_hash = excluded.head_hash,
+                     body = excluded.body, signature = excluded.signature
+                 WHERE excluded.head_sequence >= adapter_anchors.head_sequence",
+                params![
+                    request.actor,
+                    request.sequence.to_string(),
+                    sequence,
+                    hash,
+                    request.body,
+                    request.signature
+                ],
+            )
+            .map_err(db)?;
+        Ok(())
     }
 
     /// R-13d.3, before C-32 recovery: the stored head must carry the APF's signature and
@@ -724,6 +808,19 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             )
             .map_err(db)?;
         let actor = request.actor.clone();
+        // R-13d.4: the client's head must be a head of this history.
+        if let Err(err) = self.check_known_head(request) {
+            let command = body_command(&request.body);
+            append_trace(
+                &self.store,
+                Some(&actor),
+                request.sequence,
+                command.as_deref(),
+                &err,
+            )
+            .map_err(db)?;
+            return Ok(Begun::Done(Err(err)));
+        }
         // C-4 step 5 and the checks of every flow that precede its kernel call.
         let (command, checked) = match self.check(&actor, &request.body) {
             Ok(checked) => checked,
@@ -1061,6 +1158,8 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         let Value::Object(mut fields) = value else {
             return Err(malformed(None, "request object"));
         };
+        // R-13d.4: `begin` checked the client's head; no flow sees it.
+        fields.remove("known_head");
         let command = match fields.get("command") {
             Some(Value::String(c)) if !c.is_empty() && c.len() <= MAX_COMMAND => c.clone(),
             _ => return Err(malformed(None, "command")),
@@ -1486,6 +1585,7 @@ fn init_store(
         .and_then(|()| store.execute_batch(REPAIR_TABLES))
         .and_then(|()| store.execute_batch(OFFERS_TABLE))
         .and_then(|()| store.execute_batch(INTENT_TABLES))
+        .and_then(|()| store.execute_batch(ANCHORS_TABLE))
     {
         let _ = store.execute_batch("ROLLBACK");
         return Err(db(err));

@@ -827,7 +827,19 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
   - A store from before R-13d.3 gets its first head at `open`. That is also what a writer who deletes the head achieves. R-13d.4 anchors close this through the heads that clients hold.
   - `open` refuses an APF key file that grants anything to the group or to others, or that belongs to another user: `malformed: apf key file permissions`.
   - Evidence: `evidence/r13d3-red.txt`, `evidence/r13d3-green.txt`.
-- **R-13d.4 to R-13d.6:** `known_head` anchors, cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
+- **R-13d.4, implemented: client-held heads.**
+  - Any request body may carry `known_head: {sequence, hash}`, the latest APF-signed head its client has seen. The actor's signature covers it.
+  - The adapter checks it right after the signature and sequence checks (C-4 step 4), and before any flow sees the request. The kernel history must hold an event at `sequence` with that `hash`. Otherwise the request gets `fork_detected` (new error code, §12) and its trace event, and nothing reaches the kernel. A malformed `known_head` gets `malformed: known_head`.
+  - Every flow ignores the field, recovery included.
+  - The latest such signed request of each actor is kept in `adapter_anchors`, the anchors R-13d.5 verifies at `open`. Storage is bounded by the number of actors.
+  - `client::HeadTracker` is the client side:
+    - it verifies each signed head (`unauthenticated`, or `binding_mismatch` for another group or key);
+    - it refuses a head that goes back (`fork_detected`);
+    - it attaches `known_head` to request bodies.
+  - The lab attaches every actor's head to its requests.
+  - Effect: a rollback of the whole data directory, which no check on the APF host can see, fails the first request of a client that saw a later head.
+  - Evidence: `evidence/r13d4-red.txt`, `evidence/r13d4-green.txt`.
+- **R-13d.5 and R-13d.6:** cause binding with replay at `open`, and `verify --full`. Specified in `docs/F-8-analysis.md` §11.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 
 ## 11. Claim gate for `full_construction_mls`
@@ -844,7 +856,7 @@ Even then, the README states that computational key confinement (`formal/`, Prop
 
 ## 12. New error codes
 
-`unauthenticated` (bad or stale request signature or sequence) · `binding_mismatch` (reused: certificate, AAD, incarnation or frontier mismatch) · `noncanonical_commit` (sequencer rejection) · `unconfirmed` (confirmation absent or inconsistent) · `entropy_unavailable` (rand provider failed closed).
+`unauthenticated` (bad or stale request signature or sequence) · `fork_detected` (R-13d.4: the request's `known_head` is not a head of this history) · `binding_mismatch` (reused: certificate, AAD, incarnation or frontier mismatch) · `noncanonical_commit` (sequencer rejection) · `unconfirmed` (confirmation absent or inconsistent) · `entropy_unavailable` (rand provider failed closed).
 
 ## 13. Decisions requested from Daniel
 

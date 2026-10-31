@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::adapter::{Adapter, ClientIdentity, Clock, SignedRequest, ADAPTER_FILE, AUTHORITY_FILE};
-use crate::client::{ClientEndpoint, JoinCandidate, PreparedJoin, StagedAdd};
+use crate::client::{ClientEndpoint, HeadTracker, JoinCandidate, PreparedJoin, StagedAdd};
 use crate::entropy::{LabEntropy, LabProvider};
 use crate::suite::Suite;
 use crate::wire::{operation_digest, Frontier, ReleaseCertificate, Right, SignedStructure};
@@ -293,6 +293,7 @@ impl Lab<'_> {
             delivered_pairs: BTreeSet::new(),
             delivered: 0,
             duplicate_deliveries: 0,
+            heads: BTreeMap::new(),
         });
         Ok(json!({
             "group": group, "root": root, "epoch": frontier.epoch, "branch": frontier.branch
@@ -345,19 +346,32 @@ struct World {
     delivered: u64,
     /// Application deliveries of an already delivered pair.
     duplicate_deliveries: u64,
+    /// R-13d.4: each actor's view of the APF history head.
+    heads: BTreeMap<String, HeadTracker>,
 }
 
 impl World {
     /// Signs `body` as `actor` with its registered key at its next sequence and handles it.
-    fn request(&mut self, actor: &str, body: Value) -> Result<Value, String> {
+    /// R-13d.4: the body carries the actor's latest head, and the head after the request
+    /// becomes the actor's latest.
+    fn request(&mut self, actor: &str, mut body: Value) -> Result<Value, String> {
         let entry = self
             .actors
             .get_mut(actor)
             .ok_or_else(|| format!("unauthorized: {actor} has no lab identity"))?;
         entry.sequence += 1;
+        let tracker = self
+            .heads
+            .entry(actor.to_owned())
+            .or_insert_with(|| HeadTracker::new(&self.apf_public, &self.group));
+        tracker.attach(&mut body);
         let request =
             SignedRequest::sign(&self.group, actor, entry.sequence, &body, &entry.signer)?;
-        self.adapter.handle(&request)
+        let outcome = self.adapter.handle(&request);
+        if let Ok(head) = self.adapter.history_head() {
+            tracker.observe(&head)?;
+        }
+        outcome
     }
 
     fn endpoint_mut(&mut self, name: &str) -> Result<&mut Endpoint, String> {
