@@ -34,3 +34,26 @@ Ruling: distinguish external APF proposal constructors from member proposal meth
 2026-10-25 (adapter session): R-12 implemented test first on branch `feat/r12-expiry` (C-45, amendment A-5): the first mutating kernel step past a delegation's `expires_at` records an `expire` event with `revoke`'s cascade and fence rule, kept even when the step fails; adapter recovery and the trace export follow. Red: assertion failures on the current code (`evidence/r12-red.txt`); green: the whole crate and `scripts/verify.py`, all gates in both suites (`evidence/r12-green.txt`). R-11 landed as 0db5f6f, on `formal/proof-items` because a concurrent session switched the shared checkout; `feat/r11-r12` points at it.
 
 2026-10-31 (stack audit session): Daniel approved moving the OpenMLS fork to the reviewed libcrux entropy change ("Yes"; "fix the docs and contract, push the rebuilt integration and bump both lockfiles"). `agent-trust/integration` had merged a superseded version (333f177e) of `feat/libcrux-provider-rng`; the branch now carries the review fix e92c013f4 (one shared DRBG state for HPKE senders, reseeding every 2^16 requests, `InsufficientRandomness` for every failed draw). The fork branch moved forward to 93ad743e, whose tree is merge(`agent-trust/keypackage-staging` 04690845f, `feat/libcrux-provider-rng` e92c013f4) and differs from dd332780 only in `libcrux_crypto`; dd332780 stays reachable. `Cargo.lock` moves the fork crates only. `scripts/verify.py` passed every gate in both suites (`evidence/verify-2026-10-31-fork-93ad743.txt`); the fork's libcrux provider tests pass (19). §8 of the contract now states the shared DRBG, the reseed interval and the outage behavior at reseed. The manifest's `latest_verification` and `dependencies` blocks, which `verify.py` does not rewrite, were stale (2026-10-24, qrand a102450) and are updated by hand.
+2026-10-31 (F-8 session): D-17 approved by Daniel (R-13, scope "Tamper + rollback + key theft"; "fully optimize memory growth"). Analysis and benchmark: `docs/F-8-analysis.md`, `evidence/f8-bench/`. Implemented test first on branch `feat/r13-history`, one commit per stage, each with red and green evidence and a full verifier run:
+- R-13a: one validation per request; head-only `checkpoint`.
+- R-13c: envelope digest in the kernel.
+- R-13d.0: v1 fixtures.
+- R-13d.1: compact v2 events and a bounded live state.
+- R-13d.2: row provenance through a Merkle tree.
+- R-13d.3: APF-signed history head; owner-only key file.
+- R-13d.4: `known_head`, `fork_detected`, anchors, `client::HeadTracker`.
+- R-13d.5: kernel replay; signed causes; key history.
+- R-13d.6: `Adapter::verify_full`.
+- R-13b withdrawn.
+
+Evidence: `evidence/r13a-*`, `r13c-*`, `r13d1-*` to `r13d6-*`, `r13d5-kernel-*`, `r13d5-adapter-*`, `evidence/f8-bench/scale-r13d{1,2}.txt`.
+
+Final verifier: all gates pass, rust 233, `full_construction_mls` true.
+
+Kernel at 100 000 events: 0.34 ms per request, 1.7 KB per event and 10 MiB RSS, all flat. Before R-13: 744 ms per request at 502 events.
+
+Testbed branch `feat/r13-history` (4bb0786, local backend only): `SCALE=pq scripts/ci.sh` passes all 11 experiments. E5 in the `pq` suite passes in 39 s, where it failed before.
+- The APF's median per request is flat at about 45–55 ms.
+- Its floor rose from 8.75 ms (pq, history ≤ 33, 2026-10-25) to 36 ms (history ≤ 48). This is the adapter path that R-13d.3–d.5 added; it is not profiled yet.
+
+Not merged; merging is Daniel's call.
