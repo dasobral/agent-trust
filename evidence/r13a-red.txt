@@ -1,0 +1,10 @@
+# R-13a red, 9fbbc62 + tests/authority_history_reads.rs, 2026-10-31
+# command: cargo test --locked --test authority_history_reads
+# exit code: 101 (behavioral: 4 assertion failures, 2 guards pass)
+thread 'malformed_history_selectors_are_refused' (155617) panicked at tests/authority_history_reads.rs:50:22:
+thread 'since_past_the_tip_is_refused' (155618) panicked at tests/authority_history_reads.rs:50:22:
+thread 'head_checkpoint_is_the_full_checkpoint_without_history' (155615) panicked at tests/authority_history_reads.rs:132:5:
+thread 'since_returns_exactly_the_events_after_the_sequence' (155619) panicked at tests/authority_history_reads.rs:170:9:
+  left: Array [Object {"event": Object {"kind": String("init"), "snapshot": Object {"branch": String("genesis"), "consumed": Array [], "delegations": Array [Object {"depth": Number(8), "expires_at": Number(18446744073709551615), "not_before": Number(0), "parent": String("root"), "resources": Array [
+ right: Array [Object {"event": Object {"kind": String("grant"), "snapshot": Object {"branch": String("genesis"), "consumed": Array [], "delegations": Array [Object {"depth": Number(8), "expires_at": Number(18446744073709551615), "not_before": Number(0), "parent": String("root"), "resources": Array 
+test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s

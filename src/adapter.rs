@@ -412,7 +412,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         }
 
         let mut kernel = Authority::open(&paths.authority)?;
-        let checkpoint = kernel.execute(json!({"command":"checkpoint"}))?;
+        let checkpoint = kernel.execute(json!({"command":"checkpoint", "history":"none"}))?;
         if checkpoint["group"] != json!(group) {
             return Err("binding_mismatch: group".into());
         }
@@ -1066,7 +1066,9 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if registered.is_some() {
             return Ok(true);
         }
-        let checkpoint = self.kernel.execute(json!({"command":"checkpoint"}))?;
+        let checkpoint = self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":"none"}))?;
         Ok(checkpoint["grants"]
             .as_array()
             .is_some_and(|grants| grants.iter().any(|g| g["subject"] == json!(subject))))
@@ -1862,7 +1864,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
                 .execute(json!({"command":"subject_status", "subject":root, "now":clock.now()}))?,
         )?;
         let rights = status.active_rights();
-        let checkpoint = shadow.execute(json!({"command":"checkpoint"}))?;
+        let checkpoint = shadow.execute(json!({"command":"checkpoint", "history":"none"}))?;
         let policy_revision = checkpoint["policy_revision"]
             .as_u64()
             .ok_or("malformed: kernel policy_revision")?;
@@ -1917,7 +1919,9 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         if self.crashed {
             return Err(CRASHED.into());
         }
-        let checkpoint = self.kernel.execute(json!({"command":"checkpoint"}))?;
+        let checkpoint = self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":"none"}))?;
         checkpoint_frontier(&checkpoint)
     }
 
@@ -1952,7 +1956,9 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
         ) else {
             return Err("unauthorized".into());
         };
-        let checkpoint = self.kernel.execute(json!({"command":"checkpoint"}))?;
+        let checkpoint = self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":"none"}))?;
         let policy_revision = checkpoint["policy_revision"]
             .as_u64()
             .ok_or("malformed: kernel policy_revision")?;
@@ -2210,7 +2216,7 @@ impl<P: OpenMlsProvider, C: Clock> GenesisPending<P, C> {
                 crashed = true;
                 return Err(CRASHED.to_string());
             }
-            let checkpoint = kernel.execute(json!({"command":"checkpoint"}))?;
+            let checkpoint = kernel.execute(json!({"command":"checkpoint", "history":"none"}))?;
             if checkpoint["policy_revision"] != json!(policy.0)
                 || checkpoint["policy_digest"] != json!(hex::encode(&policy.1))
             {
@@ -2749,7 +2755,15 @@ fn checkpoint_roster(checkpoint: &Value) -> Result<Vec<String>, String> {
 }
 
 impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
+    /// R-13a: the kernel head (policy, frontier, roster, grants, `history_root`) without
+    /// the history events.
     fn kernel_checkpoint(&mut self) -> Result<Value, String> {
+        self.kernel
+            .execute(json!({"command":"checkpoint", "history":"none"}))
+    }
+
+    /// The full kernel checkpoint, history included: only C-32 recovery reads events.
+    fn kernel_history(&mut self) -> Result<Value, String> {
         self.kernel.execute(json!({"command":"checkpoint"}))
     }
 
@@ -3753,7 +3767,7 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
     fn recover(&mut self) -> Result<(), String> {
         let intents = self.intents()?;
         for intent in intents {
-            let checkpoint = self.kernel_checkpoint()?;
+            let checkpoint = self.kernel_history()?;
             // The events after the intent's revision: R-12 `expire` events, which the
             // kernel records in the step's transaction even when the step fails, then the
             // step's own event if it was applied.

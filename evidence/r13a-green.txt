@@ -1,0 +1,18 @@
+# R-13a green, 2026-10-31
+# command: cargo test --locked --test authority_history_reads   (exit 0)
+test head_checkpoint_still_detects_a_tampered_state_row ... ok
+test since_past_the_tip_is_refused ... ok
+test head_checkpoint_is_the_full_checkpoint_without_history ... ok
+test explicit_all_is_the_default_checkpoint ... ok
+test since_returns_exactly_the_events_after_the_sequence ... ok
+test malformed_history_selectors_are_refused ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+# command: cargo test --locked   (exit 0): 27 suites, 196 passed, 0 failed, 1 ignored (pre-existing)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (196 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

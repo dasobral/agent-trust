@@ -125,6 +125,12 @@ impl Authority {
             .ok_or_else(|| "malformed: request object".to_string())?;
         let command = req_id(obj, "command")?;
         self.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
+        // R-13a: the history is validated once per request, at the start of its
+        // transaction; `expire` and the step read the state without validating again.
+        if let Err(error) = self.validate_history() {
+            let _ = self.conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
         // R-12: the expiry events come first, in the step's transaction. A failed step
         // rolls back to the savepoint only, so the expiry is recorded whatever the step's
         // outcome; a failed sweep rolls back everything.
@@ -263,7 +269,7 @@ impl Authority {
         }
         let mut state = self.load()?;
         match command {
-            "checkpoint" => self.checkpoint(&state),
+            "checkpoint" => self.checkpoint(&state, history_selector(obj)?),
             "grant" => self.grant(&mut state, obj),
             "delegate" => self.delegate(&mut state, obj),
             "invoke" => self.invoke(&mut state, obj),
@@ -1031,13 +1037,43 @@ impl Authority {
         Ok(json!({"epoch":s.epoch,"branch":s.branch,"policy_revision":s.policy_revision}))
     }
 
-    fn checkpoint(&self, s: &State) -> Result<Value, String> {
+    /// R-13a: `history` selects which events the response carries; the head fields and
+    /// `history_root` are always present.
+    fn checkpoint(&self, s: &State, selector: HistorySelector) -> Result<Value, String> {
+        let tip: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT sequence,hash FROM authority_events ORDER BY sequence DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(db)?;
+        let (tip_sequence, root) = match tip {
+            Some((sequence, hash)) => (
+                u64::try_from(sequence).map_err(|_| "corrupt_history".to_string())?,
+                hash,
+            ),
+            None => return Err("corrupt_history".into()),
+        };
+        let mut response = json!({"group":s.group,"revision":s.revision,"policy_revision":s.policy_revision,"policy_digest":policy_digest(s)?,"fence_revision":s.fence_revision,"repair_pending":s.repair_pending,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root});
+        let after: i64 = match selector {
+            HistorySelector::None => return Ok(response),
+            HistorySelector::All => -1,
+            // A reader ahead of the tip saw a history this store no longer holds.
+            HistorySelector::Since(since) if since > tip_sequence => {
+                return Err("stale_frontier: history since is past the tip".into())
+            }
+            HistorySelector::Since(since) => {
+                i64::try_from(since).map_err(|_| "malformed: history".to_string())?
+            }
+        };
         let mut stmt = self
             .conn
-            .prepare("SELECT sequence,previous,hash,event FROM authority_events ORDER BY sequence")
+            .prepare("SELECT sequence,previous,hash,event FROM authority_events WHERE sequence > ?1 ORDER BY sequence")
             .map_err(db)?;
         let rows = stmt
-            .query_map([], |r| {
+            .query_map([after], |r| {
                 Ok((
                     r.get::<_, i64>(0)?,
                     r.get::<_, String>(1)?,
@@ -1047,7 +1083,6 @@ impl Authority {
             })
             .map_err(db)?;
         let mut history = Vec::new();
-        let mut root = String::new();
         for row in rows {
             let (sequence, previous, hash, raw) = row.map_err(db)?;
             let sequence: u64 = sequence
@@ -1055,13 +1090,11 @@ impl Authority {
                 .map_err(|_| "corrupt_history".to_string())?;
             let event: Value =
                 serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
-            root = hash.clone();
             history
                 .push(json!({"sequence":sequence,"previous":previous,"hash":hash,"event":event}));
         }
-        Ok(
-            json!({"group":s.group,"revision":s.revision,"policy_revision":s.policy_revision,"policy_digest":policy_digest(s)?,"fence_revision":s.fence_revision,"repair_pending":s.repair_pending,"epoch":s.epoch,"branch":s.branch,"read_fenced":s.read_fenced,"roster":s.roster,"grants":s.grants,"invocations":s.invocations,"history_root":root,"history":history}),
-        )
+        response["history"] = Value::Array(history);
+        Ok(response)
     }
 
     fn get_meta(&self, key: &str) -> Result<Option<String>, String> {
@@ -1072,8 +1105,8 @@ impl Authority {
             .optional()
             .map_err(db)
     }
+    /// The current state row. `execute` has validated the history in this transaction.
     fn load(&self) -> Result<State, String> {
-        self.validate_history()?;
         let raw = self
             .get_meta("state")?
             .ok_or_else(|| "uninitialized".to_string())?;
@@ -1164,6 +1197,28 @@ impl Authority {
             }
         }
         Ok(())
+    }
+}
+
+/// R-13a: which history events a `checkpoint` response carries.
+enum HistorySelector {
+    All,
+    None,
+    Since(u64),
+}
+
+fn history_selector(o: &serde_json::Map<String, Value>) -> Result<HistorySelector, String> {
+    let malformed = || "malformed: history".to_string();
+    match o.get("history") {
+        None => Ok(HistorySelector::All),
+        Some(Value::String(name)) if name == "all" => Ok(HistorySelector::All),
+        Some(Value::String(name)) if name == "none" => Ok(HistorySelector::None),
+        Some(Value::Object(fields)) if fields.len() == 1 => fields
+            .get("since")
+            .and_then(Value::as_u64)
+            .map(HistorySelector::Since)
+            .ok_or_else(malformed),
+        Some(_) => Err(malformed()),
     }
 }
 

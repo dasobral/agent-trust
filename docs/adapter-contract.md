@@ -802,6 +802,16 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
 - Historical records keep their words: `evidence/*.txt`, quoted approvals in §13, `formal/baseline/` and dated plans.
 - Tests: the existing Rust and Python suites, renamed identically, with no assertion weakened. Evidence: `evidence/c43-rename.txt`.
 
+**R-13 (approved 2026-10-31, D-17): bounded kernel history cost and a hardened history.** Source: testbed finding F-8, analysed in `docs/F-8-analysis.md` with its benchmark in `evidence/f8-bench/`. The kernel stores a full state snapshot per event and re-reads the whole history several times per request, so the cost per request grows with the square of the history. R-13 proceeds in stages, each test first:
+- **R-13a, implemented:**
+  - the kernel validates the chain once per request;
+  - `checkpoint` takes an optional `history` selector (`docs/authority-contract.md`);
+  - every adapter read of the kernel head uses `"history":"none"`. C-32 recovery and `Adapter::checkpoint` still read the full history.
+  - No format, behavior or error code changes for existing callers. Evidence: `evidence/r13a-red.txt`, `evidence/r13a-green.txt`.
+- **R-13c:** the kernel binds a persisted envelope by its SHA-256 digest. The adapter store keeps the bytes, and the C-37 export reads them from there.
+- **R-13d:** compact v2 events, normalized live state with garbage collection of dead operations, a signed head, actor-anchored checkpoints, and replay at `open`. Specified in `docs/F-8-analysis.md` §11 before implementation.
+- **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
+
 ## 11. Claim gate for `full_construction_mls`
 
 `full_construction_mls` MAY be reported `true` only when all of the following hold in one recorded run:
@@ -819,6 +829,8 @@ Even then, the README states that computational key confinement (`formal/`, Prop
 `unauthenticated` (bad or stale request signature or sequence) · `binding_mismatch` (reused: certificate, AAD, incarnation or frontier mismatch) · `noncanonical_commit` (sequencer rejection) · `unconfirmed` (confirmation absent or inconsistent) · `entropy_unavailable` (rand provider failed closed).
 
 ## 13. Decisions requested from Daniel
+
+- **D-17 (approved 2026-10-31 by Daniel): R-13, bounded kernel history cost (§10).** Daniel approved the stages with "I approve but we must harden the implementation the most. Any kind of attack should be possible" (read as "should not be possible"). He chose the defense scope "Tamper + rollback + key theft". He then asked to "fully optimize memory growth" for production, and rejected any design that gives up detecting APF key theft. This brings compromise and rollback of the authority's own store into the threat model (`docs/specification.md` §1 is amended with R-13d). Details and the claim boundary: `docs/F-8-analysis.md` §10 and §11.
 
 - **D-1:** Approve R-1 to R-7.
 - **D-2:** Approve the APF holding an OpenMLS `PublicGroup` as a public sequencer, with handshake messages sent as `PublicMessage`. The alternative is that the APF trusts a member's report of the frontier, which is weaker. Sending handshake messages in plaintext exposes membership changes to the delivery path. That is acceptable for this laboratory.
