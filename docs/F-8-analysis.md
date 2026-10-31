@@ -328,3 +328,13 @@ Target: the live set is bounded by members plus messages in flight; time per req
 | Holds the APF key and rewrites, forges or truncates history | Yes | `open` (actor-signed anchors, actor signatures on each `cause`) or the next client request |
 | Holds the APF key and moves `now` | Partly | Monotonic `now` at replay. A time witness is outside the profile. |
 | Holds the APF key and the keys of the actors involved | No | Their signatures *are* those actors. A limit set by who holds the keys. |
+
+## 12. Progress
+
+| Stage | Commit | ms per request at 502 events (classical / `pq`, adapter mode, §5.1) | History at 502 events | Growth |
+|---|---|---|---|---|
+| Before R-13 | `e774ba2` | 744 / 1 213 | 27.8 / 137.7 MB | quadratic |
+| R-13a + R-13c | `efc0892` | 239 / 238 | 11.6 / 11.6 MB | quadratic, and the same in both suites |
+| R-13d | next | target: flat | target: constant per event | target: bounded live set |
+
+The figures for `efc0892` are measured on the committed `src/authority.rs` (`evidence/f8-bench/`, with the committed kernel as `authority_base.rs`). The verifier passed every gate after each stage (`evidence/r13a-green.txt`, `evidence/r13c-green.txt`).
