@@ -1,0 +1,137 @@
+--- a/authority.rs
++++ b/authority.rs
+@@ -13,6 +13,13 @@
+ 
+ pub struct Authority {
+     conn: Connection,
++    /// F-8 prototype layers: a = one validation per execute, b = incremental from the
++    /// committed tip, c = head-only checkpoint, d = envelope digest in the kernel.
++    layers: String,
++    /// (b) last validated (sequence, hash) and SHA-256 of the state row at that point.
++    tip: std::cell::RefCell<Option<(u64, String)>>,
++    /// (a) set while the current execute has validated once.
++    checked: std::cell::Cell<bool>,
+ }
+ 
+ #[derive(Clone, Debug, Serialize, Deserialize)]
+@@ -114,7 +121,8 @@
+             CREATE TABLE IF NOT EXISTS authority_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);")
+             .map_err(db)?;
+-        let this = Self { conn };
++        let layers = std::env::var("F8_LAYERS").unwrap_or_default();
++        let this = Self { conn, layers, tip: Default::default(), checked: Default::default() };
+         this.validate_history()?;
+         Ok(this)
+     }
+@@ -125,6 +133,20 @@
+             .ok_or_else(|| "malformed: request object".to_string())?;
+         let command = req_id(obj, "command")?;
+         self.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
++        if self.layers.contains('a') {
++            if let Err(e) = self.validate_history() {
++                let _ = self.conn.execute_batch("ROLLBACK");
++                return Err(e);
++            }
++            self.checked.set(true);
++        }
++        let result = self.execute_tx(obj, &command);
++        self.checked.set(false);
++        result
++    }
++
++    fn execute_tx(&mut self, obj: &serde_json::Map<String, Value>, command: &str) -> Result<Value, String> {
++        let command = command.to_owned();
+         // R-12: the expiry events come first, in the step's transaction. A failed step
+         // rolls back to the savepoint only, so the expiry is recorded whatever the step's
+         // outcome; a failed sweep rolls back everything.
+@@ -263,6 +285,9 @@
+         }
+         let mut state = self.load()?;
+         match command {
++            "checkpoint" if self.layers.contains('c') && obj.get("history") == Some(&json!("none")) => {
++                Ok(json!({"group":state.group,"revision":state.revision,"policy_revision":state.policy_revision,"policy_digest":policy_digest(&state)?,"epoch":state.epoch,"branch":state.branch,"read_fenced":state.read_fenced,"roster":state.roster,"grants":state.grants}))
++            }
+             "checkpoint" => self.checkpoint(&state),
+             "grant" => self.grant(&mut state, obj),
+             "delegate" => self.delegate(&mut state, obj),
+@@ -721,7 +746,10 @@
+     ) -> Result<Value, String> {
+         let op = req_id(o, "op")?;
+         let digest = req_payload(o, "digest")?;
+-        let envelope = req_envelope(o, "envelope")?;
++        let mut envelope = req_envelope(o, "envelope")?;
++        if self.layers.contains('d') {
++            envelope = hex::encode(Sha256::digest(envelope.as_bytes()));
++        }
+         let x = s
+             .operations
+             .iter_mut()
+@@ -1073,7 +1101,9 @@
+             .map_err(db)
+     }
+     fn load(&self) -> Result<State, String> {
+-        self.validate_history()?;
++        if !self.checked.get() {
++            self.validate_history()?;
++        }
+         let raw = self
+             .get_meta("state")?
+             .ok_or_else(|| "uninitialized".to_string())?;
+@@ -1121,12 +1151,25 @@
+         Ok(hash)
+     }
+     fn validate_history(&self) -> Result<(), String> {
++        let tip = if self.layers.contains('b') { self.tip.borrow().clone() } else { None };
++        let (start, mut previous, mut count) = match &tip {
++            Some((seq, hash)) => {
++                let stored: Option<String> = self.conn.query_row(
++                    "SELECT hash FROM authority_events WHERE sequence=?1", [*seq as i64], |r| r.get(0))
++                    .optional().map_err(db)?;
++                if stored.as_deref() != Some(hash.as_str()) {
++                    return Err("corrupt_history".into());
++                }
++                (*seq as i64, hash.clone(), seq + 1)
++            }
++            None => (-1, String::new(), 0u64),
++        };
+         let mut stmt = self
+             .conn
+-            .prepare("SELECT sequence,previous,hash,event FROM authority_events ORDER BY sequence")
++            .prepare("SELECT sequence,previous,hash,event FROM authority_events WHERE sequence > ?1 ORDER BY sequence")
+             .map_err(db)?;
+         let rows = stmt
+-            .query_map([], |r| {
++            .query_map([start], |r| {
+                 Ok((
+                     r.get::<_, i64>(0)?,
+                     r.get::<_, String>(1)?,
+@@ -1135,9 +1178,8 @@
+                 ))
+             })
+             .map_err(db)?;
+-        let mut previous = String::new();
+-        let mut count = 0u64;
+         let mut last_snapshot: Option<Value> = None;
++        let tip_snapshot_needed = tip.is_some();
+         for row in rows {
+             let (seq, prev, hash, raw) = row.map_err(db)?;
+             let seq: u64 = seq.try_into().map_err(|_| "corrupt_history".to_string())?;
+@@ -1150,6 +1192,17 @@
+             previous = hash;
+             count += 1;
+         }
++        if tip_snapshot_needed && last_snapshot.is_none() {
++            // No new rows: compare the state row with the tip event's snapshot.
++            let raw: String = self.conn.query_row(
++                "SELECT event FROM authority_events WHERE sequence=?1", [(count - 1) as i64], |r| r.get(0))
++                .map_err(db)?;
++            let event: Value = serde_json::from_str(&raw).map_err(|_| "corrupt_history".to_string())?;
++            last_snapshot = event.get("snapshot").cloned();
++        }
++        if self.layers.contains('b') && count > 0 {
++            *self.tip.borrow_mut() = Some((count - 1, previous.clone()));
++        }
+         let state = self.get_meta("state")?;
+         if count == 0 {
+             if state.is_some() {
