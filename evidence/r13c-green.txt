@@ -1,0 +1,16 @@
+# R-13c green, 2026-10-31
+# command: cargo test --locked --test authority_envelope_digest   (exit 0)
+test persisted_operation_carries_the_envelope_digest_not_the_envelope ... ok
+test the_digest_covers_bytes_not_hex_spelling ... ok
+test persist_and_emit_bind_the_same_bytes_only ... ok
+test history_size_does_not_depend_on_the_envelope_size ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+# command: cargo test --locked   (exit 0): 28 suites, 200 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (200 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

@@ -78,6 +78,7 @@ Clarifications made during the phase 4.0 implementation. They only affect a stor
 - A second fencing revoke while the fence is closed moves `fence_revision` to the newer policy revision.
 - If `fence_revision` is null when `repair_stage` runs (a store fenced before the upgrade), only the check that `policy_revision` equals the current value applies.
 - Before R-6, envelopes were also limited by the shared 256-character identifier bound. `MAX_ENVELOPE` replaces that limit for `persist` and `emit` only.
+- R-13c (D-17) resolves the envelope part of this cost: the kernel keeps `envelope_digest = SHA-256(envelope bytes)`, not the envelope, and `persist` and `emit` compare through the digest. The remaining cost of a snapshot per event is R-13d.
 - Known cost: every history event stores a full state snapshot, envelopes included. Large envelopes therefore grow the history roughly quadratically. Phase 4.3 should keep exact envelope bytes in the adapter store and give the kernel only bounded data. This is a candidate follow-up correction; it does not affect the R-6 tests.
 
 ## R-12: delegation expiry is a ledger event (D-16, 2026-10-25)

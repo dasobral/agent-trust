@@ -1252,6 +1252,36 @@ struct Export<'a> {
 }
 
 impl Export<'_> {
+    /// The hex of `op`'s persisted envelope. R-13c: the kernel keeps only its digest, so
+    /// the bytes come from the adapter store and must match that digest; a kernel store
+    /// written before R-13c still carries the hex.
+    fn envelope_of(&self, op: &str, operation: &Value) -> Result<String, String> {
+        if let Some(envelope) = operation["envelope"].as_str() {
+            return Ok(envelope.to_owned());
+        }
+        let digest = operation["envelope_digest"]
+            .as_str()
+            .ok_or("corrupt_history: persisted envelope")?;
+        let bytes: Option<Vec<u8>> = self
+            .store
+            .query_row(
+                "SELECT envelope FROM adapter_operations WHERE op = ?1",
+                [op],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)?
+            .flatten();
+        let bytes =
+            bytes.ok_or_else(|| format!("binding_mismatch: no stored envelope for {op}"))?;
+        if hex::encode(Sha256::digest(&bytes)) != digest {
+            return Err(format!(
+                "binding_mismatch: stored envelope of {op} differs from the kernel digest"
+            ));
+        }
+        Ok(hex::encode(bytes))
+    }
+
     /// Exports every R-12 `expire` event at the head of `history` as `deny` events and
     /// returns the snapshot after them.
     fn expiries(
@@ -1379,9 +1409,7 @@ impl Export<'_> {
             }
             "persist" => {
                 for (op, operation) in changed_status(previous, next, "released", "persisted")? {
-                    let envelope = operation["envelope"]
-                        .as_str()
-                        .ok_or("corrupt_history: persisted envelope")?;
+                    let envelope = self.envelope_of(&op, &operation)?;
                     let digest = operation["digest"]
                         .as_str()
                         .ok_or("corrupt_history: persisted digest")?;
@@ -1667,12 +1695,11 @@ impl Export<'_> {
                     && operation["epoch"].as_u64() == Some(epoch)
                     && operation["branch"].as_str() == Some(branch.as_str())
             })
-            .filter_map(|(op, operation)| {
-                operation["envelope"]
-                    .as_str()
-                    .map(|envelope| (op, envelope.to_owned()))
+            .map(|(op, operation)| {
+                let envelope = self.envelope_of(&op, &operation)?;
+                Ok((op, envelope))
             })
-            .collect();
+            .collect::<Result<_, String>>()?;
         let op = self
             .persisted
             .iter()

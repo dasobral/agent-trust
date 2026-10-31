@@ -1,0 +1,15 @@
+# R-13c red, 15508e6 + tests/authority_envelope_digest.rs, 2026-10-31
+# command: cargo test --locked --test authority_envelope_digest
+# exit code: 101 (behavioral: 3 assertion failures, 1 guard passes)
+test the_digest_covers_bytes_not_hex_spelling ... FAILED
+test persisted_operation_carries_the_envelope_digest_not_the_envelope ... FAILED
+test persist_and_emit_bind_the_same_bytes_only ... ok
+test history_size_does_not_depend_on_the_envelope_size ... FAILED
+thread 'the_digest_covers_bytes_not_hex_spelling' (170180) panicked at tests/authority_envelope_digest.rs:185:37:
+thread 'persisted_operation_carries_the_envelope_digest_not_the_envelope' (170179) panicked at tests/authority_envelope_digest.rs:132:5:
+assertion `left == right` failed
+  left: Null
+ right: String("b23549dda157801533d1d272da5ff88683bf1fbe6ee46deb3066bf55f7d05507")
+thread 'history_size_does_not_depend_on_the_envelope_size' (170177) panicked at tests/authority_envelope_digest.rs:154:5:
+largest event is 132205 bytes
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s

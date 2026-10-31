@@ -808,7 +808,7 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
   - `checkpoint` takes an optional `history` selector (`docs/authority-contract.md`);
   - every adapter read of the kernel head uses `"history":"none"`. C-32 recovery and `Adapter::checkpoint` still read the full history.
   - No format, behavior or error code changes for existing callers. Evidence: `evidence/r13a-red.txt`, `evidence/r13a-green.txt`.
-- **R-13c:** the kernel binds a persisted envelope by its SHA-256 digest. The adapter store keeps the bytes, and the C-37 export reads them from there.
+- **R-13c, implemented:** the kernel binds a persisted envelope by `envelope_digest = SHA-256(bytes)` and keeps neither the bytes nor their hex. `persist` and `emit` compare bytes through the digest, so two hex spellings of the same bytes are the same envelope. Stores written before R-13c keep their hex and compare bytes. The adapter store keeps the exact bytes. The C-37 export reads them from there and refuses bytes that differ from the kernel digest (`binding_mismatch`). Evidence: `evidence/r13c-red.txt`, `evidence/r13c-green.txt`.
 - **R-13d:** compact v2 events, normalized live state with garbage collection of dead operations, a signed head, actor-anchored checkpoints, and replay at `open`. Specified in `docs/F-8-analysis.md` §11 before implementation.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 

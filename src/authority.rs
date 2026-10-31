@@ -63,7 +63,11 @@ struct Operation {
     epoch: Option<u64>,
     branch: Option<String>,
     digest: Option<String>,
+    /// The persisted envelope's hex, kept only by stores written before R-13c.
     envelope: Option<String>,
+    /// R-13c: `SHA-256` of the persisted envelope bytes (lowercase hex).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    envelope_digest: Option<String>,
     roster: Vec<Reader>,
     writer_generation: Option<u64>,
     resource: String,
@@ -71,6 +75,23 @@ struct Operation {
     #[serde(default)]
     policy_revision: Option<u64>,
 }
+impl Operation {
+    /// Whether an envelope is bound to this operation.
+    fn persisted(&self) -> bool {
+        self.envelope_digest.is_some() || self.envelope.is_some()
+    }
+
+    /// Whether `bytes` are the bound envelope; `None` before `persist`. R-13c binds by
+    /// digest; a store written before R-13c keeps the hex and compares the bytes.
+    fn binds(&self, bytes: &[u8]) -> Option<bool> {
+        match (&self.envelope_digest, &self.envelope) {
+            (Some(digest), _) => Some(*digest == hex::encode(Sha256::digest(bytes))),
+            (None, Some(old)) => Some(hex::decode(old).ok().as_deref() == Some(bytes)),
+            (None, None) => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Invocation {
     id: String,
@@ -524,6 +545,7 @@ impl Authority {
             branch: None,
             digest: None,
             envelope: None,
+            envelope_digest: None,
             roster: vec![],
             writer_generation: None,
             resource,
@@ -739,13 +761,14 @@ impl Authority {
         if x.digest.as_deref() != Some(&digest) {
             return Err("binding_mismatch".into());
         }
-        if let Some(old) = &x.envelope {
-            if old != &envelope {
+        let bytes = hex::decode(&envelope).map_err(|_| "malformed: envelope".to_string())?;
+        if let Some(bound) = x.binds(&bytes) {
+            if !bound {
                 return Err("binding_mismatch".into());
             }
             return Ok(json!({"op":op}));
         }
-        x.envelope = Some(envelope);
+        x.envelope_digest = Some(hex::encode(Sha256::digest(&bytes)));
         x.status = "persisted".into();
         bump(s);
         self.save(s, "persist")?;
@@ -760,13 +783,11 @@ impl Authority {
             .iter()
             .find(|x| x.op == op)
             .ok_or_else(|| "not_persisted".to_string())?;
-        if x.envelope.is_none() {
+        let bytes = hex::decode(&envelope).map_err(|_| "malformed: envelope".to_string())?;
+        let Some(bound) = x.binds(&bytes) else {
             return Err("not_persisted".into());
-        }
-        if x.envelope.as_deref() != Some(&envelope)
-            || x.epoch != Some(s.epoch)
-            || x.branch.as_deref() != Some(&s.branch)
-        {
+        };
+        if !bound || x.epoch != Some(s.epoch) || x.branch.as_deref() != Some(&s.branch) {
             return Err("binding_mismatch".into());
         }
         Ok(json!({"op":op,"envelope":envelope}))
@@ -788,7 +809,7 @@ impl Authority {
             .iter()
             .find(|x| x.op == op)
             .ok_or_else(|| "not_persisted".to_string())?;
-        if release.status != "persisted" || release.envelope.is_none() {
+        if release.status != "persisted" || !release.persisted() {
             return Err("not_persisted".into());
         }
         if release.epoch != Some(s.epoch) || release.branch.as_deref() != Some(&s.branch) {
@@ -840,7 +861,7 @@ impl Authority {
         if x.status == "abandoned" {
             return Ok(json!({"op":op}));
         }
-        if x.status != "released" || x.envelope.is_some() {
+        if x.status != "released" || x.persisted() {
             return Err("invalid_transition".into());
         }
         x.status = "abandoned".into();
