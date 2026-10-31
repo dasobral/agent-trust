@@ -1,0 +1,16 @@
+# R-13d.5 (kernel replay) green, 2026-10-31
+# command: cargo test --locked --test authority_replay   (exit 0)
+test a_rechained_change_to_what_a_step_did_is_caught ... ok
+test a_rechained_now_that_goes_back_is_caught ... ok
+test a_rechained_step_the_rules_refuse_is_caught ... ok
+test an_honest_history_replays_from_genesis_and_from_any_anchor ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+# command: cargo test --locked   (exit 0): 33 suites, 227 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (227 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

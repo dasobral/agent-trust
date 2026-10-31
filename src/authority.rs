@@ -24,7 +24,16 @@ pub struct Authority {
     cause: Option<String>,
     /// R-13d.2: the Merkle tree over the event hashes as this handle validated them.
     mmr: Mmr,
+    /// R-13d.5: a scratch kernel that `replay` drives; see `Authority::scratch`.
+    replaying: bool,
 }
+
+/// The kernel tables.
+const TABLES: &str = "CREATE TABLE IF NOT EXISTS authority_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS authority_ops (op TEXT PRIMARY KEY, row TEXT NOT NULL, written INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS authority_invocations (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, record TEXT NOT NULL, written INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS authority_mmr (height INTEGER NOT NULL, idx INTEGER NOT NULL, hash TEXT NOT NULL, PRIMARY KEY(height, idx));";
 
 /// R-13d.2: an append-only Merkle tree (a Merkle mountain range) over the event hashes,
 /// kept as its peaks. Leaf `i` is the hash of event `i`.
@@ -174,12 +183,16 @@ impl Operation {
         self.envelope_digest.is_some() || self.envelope.is_some()
     }
 
-    /// Whether `bytes` are the bound envelope; `None` before `persist`. R-13c binds by
-    /// digest; a store written before R-13c keeps the hex and compares the bytes.
-    fn binds(&self, bytes: &[u8]) -> Option<bool> {
+    /// Whether the envelope with `digest` (SHA-256, hex) is the bound one; `None` before
+    /// `persist`. R-13c binds by digest; a store written before R-13c keeps the hex.
+    fn binds(&self, digest: &str) -> Option<bool> {
         match (&self.envelope_digest, &self.envelope) {
-            (Some(digest), _) => Some(*digest == hex::encode(Sha256::digest(bytes))),
-            (None, Some(old)) => Some(hex::decode(old).ok().as_deref() == Some(bytes)),
+            (Some(bound), _) => Some(bound == digest),
+            (None, Some(old)) => Some(
+                hex::decode(old)
+                    .ok()
+                    .is_some_and(|bytes| hex::encode(Sha256::digest(bytes)) == digest),
+            ),
             (None, None) => None,
         }
     }
@@ -228,13 +241,9 @@ impl Authority {
     /// (a snapshot per event) is migrated to the R-13d tables in the same transaction.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
         let conn = Connection::open(path).map_err(db)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-            CREATE TABLE IF NOT EXISTS authority_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_events (sequence INTEGER PRIMARY KEY, previous TEXT NOT NULL, hash TEXT NOT NULL, event TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_ops (op TEXT PRIMARY KEY, row TEXT NOT NULL, written INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_invocations (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, record TEXT NOT NULL, written INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS authority_mmr (height INTEGER NOT NULL, idx INTEGER NOT NULL, hash TEXT NOT NULL, PRIMARY KEY(height, idx));")
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(db)?;
+        conn.execute_batch(TABLES).map_err(db)?;
         let mut this = Self {
             conn,
             anchor: None,
@@ -242,6 +251,7 @@ impl Authority {
             recorded: Value::Null,
             cause: None,
             mmr: Mmr::default(),
+            replaying: false,
         };
         this.conn.execute_batch("BEGIN IMMEDIATE").map_err(db)?;
         match this.open_checks() {
@@ -252,6 +262,197 @@ impl Authority {
             }
         }
         Ok(this)
+    }
+
+    /// R-13d.5: re-executes every recorded request after sequence `after` (all of them
+    /// when `None`) from the state as of `after`, and requires the same events, with a
+    /// `now` that never goes back. v1 events, which record no request, are not replayed.
+    /// The cost is the events after `after` and the rows they touch, not the history.
+    pub fn replay(&mut self, after: Option<u64>) -> Result<(), String> {
+        self.conn.execute_batch("BEGIN").map_err(db)?;
+        let result = self.revalidate().and_then(|()| self.replay_inner(after));
+        let _ = self.conn.execute_batch("COMMIT");
+        result
+    }
+
+    fn replay_inner(&mut self, after: Option<u64>) -> Result<(), String> {
+        let corrupt = |detail: &str| format!("corrupt_history: replay: {detail}");
+        let Some((tip, _)) = self.anchor.clone() else {
+            return Ok(());
+        };
+        let mut start = after.map_or(0, |after| after.saturating_add(1));
+        while start <= tip && !is_v2(&self.event_row(start)?.2) {
+            start += 1;
+        }
+        if start > tip {
+            return Ok(());
+        }
+        // The state as of `start - 1`: the head and the rows the replayed events touch,
+        // from their `before` values, latest event first.
+        let mut head: Value =
+            serde_json::from_str(&self.get_meta("state")?.ok_or_else(|| corrupt("no head"))?)
+                .map_err(|_| corrupt("head"))?;
+        let mut ops: BTreeMap<String, Option<Value>> = BTreeMap::new();
+        let mut referenced: BTreeSet<String> = BTreeSet::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT event FROM authority_events WHERE sequence >= ?1 ORDER BY sequence DESC")
+                .map_err(db)?;
+            let rows = stmt
+                .query_map([start as i64], |r| r.get::<_, String>(0))
+                .map_err(db)?;
+            for raw in rows {
+                let event: Value =
+                    serde_json::from_str(&raw.map_err(db)?).map_err(|_| corrupt("event"))?;
+                for (key, value) in event["before"]["head"].as_object().into_iter().flatten() {
+                    head[key] = value.clone();
+                }
+                for (op, row) in event["before"]["ops"].as_object().into_iter().flatten() {
+                    ops.insert(op.clone(), (!row.is_null()).then(|| row.clone()));
+                }
+                let request = if event["kind"] == "expire" {
+                    &event["request"]["step"]
+                } else {
+                    &event["request"]
+                };
+                for key in ["invocation", "parent_invocation"] {
+                    if let Some(id) = request[key].as_str() {
+                        referenced.insert(id.to_owned());
+                    }
+                }
+                for row in event["after"]["ops"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(_, r)| r)
+                {
+                    if let Some(id) = row["operation"]["invocation"].as_str() {
+                        referenced.insert(id.to_owned());
+                    }
+                }
+            }
+        }
+        let mut copy = Authority::scratch()?;
+        if start > 0 {
+            let head: Head = serde_json::from_value(head).map_err(|_| corrupt("head"))?;
+            let written = (start - 1) as i64;
+            let raw = serde_json::to_string(&head).map_err(|_| corrupt("head"))?;
+            copy.conn
+                .execute(
+                    "INSERT INTO authority_meta(k,v) VALUES('state',?1),('format','2')",
+                    [raw],
+                )
+                .map_err(db)?;
+            for (op, row) in &ops {
+                if let Some(row) = row {
+                    copy.conn
+                        .execute(
+                            "INSERT INTO authority_ops(op,row,written) VALUES(?1,?2,?3)",
+                            rusqlite::params![op, row.to_string(), written],
+                        )
+                        .map_err(db)?;
+                }
+            }
+            // Invocations never change once written; those that existed at `start - 1`
+            // are copied with their parent chains.
+            let mut pending: Vec<String> = referenced.into_iter().collect();
+            let mut copied = HashSet::new();
+            while let Some(id) = pending.pop() {
+                if !copied.insert(id.clone()) {
+                    continue;
+                }
+                let row: Option<(i64, String)> = self
+                    .conn
+                    .query_row(
+                        "SELECT ordinal, record FROM authority_invocations WHERE id=?1",
+                        [&id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()
+                    .map_err(db)?;
+                let Some((ordinal, record)) = row else {
+                    continue;
+                };
+                if (ordinal as u64) >= head.invocations_count {
+                    continue;
+                }
+                let invocation: Invocation =
+                    serde_json::from_str(&record).map_err(|_| corrupt("invocation"))?;
+                if let Some(parent) = invocation.parent {
+                    pending.push(parent);
+                }
+                copy.conn
+                    .execute(
+                        "INSERT INTO authority_invocations(ordinal,id,record,written) VALUES(?1,?2,?3,?4)",
+                        rusqlite::params![ordinal, id, record, written],
+                    )
+                    .map_err(db)?;
+            }
+            let (previous, hash, raw) = self.event_row(start - 1)?;
+            copy.conn
+                .execute(
+                    "INSERT INTO authority_events(sequence,previous,hash,event) VALUES(?1,?2,?3,?4)",
+                    rusqlite::params![written, previous, hash, raw],
+                )
+                .map_err(db)?;
+        }
+        let mut floor: Option<u64> = None;
+        let mut sequence = start;
+        while sequence <= tip {
+            let (_, _, raw) = self.event_row(sequence)?;
+            if !is_v2(&raw) {
+                return Err(corrupt("a v1 event after a v2 event"));
+            }
+            let event: Value = serde_json::from_str(&raw).map_err(|_| corrupt("event"))?;
+            let mut request = if event["kind"] == "expire" {
+                event["request"]["step"].clone()
+            } else {
+                event["request"].clone()
+            };
+            if let Some(now) = request["now"].as_u64() {
+                if floor.is_some_and(|floor| now < floor) {
+                    return Err(corrupt("now goes back"));
+                }
+                floor = Some(now);
+            }
+            if let (Some(fields), Some(cause)) = (request.as_object_mut(), event["cause"].as_str())
+            {
+                fields.insert("cause".into(), json!(cause));
+            }
+            let _ = copy.execute(request);
+            let produced = copy
+                .tip()?
+                .filter(|(produced, _)| *produced >= sequence && *produced <= tip)
+                .ok_or_else(|| {
+                    corrupt(&format!(
+                        "event {sequence} is not what its request produces"
+                    ))
+                })?;
+            if self.event_row(produced.0)?.1 != produced.1 {
+                return Err(corrupt(&format!(
+                    "event {sequence} is not what its request produces"
+                )));
+            }
+            sequence = produced.0 + 1;
+        }
+        Ok(())
+    }
+
+    /// R-13d.5: an empty in-memory kernel that replays recorded requests: it trusts its
+    /// rows, which `replay` built from validated events, and keeps no tree.
+    fn scratch() -> Result<Self, String> {
+        let conn = Connection::open_in_memory().map_err(db)?;
+        conn.execute_batch(TABLES).map_err(db)?;
+        Ok(Self {
+            conn,
+            anchor: None,
+            base: None,
+            recorded: Value::Null,
+            cause: None,
+            mmr: Mmr::default(),
+            replaying: true,
+        })
     }
 
     pub fn execute(&mut self, request: Value) -> Result<Value, String> {
@@ -312,10 +513,9 @@ impl Authority {
             return Ok(());
         };
         let mut s = self.load(o)?;
-        let step = std::mem::replace(
-            &mut self.recorded,
-            json!({"command":"expire", "now":now, "step":command}),
-        );
+        // R-13d.5: an expiry records the whole step request, so `replay` can run the step.
+        let expiry = json!({"command":"expire", "now":now, "step":self.recorded.clone()});
+        let step = std::mem::replace(&mut self.recorded, expiry);
         let swept = self.sweep(&mut s, now);
         self.recorded = step;
         swept
@@ -877,7 +1077,7 @@ impl Authority {
     ) -> Result<Value, String> {
         let op = req_id(o, "op")?;
         let digest = req_payload(o, "digest")?;
-        let envelope = req_envelope(o, "envelope")?;
+        let envelope_digest = self.envelope_digest(o)?;
         let x = s
             .operations
             .iter_mut()
@@ -889,18 +1089,33 @@ impl Authority {
         if x.digest.as_deref() != Some(&digest) {
             return Err("binding_mismatch".into());
         }
-        let bytes = hex::decode(&envelope).map_err(|_| "malformed: envelope".to_string())?;
-        if let Some(bound) = x.binds(&bytes) {
+        if let Some(bound) = x.binds(&envelope_digest) {
             if !bound {
                 return Err("binding_mismatch".into());
             }
             return Ok(json!({"op":op}));
         }
-        x.envelope_digest = Some(hex::encode(Sha256::digest(&bytes)));
+        x.envelope_digest = Some(envelope_digest);
         x.status = "persisted".into();
         bump(s);
         self.save(s, "persist")?;
         Ok(json!({"op":op}))
+    }
+
+    /// R-13c: the digest of a request's envelope. A replayed `persist` (R-13d.5) carries
+    /// the digest that its event recorded instead of the envelope.
+    fn envelope_digest(&self, o: &serde_json::Map<String, Value>) -> Result<String, String> {
+        if self.replaying && !o.contains_key("envelope") {
+            return o
+                .get("envelope_digest")
+                .and_then(Value::as_str)
+                .filter(|digest| digest.len() == 64)
+                .map(str::to_owned)
+                .ok_or_else(|| "malformed: envelope_digest".to_string());
+        }
+        let envelope = req_envelope(o, "envelope")?;
+        let bytes = hex::decode(envelope).map_err(|_| "malformed: envelope".to_string())?;
+        Ok(hex::encode(Sha256::digest(bytes)))
     }
 
     fn emit(&self, s: &State, o: &serde_json::Map<String, Value>) -> Result<Value, String> {
@@ -912,7 +1127,7 @@ impl Authority {
             .find(|x| x.op == op)
             .ok_or_else(|| "not_persisted".to_string())?;
         let bytes = hex::decode(&envelope).map_err(|_| "malformed: envelope".to_string())?;
-        let Some(bound) = x.binds(&bytes) else {
+        let Some(bound) = x.binds(&hex::encode(Sha256::digest(bytes))) else {
             return Err("not_persisted".into());
         };
         if !bound || x.epoch != Some(s.epoch) || x.branch.as_deref() != Some(&s.branch) {
@@ -1288,7 +1503,9 @@ impl Authority {
         let mut s = state_from_head(&head);
         if let Some(op) = o.get("op").and_then(Value::as_str) {
             if let Some((row, written)) = self.op_row(op)? {
-                self.verify_op_row(op, &row, written)?;
+                if !self.replaying {
+                    self.verify_op_row(op, &row, written)?;
+                }
                 for recipient in &row.consumed_by {
                     s.consumed.push(Consumption {
                         op: op.to_owned(),
@@ -1308,7 +1525,9 @@ impl Authority {
                 continue;
             }
             if let Some((invocation, written)) = self.invocation_row(&id)? {
-                self.verify_invocation_row(&invocation, written)?;
+                if !self.replaying {
+                    self.verify_invocation_row(&invocation, written)?;
+                }
                 if let Some(parent) = &invocation.parent {
                     pending.push(parent.clone());
                 }
@@ -1614,7 +1833,9 @@ impl Authority {
                 rusqlite::params![written, previous, &hash, raw],
             )
             .map_err(db)?;
-        self.db_append(sequence, &hash)?;
+        if !self.replaying {
+            self.db_append(sequence, &hash)?;
+        }
         self.conn.execute("INSERT INTO authority_meta(k,v) VALUES('state',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v",[&head_raw]).map_err(db)?;
         if sequence == 0 {
             self.conn
@@ -1701,6 +1922,9 @@ impl Authority {
     /// validated last is unchanged, validates every event appended after it (by this
     /// handle or another), rehashes the tip, and checks the head row against the tip.
     fn revalidate(&mut self) -> Result<(), String> {
+        if self.replaying {
+            return Ok(());
+        }
         let mut mmr = self.mmr.clone();
         let tip = self.validate_chain(self.anchor.clone(), &mut mmr)?;
         if self.db_root(mmr.leaves)? != mmr.root() {

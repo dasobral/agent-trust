@@ -1,0 +1,14 @@
+# R-13d.5 (kernel replay) red, f71c063 + Authority::replay stub (returns Ok) + tests/authority_replay.rs, 2026-10-31
+# command: cargo test --locked --test authority_replay   (exit 101)
+# behavioral: three rechained forgeries (an unauthorized grant, a changed release, a now that goes back) open as consistent stores and are accepted.
+test a_rechained_now_that_goes_back_is_caught ... FAILED
+test a_rechained_step_the_rules_refuse_is_caught ... FAILED
+test a_rechained_change_to_what_a_step_did_is_caught ... FAILED
+test an_honest_history_replays_from_genesis_and_from_any_anchor ... ok
+thread 'a_rechained_now_that_goes_back_is_caught' (261505) panicked at tests/authority_replay.rs:137:22:
+replay must refuse the forged history: ()
+thread 'a_rechained_step_the_rules_refuse_is_caught' (261506) panicked at tests/authority_replay.rs:137:22:
+replay must refuse the forged history: ()
+thread 'a_rechained_change_to_what_a_step_did_is_caught' (261504) panicked at tests/authority_replay.rs:137:22:
+replay must refuse the forged history: ()
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
