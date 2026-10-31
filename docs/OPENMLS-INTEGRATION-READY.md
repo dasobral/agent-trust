@@ -4,7 +4,7 @@ The staged-KeyPackage construction hook is integrated into the real OpenMLS labo
 
 ## Current dependency boundary
 
-The project takes every OpenMLS crate (`openmls`, `openmls_traits`, `openmls_rust_crypto`, `openmls_basic_credential`, `openmls_sqlite_storage` and `openmls_libcrux_crypto`) from the custom-fork branch `agent-trust/integration` (since 2026-10-25 it follows the branch; `Cargo.lock` records the commit, `dd33278099426c2ffc8a4ec686e88bde1f937963` at that date, and `cargo update` moves it). That branch is current upstream `main` with the staged KeyPackage API (branch `agent-trust/keypackage-staging`) and the libcrux provider entropy source (branch `feat/libcrux-provider-rng`) merged in, and it keeps the normal non-draft feature surface.
+The project takes every OpenMLS crate (`openmls`, `openmls_traits`, `openmls_rust_crypto`, `openmls_basic_credential`, `openmls_sqlite_storage` and `openmls_libcrux_crypto`) from the custom-fork branch `agent-trust/integration` (since 2026-10-25 it follows the branch; `Cargo.lock` records the commit: `dd33278099426c2ffc8a4ec686e88bde1f937963` at that date, `93ad743ebe55d8983558ded3876729a00b8c291c` since 2026-10-31, and `cargo update` moves it). That branch is current upstream `main` with the staged KeyPackage API (branch `agent-trust/keypackage-staging`) and the libcrux provider entropy source (branch `feat/libcrux-provider-rng`) merged in, and it keeps the normal non-draft feature surface.
 
 Until 2026-10-24 the pin was `6daabe33ddb616a6ed54b511d333e691db18a99f` on `agent-trust/keypackage-staging-v0.9`, based on OpenMLS `0.9.0`; that branch is kept unchanged, because earlier evidence was recorded against it.
 
