@@ -1,0 +1,52 @@
+# python3 scripts/verify.py, 2026-10-31, branch build/fork-drbg-review (agent-trust main e774ba2 with Cargo.lock moved to OpenMLS fork agent-trust/integration 93ad743e, openmls-qrand 868f058f). Filtered: gate lines, test summaries and the named integration tests per suite.
+PASS build
+Ran 73 tests in 0.027s
+OK
+PASS python-oracle (73 tests)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.85s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.70s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.36s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.23s
+PASS rust (190 tests)
+Ran 108 tests in 256.193s
+OK
+PASS harness (108 tests)
+test_broken_controls_are_rejected_by_oracle (harness.test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (harness.test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+test_process_restart_preserves_frontier_and_fence (harness.test_integration.LabRestartTests.test_process_restart_preserves_frontier_and_fence) ... ok
+test_seeded_schedules_reorder_drop_and_duplicate (harness.test_integration.SeededScheduleTests.test_seeded_schedules_reorder_drop_and_duplicate) ... ok
+test_verify_runs_adapter_gates_and_fails_closed (harness.test_integration.VerifierGateTests.test_verify_runs_adapter_gates_and_fails_closed) ... ok
+Ran 5 tests in 222.147s
+OK
+PASS integration (pq) (5 tests, named oracle controls passed)
+test_broken_controls_are_rejected_by_oracle (harness.test_integration.LabIntegrationTests.test_broken_controls_are_rejected_by_oracle) ... ok
+test_lab_scenario_trace_is_accepted_by_oracle (harness.test_integration.LabIntegrationTests.test_lab_scenario_trace_is_accepted_by_oracle) ... ok
+test_process_restart_preserves_frontier_and_fence (harness.test_integration.LabRestartTests.test_process_restart_preserves_frontier_and_fence) ... ok
+test_seeded_schedules_reorder_drop_and_duplicate (harness.test_integration.SeededScheduleTests.test_seeded_schedules_reorder_drop_and_duplicate) ... ok
+test_verify_runs_adapter_gates_and_fails_closed (harness.test_integration.VerifierGateTests.test_verify_runs_adapter_gates_and_fails_closed) ... ok
+Ran 5 tests in 57.048s
+OK
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true
+exit=0

@@ -25,7 +25,7 @@ messaging system.
 
 | Claim | Result |
 | --- | --- |
-| `full_construction_mls` | **`true`**, recorded 2026-10-25 with the integration gate run in both suites, `pq` and `classical` ([log](evidence/verify-2026-10-25-c43.txt)) |
+| `full_construction_mls` | **`true`**, recorded 2026-10-31 on `main` (R-11, R-12) with the OpenMLS fork at `93ad743e`, the integration gate run in both suites, `pq` and `classical` ([log](evidence/verify-2026-10-31-fork-93ad743.txt)) |
 | Post quantum suite | **Default** in the lab: MLS `0x0052`, X-Wing key exchange (ML-KEM-768 with X25519) and ML-DSA-44 signatures for every identity and the APF ([C-42](docs/adapter-contract.md#83-post-quantum-suite-c-42-d-13)); `classical` (`0x0001`) stays available |
 | Key confinement, computational ([Proposition 3](formal/README.md#status-of-each-claim); the Third Edition's `Bridge_remove^ETK`) | **Conditional.** Derived from ETK Theorem 1 under K1–K5, and checked against ETK's full version (v2.0): its statement, predicates, corruption interfaces and proof structure ([record](formal/notes/etk-full-check.md)); not every case of its Appendix J was re-verified. Since R-11 every commit the code produces is an operation ETK models, so the result covers the code as well as the construction. One item is open: ETK's proof holds against classical adversaries only, so with the post-quantum suite the result is classical (the quantum version is a conjecture with five checks, [`etk-qrom`](formal/notes/etk-qrom.tex)). The strong unforgeability of ML-DSA-44 that ETK needs is written out as a reduction, not mechanized ([`ml-dsa-suf`](formal/notes/ml-dsa-suf.tex)). |
 | Live Entropy Core run | **Not yet run** |
