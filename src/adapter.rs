@@ -714,6 +714,13 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             anchor = anchor.max(Some(head_sequence));
         }
         self.kernel.replay(anchor)?;
+        self.verify_causes_after(anchor)
+    }
+
+    /// R-13d.5, steps 3 and 4: the signed causes and the release certificates of the
+    /// events after `anchor` (all events when `None`).
+    fn verify_causes_after(&mut self, anchor: Option<u64>) -> Result<(), String> {
+        let corrupt = |detail: &str| format!("corrupt_history: {detail}");
 
         let causes_from: u64 = meta_opt(&self.store, "causes_from")?
             .and_then(|from| from.parse().ok())
@@ -788,6 +795,96 @@ impl<P: OpenMlsProvider, C: Clock> Adapter<P, C> {
             }
         }
         Ok(())
+    }
+
+    /// R-13d.6: the checks of `open` over the whole history, whatever the anchors, and the
+    /// provenance of every registered actor key: each must be the `subject_key` of a stored
+    /// `grant` or `delegate` request that verifies, except the root's genesis key. A key
+    /// that a rekey rotated in comes from an MLS commit, which this check does not parse;
+    /// such actors are listed in `keys_rotated`, not passed silently.
+    pub fn verify_full(&mut self) -> Result<Value, String> {
+        let corrupt = |detail: &str| format!("corrupt_history: {detail}");
+        self.kernel.replay(None)?;
+        self.verify_causes_after(None)?;
+        let genesis = self
+            .kernel
+            .execute(json!({"command":"checkpoint", "history":{"since":0}}))?;
+        let root = self.kernel.execute(json!({"command":"checkpoint"}))?["history"][0]["event"]
+            .get("request")
+            .and_then(|request| request["root"].as_str())
+            .or_else(|| genesis["roster"][0].as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| corrupt("no genesis root"))?;
+        let mut registered: std::collections::HashSet<(String, Vec<u8>)> = Default::default();
+        let requests: Vec<(String, String, Vec<u8>, Vec<u8>)> = {
+            let mut stmt = self
+                .store
+                .prepare("SELECT actor, sequence, body, signature FROM adapter_requests")
+                .map_err(db)?;
+            let rows = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+                .map_err(db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(db)?
+        };
+        for (actor, sequence, body, signature) in requests {
+            let fields: Value =
+                serde_json::from_slice(&body).map_err(|_| corrupt("a stored request"))?;
+            if !matches!(fields["command"].as_str(), Some("grant" | "delegate")) {
+                continue;
+            }
+            let (Some(subject), Some(key)) = (
+                fields["subject"].as_str(),
+                fields["subject_key"]
+                    .as_str()
+                    .and_then(|key| hex::decode(key).ok()),
+            ) else {
+                continue;
+            };
+            let request = SignedRequest {
+                actor,
+                sequence: sequence.parse().map_err(|_| corrupt("a stored request"))?,
+                body: body.clone(),
+                signature,
+            };
+            self.verify_stored_request(&request)?;
+            registered.insert((subject.to_owned(), key));
+        }
+        let keys: Vec<(String, Vec<u8>)> = {
+            let mut stmt = self
+                .store
+                .prepare("SELECT actor, public_key FROM adapter_keys")
+                .map_err(db)?;
+            let rows = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(db)?
+        };
+        let mut traced = 0u64;
+        let mut rotated = Vec::new();
+        for (actor, key) in keys {
+            if actor == root {
+                continue;
+            }
+            if registered.contains(&(actor.clone(), key)) {
+                traced += 1;
+                continue;
+            }
+            let retired: i64 = self
+                .store
+                .query_row(
+                    "SELECT COUNT(*) FROM adapter_key_history WHERE actor = ?1",
+                    [&actor],
+                    |r| r.get(0),
+                )
+                .map_err(db)?;
+            if retired == 0 {
+                return Err(corrupt(&format!(
+                    "the key of {actor} was registered by no signed request"
+                )));
+            }
+            rotated.push(actor);
+        }
+        Ok(json!({"keys_traced": traced, "keys_rotated": rotated}))
     }
 
     /// R-13d.5: the stored signed request with digest `cause`, which must match it.

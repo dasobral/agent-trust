@@ -863,7 +863,7 @@ Amendment A-5 (coordinator, 2026-10-25, with D-16; not the alignment note of the
     - An attacker who replaces an actor's registered key in `adapter.sqlite`, and re-signs that actor's stored requests and anchors, is detected at that actor's next request (its signature no longer verifies, so the actor sees `unauthenticated`), and by R-13d.6.
     - `now` is asserted by the APF and only checked to be monotonic.
   - Evidence: `evidence/r13d5-kernel-red.txt`, `evidence/r13d5-kernel-green.txt`, `evidence/r13d5-adapter-red.txt`, `evidence/r13d5-adapter-green.txt`.
-- **R-13d.6:** `verify --full`: replay from genesis, with key registrations traced to the root key. Specified in `docs/F-8-analysis.md` §11.
+- **R-13d.6, implemented: `Adapter::verify_full`.** It runs the checks of `open` over the whole history, whatever the anchors: the replay from genesis, the causes and the release certificates. It also traces every registered actor key other than the root's genesis key to the `subject_key` of a stored `grant` or `delegate` request that verifies. A key that no signed request registered is `corrupt_history`. A key that a rekey rotated in comes from an MLS commit, which this check does not parse, so the actor is listed in `keys_rotated` and not passed silently. Effect: an attacker with the APF key who replaces an actor's key and re-signs that actor's requests passes `open` when no client anchor follows, and fails `verify_full`. Its cost is the whole history; it is meant to run offline or on a schedule. Evidence: `evidence/r13d6-red.txt`, `evidence/r13d6-green.txt`.
 - **R-13b** (incremental snapshot validation) is withdrawn: R-13d supersedes it.
 
 ## 11. Claim gate for `full_construction_mls`

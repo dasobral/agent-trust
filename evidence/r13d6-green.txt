@@ -1,0 +1,15 @@
+# R-13d.6 green, 2026-10-31
+# command: cargo test --locked --test adapter_verify_full   (exit 0)
+test an_honest_history_verifies_in_full ... ok
+test a_substituted_actor_key_fails_verify_full ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+# note: the first red showed open already refuses a key substitution that leaves the actor's earlier requests unsigned under the new key; the test's thief re-signs them and rewrites the causes.
+# command: cargo test --locked   (exit 0): 35 suites, 233 passed, 0 failed, 1 ignored (live Entropy Core gate)
+# command: python3 scripts/verify.py   (exit 0)
+PASS build
+PASS python-oracle (73 tests)
+PASS rust (233 tests)
+PASS harness (108 tests)
+PASS integration (pq) (5 tests, named oracle controls passed)
+PASS integration (classical) (5 tests, named oracle controls passed)
+claim_boundary.full_construction_mls: true

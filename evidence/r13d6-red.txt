@@ -1,0 +1,11 @@
+# R-13d.6 red, f21afef + Adapter::verify_full stub (returns {}) + tests/adapter_verify_full.rs, 2026-10-31
+# command: cargo test --locked --test adapter_verify_full   (exit 101)
+# behavioral: a thief with the APF key substitutes alice's key, re-signs her request, rewrites the cause and re-signs the head; open (no anchors) and the stub accept it.
+test an_honest_history_verifies_in_full ... FAILED
+test a_substituted_actor_key_fails_verify_full ... FAILED
+thread 'an_honest_history_verifies_in_full' (314588) panicked at tests/adapter_verify_full.rs:52:5:
+assertion `left == right` failed: {}
+  left: Null
+thread 'a_substituted_actor_key_fails_verify_full' (314587) panicked at tests/adapter_verify_full.rs:139:37:
+verify_full must trace alice's key: Object {}
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s

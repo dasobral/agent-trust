@@ -14,7 +14,7 @@ The experiment must reproduce the failure of independent authorization and group
 
 A model-only implementation would accelerate scheduling tests but would not test retained-key exclusion. A replicated authority would add distributed-failure work before establishing the core contract. Use a model for the independent oracle and **real MLS with a single authority** for the first implementation. Replication and alternate revocation cuts are later work.
 
-The authority is trusted for policy, signing keys, and durable history. Its single-writer transaction order realizes the experimental linearizable interface; this is not a quorum or high-availability deployment. Client crashes and client snapshot rollback are in scope. Rollback or compromise of the authority’s own durable store is outside this profile. No offline protected operations, retrospective plaintext erasure, FHE, or GPU work is included.
+The authority is trusted for policy, signing keys, and durable history. Its single-writer transaction order realizes the experimental linearizable interface; this is not a quorum or high-availability deployment. Client crashes and client snapshot rollback are in scope. Rollback or compromise of the authority’s own durable store was outside this profile until R-13 (D-17, 31 October 2026), which brings it in: tampering with the store, rollback of the whole data directory, and theft of the APF signing key are detected as `docs/adapter-contract.md` §10 (R-13d) states, with its residuals. An attacker who holds the APF key and the keys of the actors involved acts as those actors, and `now` is asserted by the APF. No offline protected operations, retrospective plaintext erasure, FHE, or GPU work is included.
 
 ## 2. Components and behavioral contract
 
